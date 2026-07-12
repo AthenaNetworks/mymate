@@ -1,0 +1,32 @@
+[Unit]
+Description=My Mate remote agent (probe)
+Documentation=https://github.com/AthenaNetworks/mymate
+After=network-online.target
+Wants=network-online.target
+# Never stop trying to restart - a probe that gives up is useless.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/mymate-agent/agent.env
+ExecStart=/usr/local/bin/mymate-agent
+# Recovery: always restart, with a short cooldown. The agent also reconnects in-process
+# (exponential backoff); this is the backstop if the process itself dies.
+Restart=always
+RestartSec=5
+
+# Runs as a transient unprivileged user - no login, no home, no privileges it doesn't need.
+DynamicUser=yes
+NoNewPrivileges=yes
+# ICMP up/down polling needs raw sockets; grant just that capability (no root).
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+# Hardening - the agent writes nothing to disk (logs go to the journal).
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

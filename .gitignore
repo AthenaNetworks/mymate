@@ -1,0 +1,57 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+# My Mate - local secrets (never commit)
+/CREDS
+.env.*
+!.env.example
+
+# Dude import: sample/uploaded databases + extracted CSVs hold plaintext device
+# credentials (and are large binaries) - keep the dude-extract.py tooling, not these.
+/scripts/*.db
+/scripts/export/
+/storage/app/imports/
+
+# Packaging build output (deploy/build/build-deb.sh)
+/build/
+/dist/
+
+# Published package downloads on the sales site (large binaries - deploy artifacts)
+/public/downloads/
+
+# Agent build output
+/agent/dist/
+/agent/bin/
+
+# Internal design/planning notes - kept local only, never published or packaged.
+/PRD.md
+/context/
+/docs/
+
+# Internal schema reference - kept local only.
+/database/SCHEMA.md

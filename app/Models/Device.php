@@ -1,0 +1,86 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\BackupStatus;
+use App\Enums\DeviceStatus;
+use App\Enums\DeviceType;
+use App\Enums\PollMethod;
+use App\Enums\UpgradeStatus;
+use Database\Factories\DeviceFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Device extends Model
+{
+    /** @use HasFactory<DeviceFactory> */
+    use HasFactory;
+
+    protected $fillable = [
+        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'agent_id',
+        'status', 'monitored', 'last_change', 'map_x', 'map_y',
+        'device_type', 'parent_device_id', 'vendor', 'model', 'uptime_seconds', 'uptime_at',
+        'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
+        'discovery_error', 'discovered_at',
+        'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
+    ];
+
+    protected $casts = [
+        'poll_method' => PollMethod::class,
+        'status' => DeviceStatus::class,
+        'monitored' => 'boolean',
+        'device_type' => DeviceType::class,
+        'upgrade_status' => UpgradeStatus::class,
+        'last_change' => 'datetime',
+        'map_x' => 'float',
+        'map_y' => 'float',
+        'uptime_seconds' => 'integer',
+        'uptime_at' => 'datetime',
+        'upgrade_at' => 'datetime',
+        'discovered_at' => 'datetime',
+        'backup_enabled' => 'boolean',
+        'backup_status' => BackupStatus::class,
+        'backup_at' => 'datetime',
+    ];
+
+    // In-memory defaults so a freshly created model mirrors the DB defaults
+    // (otherwise status/device_type are null on the returned instance until refreshed).
+    protected $attributes = [
+        'status' => 'unknown',
+        'monitored' => true,
+        'device_type' => 'unknown',
+        'map_x' => 0,
+        'map_y' => 0,
+        'backup_enabled' => false,
+    ];
+
+    public function credential(): BelongsTo
+    {
+        return $this->belongsTo(Credential::class);
+    }
+
+    /** The remote agent that polls this device, or null when polled centrally. */
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class);
+    }
+
+    /** The upstream device this one depends on (drives the hierarchy + inspector). */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_device_id');
+    }
+
+    /** @return HasMany<Device, $this> */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_device_id');
+    }
+
+    public function interfaces(): HasMany
+    {
+        return $this->hasMany(NetworkInterface::class);
+    }
+}

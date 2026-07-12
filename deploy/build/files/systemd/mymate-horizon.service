@@ -1,0 +1,21 @@
+[Unit]
+Description=My Mate - Horizon queue workers (ping / poll / scan pools)
+After=network.target postgresql.service redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=mymate
+Group=mymate
+WorkingDirectory=/opt/mymate
+# /usr/local/sbin first so the bundled fping 5.5 (JSON output) is found ahead of any apt fping.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/php /opt/mymate/artisan horizon
+# Horizon needs a clean SIGTERM to finish in-flight jobs before restart.
+ExecStop=/usr/bin/php /opt/mymate/artisan horizon:terminate
+Restart=always
+RestartSec=3
+TimeoutStopSec=35
+
+[Install]
+WantedBy=multi-user.target

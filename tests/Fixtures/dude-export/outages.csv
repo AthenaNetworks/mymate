@@ -1,0 +1,2 @@
+time_utc,status,duration_s,deviceID,device,ip,serviceID,service,mapID,map
+2026-06-20 10:00:00,down,120,100,router-a,10.0.0.1,8001,ping,500,Main

@@ -1,0 +1,2 @@
+linkID,link_type,a_deviceID,a_device,a_ip,a_if_index,speed_bps,b_deviceID,b_device,tx_probe,rx_probe,map
+900,gigabit ethernet,100,router-a,10.0.0.1,1,1000000000,200,switch-b,ether1 @ router-a tx,ether1 @ router-a rx,Main

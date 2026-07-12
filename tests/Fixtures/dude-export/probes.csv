@@ -1,0 +1,4 @@
+probeID,name,metric,target,direction,unit,poll_interval_s,kind,deviceID,if_index,iface_direction
+8001,ping @ router-a,ping,router-a,,s,30,service,,,
+9001,ether1 @ router-a tx,ether1,router-a,tx,bit/s,30,interface,100,1,tx
+9002,ether1 @ router-a rx,ether1,router-a,rx,bit/s,30,interface,100,1,rx

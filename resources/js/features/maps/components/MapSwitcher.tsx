@@ -1,0 +1,184 @@
+import { useEffect, useState } from 'react';
+import { CaretDown, MapTrifold, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
+import { useMaps, useSaveMap, useDeleteMap } from '../api/maps';
+import { useIsAdmin } from '../../auth/api/auth';
+import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
+import { pushToast } from '../../../lib/toast';
+import { PromptDialog, ConfirmDialog } from '../../../components/Dialog';
+import type { NetworkMap } from '../../../types';
+
+type MapDialog = { mode: 'create' } | { mode: 'rename'; id: number; current: string } | { mode: 'delete'; id: number; name: string };
+
+/** Which map to land on: the flagged default if it has devices, else the first
+ *  populated map (by the API\'s position/name order), else fall back to the default
+ *  or the first map (everything\'s empty - nothing better to show). */
+export function pickDefaultMap(maps: NetworkMap[]): NetworkMap {
+    const flagged = maps.find((m) => m.is_default);
+    if (flagged && flagged.device_count > 0) return flagged;
+    return maps.find((m) => m.device_count > 0) ?? flagged ?? maps[0];
+}
+
+/** Switch / create / rename / delete maps. Drives the active map id
+ *  in the shell store, which MapCanvas renders. Create/rename/delete use the app\'s
+ *  styled dialogs, never the browser\'s native prompt/confirm. */
+export function MapSwitcher() {
+    const isAdmin = useIsAdmin();
+    const { data: maps } = useMaps();
+    const activeId = useActiveMapId();
+    const saveMap = useSaveMap();
+    const delMap = useDeleteMap();
+    const [open, setOpen] = useState(false);
+    const [dialog, setDialog] = useState<MapDialog | null>(null);
+
+    // Default the active map once maps load. Prefer one that actually has devices on
+    // it, so a fresh/empty default map (e.g. the seed "Main" alongside imported maps)
+    // never strands you on a blank canvas - land on the topology you can see.
+    useEffect(() => {
+        // Default when no map is active, or when a persisted id no longer exists (deleted).
+        if (maps && maps.length > 0 && (activeId === null || !maps.some((m) => m.id === activeId))) {
+            setActiveMap(pickDefaultMap(maps).id);
+        }
+    }, [activeId, maps]);
+
+    const active = maps?.find((m) => m.id === activeId) ?? null;
+
+    function openDialog(d: MapDialog) {
+        setOpen(false);
+        setDialog(d);
+    }
+
+    function doCreate(name: string) {
+        saveMap.mutate(
+            { name },
+            {
+                onSuccess: (m) => {
+                    setActiveMap(m.id);
+                    setDialog(null);
+                    pushToast({ title: `Map "${m.name}" created`, tone: 'info' });
+                },
+                onError: () => pushToast({ title: 'Couldn\'t create the map', tone: 'down' }),
+            },
+        );
+    }
+
+    function doRename(id: number, name: string) {
+        saveMap.mutate(
+            { id, name },
+            {
+                onSuccess: () => setDialog(null),
+                onError: () => pushToast({ title: 'Couldn\'t rename the map', tone: 'down' }),
+            },
+        );
+    }
+
+    function doDelete(id: number) {
+        delMap.mutate(id, {
+            onSuccess: () => {
+                if (activeId === id) {
+                    const remaining = maps?.filter((m) => m.id !== id) ?? [];
+                    setActiveMap(remaining.length > 0 ? pickDefaultMap(remaining).id : null);
+                }
+                setDialog(null);
+            },
+            onError: () => pushToast({ title: 'Couldn\'t delete the map', tone: 'down' }),
+        });
+    }
+
+    return (
+        <>
+            <div className="relative">
+                <button
+                    onClick={() => setOpen((o) => !o)}
+                    className="flex items-center gap-2 rounded-full bg-[#0d0d11]/80 px-3 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:text-white"
+                >
+                    <MapTrifold weight="light" className="h-4 w-4 text-emerald-300" />
+                    {active?.name ?? 'Map'}
+                    <CaretDown weight="bold" className="h-3 w-3 text-white/40" />
+                </button>
+
+                {open && (
+                    <>
+                        <button aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
+                        <div className="absolute left-0 z-20 mt-1.5 w-64 rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                            {maps?.map((m) => (
+                                <div key={m.id} className={`group flex items-center gap-0.5 rounded-lg ${m.id === activeId ? 'bg-emerald-500/10' : ''}`}>
+                                    <button
+                                        onClick={() => {
+                                            setActiveMap(m.id);
+                                            setOpen(false);
+                                        }}
+                                        className="min-w-0 flex-1 truncate px-2.5 py-1.5 text-left text-sm text-white/85"
+                                    >
+                                        {m.parent_map_id ? '- ' : ''}
+                                        {m.name}
+                                        <span className="text-white/30"> - {m.device_count}</span>
+                                    </button>
+                                    {isAdmin && (
+                                        <>
+                                            <button onClick={() => openDialog({ mode: 'rename', id: m.id, current: m.name })} title="Rename" className="rounded p-1 text-white/30 hover:text-white/70">
+                                                <PencilSimple weight="bold" className="h-3 w-3" />
+                                            </button>
+                                            {!m.is_default && (
+                                                <button onClick={() => openDialog({ mode: 'delete', id: m.id, name: m.name })} title="Delete" className="rounded p-1 text-white/30 hover:text-rose-300">
+                                                    <Trash weight="bold" className="h-3 w-3" />
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                            {isAdmin && (
+                                <button onClick={() => openDialog({ mode: 'create' })} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
+                                    <Plus weight="bold" className="h-3.5 w-3.5" /> New map
+                                </button>
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+
+            {dialog?.mode === 'create' && (
+                <PromptDialog
+                    title="New map"
+                    label="Map name"
+                    icon={<MapTrifold weight="light" className="h-5 w-5" />}
+                    placeholder="e.g. North Region"
+                    confirmLabel="Create map"
+                    busy={saveMap.isPending}
+                    onSubmit={doCreate}
+                    onClose={() => setDialog(null)}
+                />
+            )}
+
+            {dialog?.mode === 'rename' && (
+                <PromptDialog
+                    title="Rename map"
+                    label="Map name"
+                    icon={<MapTrifold weight="light" className="h-5 w-5" />}
+                    initial={dialog.current}
+                    confirmLabel="Save name"
+                    busy={saveMap.isPending}
+                    onSubmit={(name) => doRename(dialog.id, name)}
+                    onClose={() => setDialog(null)}
+                />
+            )}
+
+            {dialog?.mode === 'delete' && (
+                <ConfirmDialog
+                    title="Delete map"
+                    icon={<Trash weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Delete map <span className="font-semibold text-white/85">"{dialog.name}"</span>? Devices stay - only this map\'s layout is removed.
+                        </>
+                    }
+                    confirmLabel="Delete map"
+                    tone="danger"
+                    busy={delMap.isPending}
+                    onConfirm={() => doDelete(dialog.id)}
+                    onClose={() => setDialog(null)}
+                />
+            )}
+        </>
+    );
+}

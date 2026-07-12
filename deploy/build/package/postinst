@@ -1,0 +1,181 @@
+#!/bin/sh
+# My Mate - postinst. Provisions a working instance on first install; safe to re-run
+# on upgrade (never clobbers .env, the DB, or generated secrets).
+set -e
+
+APP=/opt/mymate
+ENVF="$APP/.env"
+RUN_USER=mymate
+RUN_GROUP=mymate
+PG_DB=mymate
+PG_USER=mymate
+
+as_app() { su -s /bin/sh "$RUN_USER" -c "cd $APP && $1"; }
+
+# Read/replace a key in .env (KEY=value). Appends if absent.
+set_env() {
+    key="$1"; val="$2"
+    if grep -qE "^${key}=" "$ENVF" 2>/dev/null; then
+        # Use a temp + sed with a safe delimiter (values contain / and +).
+        sed -i "s|^${key}=.*|${key}=${val}|" "$ENVF"
+    else
+        printf '%s=%s\n' "$key" "$val" >> "$ENVF"
+    fi
+}
+
+case "$1" in
+configure)
+    echo "my-mate: configuring instance..."
+
+    # --- 1. runtime user -------------------------------------------------
+    if ! getent group "$RUN_GROUP" >/dev/null; then
+        addgroup --system "$RUN_GROUP"
+    fi
+    if ! getent passwd "$RUN_USER" >/dev/null; then
+        adduser --system --home "$APP" --no-create-home --ingroup "$RUN_GROUP" \
+                --disabled-login --gecos "My Mate" "$RUN_USER"
+    fi
+
+    # --- 2. services we depend on ---------------------------------------
+    systemctl enable --now postgresql >/dev/null 2>&1 || service postgresql start || true
+    systemctl enable --now redis-server >/dev/null 2>&1 || service redis-server start || true
+
+    # --- 2c. ICMP for up/down monitoring (HARD requirement) -------------
+    # My Mate's core function is up/down probing via fping, run as the non-root mymate user.
+    # Enable it (unprivileged ping sockets, else CAP_NET_RAW) and PROVE it works. Fail the
+    # install if it can't - fast, before any DB is provisioned - so a host that can't do
+    # ICMP is caught up front rather than silently shipping a monitor that can't monitor.
+    if ! /usr/share/mymate/enable-icmp.sh; then
+        cat >&2 <<'ICMPERR'
+
+  ┌─ CRITICAL: My Mate cannot send ICMP on this host ──────────────────────────┐
+  │ Up/down monitoring - the core of the product - will not work, so the        │
+  │ install is aborted. This host permits neither unprivileged ICMP ping        │
+  │ sockets nor CAP_NET_RAW for the service user. Fix one of these, then         │
+  │ re-run:  sudo apt-get install -f                                             │
+  │                                                                             │
+  │   - VM / bare metal:  normally automatic. Ensure sysctl                      │
+  │       net.ipv4.ping_group_range is writable (it is by default).             │
+  │   - Proxmox / LXC:    unprivileged containers keep net_raw + allow the      │
+  │       ping-socket sysctl by default. If you customised lxc.cap.drop,        │
+  │       keep 'net_raw'.                                                        │
+  │   - Docker / podman:  run the container with                                │
+  │       --sysctl net.ipv4.ping_group_range="0 2147483647"   (or --cap-add=NET_RAW)
+  └─────────────────────────────────────────────────────────────────────────────┘
+ICMPERR
+        exit 1
+    fi
+    echo "my-mate: ICMP up/down probing enabled and verified."
+
+    # --- 3. first-install .env + secrets --------------------------------
+    FIRST_INSTALL=0
+    if [ ! -f "$ENVF" ]; then
+        FIRST_INSTALL=1
+        echo "my-mate: first install - generating configuration"
+        cp /usr/share/mymate/env.tmpl "$ENVF"
+
+        DB_PASS="$(openssl rand -hex 24)"
+        REVERB_SECRET="$(openssl rand -hex 24)"
+        REVERB_APP_ID="mymate-$(openssl rand -hex 4)"
+
+        set_env DB_PASSWORD "$DB_PASS"
+        set_env REVERB_APP_SECRET "$REVERB_SECRET"
+        set_env REVERB_APP_ID "$REVERB_APP_ID"
+
+        # Best-effort host detection so the SPA's cookie auth works out of the box.
+        HOST_FQDN="$(hostname -f 2>/dev/null || hostname)"
+        HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        STATEFUL="localhost,127.0.0.1,::1"
+        [ -n "$HOST_FQDN" ] && STATEFUL="$HOST_FQDN,$STATEFUL"
+        [ -n "$HOST_IP" ]   && STATEFUL="$HOST_IP,$STATEFUL"
+        set_env SANCTUM_STATEFUL_DOMAINS "$STATEFUL"
+        set_env APP_URL "http://${HOST_IP:-localhost}"
+        set_env CORS_ALLOWED_ORIGINS "*"
+
+        # Create the Postgres role + database (idempotent).
+        if ! su postgres -c "psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='$PG_USER'\"" | grep -q 1; then
+            su postgres -c "psql -c \"CREATE ROLE $PG_USER LOGIN PASSWORD '$DB_PASS'\"" >/dev/null
+        else
+            su postgres -c "psql -c \"ALTER ROLE $PG_USER LOGIN PASSWORD '$DB_PASS'\"" >/dev/null
+        fi
+        if ! su postgres -c "psql -tAc \"SELECT 1 FROM pg_database WHERE datname='$PG_DB'\"" | grep -q 1; then
+            su postgres -c "createdb -O $PG_USER $PG_DB" >/dev/null
+        fi
+    fi
+
+    # --- 4. ownership + permissions -------------------------------------
+    chown "$RUN_USER:$RUN_GROUP" "$ENVF"
+    chmod 640 "$ENVF"
+    chown -R "$RUN_USER:$RUN_GROUP" "$APP/storage" "$APP/bootstrap/cache"
+    chmod -R u+rwX "$APP/storage" "$APP/bootstrap/cache"
+
+
+    # --- 5. app key + migrate -------------------------------------------
+    if [ "$FIRST_INSTALL" = "1" ] || ! grep -qE '^APP_KEY=base64:' "$ENVF"; then
+        as_app "php artisan key:generate --force --no-interaction" || true
+    fi
+    echo "my-mate: running database migrations"
+    as_app "php artisan migrate --force --no-interaction"
+
+    # A .deb install provisions on the real host here, so mark it done - the first-boot
+    # service (for prebuilt LXC/VM images) is then a no-op. (The LXC build removes this.)
+    touch "$APP/storage/.provisioned"
+    chown "$RUN_USER:$RUN_GROUP" "$APP/storage/.provisioned"
+
+    # --- 6. web server + fpm --------------------------------------------
+    ln -sf /etc/nginx/sites-available/mymate /etc/nginx/sites-enabled/mymate
+    [ -e /etc/nginx/sites-enabled/default ] && rm -f /etc/nginx/sites-enabled/default || true
+    if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx >/dev/null 2>&1 || systemctl restart nginx >/dev/null 2>&1 || true
+    else
+        echo "my-mate: WARNING nginx config test failed - check 'nginx -t'." >&2
+    fi
+    systemctl restart php8.4-fpm >/dev/null 2>&1 || service php8.4-fpm restart || true
+
+    # --- 7. background services -----------------------------------------
+    systemctl daemon-reload || true
+    for svc in mymate-horizon mymate-reverb mymate-loop mymate-scheduler mymate-agent-hub; do
+        systemctl enable "$svc" >/dev/null 2>&1 || true
+        systemctl restart "$svc" >/dev/null 2>&1 || true
+    done
+
+    # --- 7b. HTTPS by default (self-signed) - encrypt day-1 traffic -----
+    # Secure before the admin ever logs in: a per-instance self-signed cert so the console
+    # (and the /agent tunnel) is HTTPS out of the box. The operator upgrades to a trusted
+    # method with `mymate-ssl setup`. Best-effort - a failure leaves the plain :80 site up.
+    if [ "$FIRST_INSTALL" = "1" ]; then
+        SSL_HOST="$HOST_IP"
+        case "$HOST_FQDN" in *.*) [ "$HOST_FQDN" != localhost ] && SSL_HOST="$HOST_FQDN" ;; esac
+        if mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1; then
+            echo "my-mate: serving HTTPS with a self-signed certificate."
+        else
+            echo "my-mate: WARNING self-signed HTTPS setup failed - serving plain HTTP. Run 'sudo mymate-ssl setup'." >&2
+        fi
+    fi
+
+    # --- 8. next steps ---------------------------------------------------
+    if [ "$FIRST_INSTALL" = "1" ]; then
+        URL="$(grep -E '^APP_URL=' "$ENVF" | cut -d= -f2-)"
+        cat <<EOF
+
+  ─────────────────────────────────────────────────────────────
+   My Mate is installed and running. Free and open source - no limits.
+
+   1. Create your admin login:
+        sudo -u $RUN_USER php $APP/artisan mymate:user:create --admin
+
+   2. Open the console:            ${URL:-https://<this-server>}
+      It's HTTPS with a built-in certificate, so your browser will warn
+      "not trusted" the first time - that's expected; click through to continue.
+
+   3. Use a trusted certificate (no warning) - a guided wizard covers a
+      Cloudflare Tunnel, your reverse proxy, Let's Encrypt, or your own cert:
+        sudo mymate-ssl setup
+  ─────────────────────────────────────────────────────────────
+
+EOF
+    fi
+    ;;
+esac
+
+exit 0

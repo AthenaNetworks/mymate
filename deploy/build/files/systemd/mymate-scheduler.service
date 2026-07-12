@@ -1,0 +1,16 @@
+[Unit]
+Description=My Mate - scheduler (history-partition retention + maintenance)
+After=network.target postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User=mymate
+Group=mymate
+WorkingDirectory=/opt/mymate
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/php /opt/mymate/artisan schedule:work
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

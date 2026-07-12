@@ -1,0 +1,97 @@
+name: Release
+
+# Tag a version (e.g. v1.0.0) to build the .deb + the Proxmox LXC template and publish
+# them as a GitHub Release. The .deb is the reliable artifact; the LXC build needs a
+# systemd-capable container (podman --privileged --systemd) - it works on GitHub-hosted
+# runners in most cases, but if it fails, use a self-hosted runner for that job.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-deb:
+    name: Build .deb
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pgsql, redis, snmp, mbstring, xml, curl, bcmath, gd, zip, intl, sodium
+          tools: composer
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm }
+      - run: npm ci
+      - name: Build the .deb
+        run: VERSION="${GITHUB_REF_NAME#v}" deploy/build/build-deb.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: mymate-deb, path: dist/*.deb, if-no-files-found: error }
+
+  build-lxc:
+    name: Build Proxmox LXC template
+    runs-on: ubuntu-24.04
+    continue-on-error: true   # best-effort; the .deb release does not depend on it
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pgsql, redis, snmp, mbstring, xml, curl, bcmath, gd, zip, intl, sodium
+          tools: composer
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm }
+      - run: npm ci
+      - name: Install container tooling
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends podman zstd nftables passt
+      - name: Build the .deb (input to the template)
+        run: VERSION="${GITHUB_REF_NAME#v}" deploy/build/build-deb.sh
+      - name: Build the LXC template
+        run: VERSION="${GITHUB_REF_NAME#v}" deploy/build/build-lxc.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: mymate-lxc, path: dist/*.tar.zst, if-no-files-found: warn }
+
+  agent:
+    name: Build agent binaries (amd64/arm64/arm - linux/macOS)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: agent/go.sum
+      - name: Cross-compile + package archives
+        working-directory: agent
+        run: VERSION="${GITHUB_REF_NAME}" ./build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: mymate-agent, path: agent/dist/*, if-no-files-found: error }
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-24.04
+    needs: [build-deb, agent]  # LXC is optional - don't block the release on it
+    if: always() && needs.build-deb.result == 'success' && needs.agent.result == 'success'
+    steps:
+      - name: Download .deb
+        uses: actions/download-artifact@v4
+        with: { name: mymate-deb, path: dist }
+      - name: Download LXC template (optional)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: mymate-lxc, path: dist }
+      - name: Download agent binaries
+        uses: actions/download-artifact@v4
+        with: { name: mymate-agent, path: dist/agent }
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+            dist/*.tar.zst
+            dist/agent/*.tar.gz
+            dist/agent/SHA256SUMS
+          fail_on_unmatched_files: false
+          generate_release_notes: true
