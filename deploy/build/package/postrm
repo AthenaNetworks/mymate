@@ -1,0 +1,38 @@
+#!/bin/sh
+# My Mate - postrm. On remove: drop the nginx site + reload. On purge: also remove
+# the database, role, generated .env and the runtime user (full teardown of what
+# postinst created). Upgrades hit neither branch destructively.
+set -e
+
+APP=/opt/mymate
+PG_DB=mymate
+PG_USER=mymate
+RUN_USER=mymate
+
+drop_nginx_site() {
+    rm -f /etc/nginx/sites-enabled/mymate
+    systemctl reload nginx >/dev/null 2>&1 || true
+}
+
+case "$1" in
+remove)
+    drop_nginx_site
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    ;;
+purge)
+    drop_nginx_site
+    # Tear down the database + role we created (purge = "remove everything, data too").
+    if command -v psql >/dev/null 2>&1; then
+        su postgres -c "dropdb --if-exists $PG_DB" >/dev/null 2>&1 || true
+        su postgres -c "psql -c \"DROP ROLE IF EXISTS $PG_USER\"" >/dev/null 2>&1 || true
+    fi
+    rm -f "$APP/.env"
+    rm -rf "$APP/storage/logs" "$APP/bootstrap/cache"
+    rm -rf /etc/mymate            # the built-in self-signed cert (mymate-ssl self-signed)
+    deluser --quiet "$RUN_USER" >/dev/null 2>&1 || true
+    delgroup --quiet "$RUN_USER" >/dev/null 2>&1 || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    ;;
+esac
+
+exit 0

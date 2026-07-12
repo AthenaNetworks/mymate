@@ -1,0 +1,4 @@
+deviceID,device,ip,mapID,map,x,y
+100,router-a,10.0.0.1,500,Main,10,20
+200,switch-b,10.0.0.2,500,Main,30,40
+300,api-only,10.0.0.3,500,Main,15,30

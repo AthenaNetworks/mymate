@@ -1,0 +1,17 @@
+[Unit]
+Description=My Mate - first-boot provisioning (per-instance secrets + host)
+After=postgresql.service redis-server.service network-online.target
+Wants=network-online.target
+# Runs only until the instance has been provisioned once (marker written on success).
+# A .deb install writes this marker in its postinst, so this service is a no-op there;
+# a prebuilt LXC/VM image ships WITHOUT the marker so it runs on the customer's first boot.
+ConditionPathExists=!/opt/mymate/storage/.provisioned
+Before=mymate-loop.service mymate-reverb.service mymate-horizon.service mymate-scheduler.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/share/mymate/firstboot.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,124 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../js/**/*.{ts,tsx}';
+
+@theme {
+    /* Premium geometric grotesk (Ethereal Glass vibe) - not Inter/Roboto. */
+    --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol';
+    /* Apple/Linear-tier motion curve -> use as `ease-fluid`. */
+    --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* App tokens. --link-down: grey for down devices/links, distinct from saturated red.
+   Consumed by the colour ramp (features/topology/lib/linkColor.ts) in . */
+:root {
+    --link-down: #6b7280;
+    /* --link-unknown: neutral slate for links carrying throughput but no known speed -
+       util% can't be computed, so the edge must NOT ramp green->red (spec). */
+    --link-unknown: #64748b;
+    color-scheme: dark;
+}
+
+html,
+body,
+#app {
+    height: 100%;
+}
+
+body {
+    background-color: #060608; /* deepest OLED-ish base */
+    color: rgb(244 244 245 / 0.92);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+/* Near-invisible refined scrollbars. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+}
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.1);
+    border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.18);
+}
+
+::selection {
+    background: rgb(52 211 153 / 0.25);
+}
+
+/* Gentle entry (GPU-safe: transform + opacity only). */
+@keyframes rise {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.animate-rise {
+    animation: rise 0.7s var(--ease-fluid) both;
+}
+
+/* Toast entry - slides up from the corner. */
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+.animate-toast {
+    animation: toast-in 0.45s var(--ease-fluid) both;
+}
+
+/* Marching-dash "flow" for busy links. The dash + offset live in
+   UtilEdge; this just drives the motion. Honors reduced-motion. */
+@keyframes dashflow {
+    to {
+        stroke-dashoffset: -24;
+    }
+}
+
+/* Outage illumination for dashboard cards - a slow red glow pulse so a
+   down device stands out across a NOC room. Paired with a ring + the status word
+   (never colour-alone). Honors reduced-motion below. */
+@keyframes cardpulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.5), 0 0 22px -2px rgba(244, 63, 94, 0.35);
+    }
+    50% {
+        box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.8), 0 0 46px 2px rgba(244, 63, 94, 0.6);
+    }
+}
+.animate-cardpulse {
+    animation: cardpulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-rise,
+    .animate-toast,
+    .animate-cardpulse {
+        animation: none;
+    }
+    /* Stop the marching-dash link flow (set inline on the edge path + the flow accent). */
+    .react-flow__edge-path,
+    .mm-edge-flow {
+        animation: none !important;
+    }
+}

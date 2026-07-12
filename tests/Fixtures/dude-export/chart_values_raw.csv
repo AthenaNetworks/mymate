@@ -1,0 +1,6 @@
+sourceID,source,time_utc,value
+9001,ether1 @ router-a tx,2026-06-22 11:00:00,500000000
+9002,ether1 @ router-a rx,2026-06-22 11:00:00,250000000
+9001,ether1 @ router-a tx,2026-06-22 11:10:00,400000000
+9002,ether1 @ router-a rx,2026-06-22 11:10:00,200000000
+8001,ping @ router-a,2026-06-22 11:00:00,0.004

@@ -1,0 +1,28 @@
+# Keep the build context small and never copy secrets / local-only material.
+.git
+.gitignore
+node_modules
+vendor
+build
+dist
+public/build
+public/hot
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+.env
+.env.*
+!.env.example
+CREDS
+.predeploy.log
+*.log
+
+# Not needed inside the web image
+agent
+tests
+deploy/build/vendor
+docs
+context
+PRD.md
+database/SCHEMA.md

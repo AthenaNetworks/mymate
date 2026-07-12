@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  My Mate remote agent - macOS LaunchDaemon (runs at boot, as root so ICMP works).
+  The install script fills in __MYMATE_URL__ / __MYMATE_AGENT_TOKEN__ and copies this to
+  /Library/LaunchDaemons/. KeepAlive restarts the agent if it ever exits (recovery).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.athenanetworks.mymate-agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/mymate-agent</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>MYMATE_URL</key>
+        <string>__MYMATE_URL__</string>
+        <key>MYMATE_AGENT_TOKEN</key>
+        <string>__MYMATE_AGENT_TOKEN__</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>5</integer>
+    <key>StandardOutPath</key>
+    <string>/var/log/mymate-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/mymate-agent.log</string>
+</dict>
+</plist>

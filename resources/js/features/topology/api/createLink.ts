@@ -1,0 +1,22 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../../lib/apiClient';
+import type { Link } from '../../../types';
+import { linkKeys } from './getLinks';
+
+export interface CreateLinkInput {
+    a_device_id: number;
+    a_interface_id: number;
+    b_device_id: number;
+    b_interface_id: number;
+}
+
+export function useCreateLink() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (input: CreateLinkInput): Promise<Link> => {
+            const { data } = await apiClient.post<{ data: Link }>('/links', input);
+            return data.data;
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: linkKeys.all }),
+    });
+}

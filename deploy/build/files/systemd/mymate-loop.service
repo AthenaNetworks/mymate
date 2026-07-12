@@ -1,0 +1,19 @@
+[Unit]
+Description=My Mate - poll-loop engine (fping up/down, throughput, discovery, history)
+After=network.target postgresql.service redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=mymate
+Group=mymate
+WorkingDirectory=/opt/mymate
+# fping (up/down probing) is invoked from here - /usr/local/sbin must be on PATH.
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/php /opt/mymate/artisan mymate:loop
+# The loop is the engine heartbeat - restart fast if it ever dies.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

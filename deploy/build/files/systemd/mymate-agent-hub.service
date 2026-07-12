@@ -1,0 +1,18 @@
+[Unit]
+Description=My Mate - remote-agent WebSocket hub (probes connect here)
+After=network.target postgresql.service redis-server.service
+Requires=redis-server.service
+
+[Service]
+Type=simple
+User=mymate
+Group=mymate
+WorkingDirectory=/opt/mymate
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# nginx reverse-proxies the /agent location on the public port to this local hub.
+ExecStart=/usr/bin/php /opt/mymate/artisan mymate:agent-hub --host=127.0.0.1 --port=9091
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

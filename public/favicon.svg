@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="f-tile" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0c0f14"/>
+      <stop offset="1" stop-color="#060608"/>
+    </linearGradient>
+    <linearGradient id="f-stroke" x1="16" y1="16" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6ee7b7"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#f-tile)"/>
+  <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="13.25" stroke="#ffffff" stroke-opacity="0.10"/>
+  <polyline points="16,47 23,16 32,37 41,16 48,47"
+    fill="none" stroke="url(#f-stroke)" stroke-width="4.6"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#34d399">
+    <circle cx="16" cy="47" r="4"/>
+    <circle cx="23" cy="16" r="4"/>
+    <circle cx="32" cy="37" r="4"/>
+    <circle cx="41" cy="16" r="4"/>
+    <circle cx="48" cy="47" r="4"/>
+  </g>
+</svg>

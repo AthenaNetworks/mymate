@@ -1,0 +1,26 @@
+# Rusted config for the My Mate integration.
+# Copy to /etc/rusted/config.toml (system-wide) and fill in api_token + secret.
+#
+# Rusted is the config-backup engine; My Mate talks to it over the HTTP API below.
+# Settings resolution order (later wins): defaults < this file < env vars < CLI flags.
+
+# SQLite inventory (devices + credentials Rusted manages). My Mate pushes into this via
+# the API - you don't edit it by hand.
+db = "/var/lib/rusted/rusted.db"
+
+# Git-versioned backups, one file per device. Keep this on a durable, backed-up volume.
+backups = "/var/lib/rusted/backups"
+
+# API listen address. IMPORTANT: bind to LOOPBACK only - My Mate runs on the same host
+# and is the only client, so the bearer token never has to leave the box. Port 8410 is
+# used because My Mate's own dev server / other services commonly take 8080.
+api_addr = "127.0.0.1:8410"
+
+# Bearer token My Mate authenticates with. MUST match RUSTED_API_TOKEN in My Mate's .env
+# (or the value saved in Settings -> Config backup engine). Generate one with:
+#   openssl rand -hex 32
+api_token = "CHANGE-ME-openssl-rand-hex-32"
+
+# Encryption key for credentials-at-rest inside Rusted's SQLite DB (AES-256-GCM).
+# Generate with: openssl rand -hex 32
+secret = "CHANGE-ME-openssl-rand-hex-32"

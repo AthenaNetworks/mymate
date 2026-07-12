@@ -1,0 +1,20 @@
+#!/bin/sh
+# My Mate - prerm. Stop the background services before the package files go away
+# (on both remove and upgrade). The DB, Redis and .env are left untouched here.
+set -e
+
+case "$1" in
+remove|upgrade|deconfigure)
+    for svc in mymate-horizon mymate-reverb mymate-loop mymate-scheduler mymate-agent-hub; do
+        systemctl stop "$svc" >/dev/null 2>&1 || true
+    done
+    # On full removal, also disable them (postrm purges the units' state).
+    if [ "$1" = "remove" ]; then
+        for svc in mymate-horizon mymate-reverb mymate-loop mymate-scheduler mymate-agent-hub; do
+            systemctl disable "$svc" >/dev/null 2>&1 || true
+        done
+    fi
+    ;;
+esac
+
+exit 0

@@ -1,0 +1,30 @@
+# systemd unit for the Rusted backup-engine API.
+# Install: sudo cp deploy/rusted/rusted-api.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now rusted-api
+#
+# This runs the HTTP API My Mate talks to. It is independent of any backup *timer* -
+# My Mate drives scheduling itself (mymate:backup:run, see routes/console.php), so you do
+# NOT also need Rusted's own rusted-backup.timer. Keep just this API service.
+
+[Unit]
+Description=Rusted config-backup engine (API for My Mate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Dedicated unprivileged user with read access to /etc/rusted and write to /var/lib/rusted.
+User=rusted
+Group=rusted
+ExecStart=/usr/local/bin/rusted --config /etc/rusted/config.toml serve
+Restart=on-failure
+RestartSec=5
+# Rusted needs SSH out to devices + its data dir; otherwise lock it down.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rusted
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

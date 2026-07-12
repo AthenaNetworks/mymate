@@ -1,0 +1,65 @@
+# My Mate, ready to run: the app plus its Postgres and Redis.
+#
+#   docker compose up -d
+#   docker compose exec app php artisan mymate:user:create --admin
+#   open https://localhost:9443    (self-signed cert, so your browser warns once)
+#
+# Ports: HTTPS is exposed on 9443 by default and listens on all interfaces. Override with
+# MYMATE_HTTPS_PORT, or MYMATE_HTTP_PORT if you uncomment the HTTP mapping below.
+#
+# Before a real deployment: set your own APP_KEY and REVERB_APP_SECRET below, and change
+# APP_URL to the address you actually browse to. If you'd rather terminate TLS at a reverse
+# proxy or a Cloudflare Tunnel, expose the HTTP port instead - the app trusts X-Forwarded-Proto.
+
+services:
+  app:
+    image: athenanetworks/mymate:latest
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      # The URL you actually browse to. If you change the published port below, change this too.
+      APP_URL: https://localhost:9443
+      # Generate one with:  docker compose run --rm app php artisan key:generate --show
+      # Leave it blank and the container makes a throwaway key each start (logins reset on restart).
+      APP_KEY: ${APP_KEY:-}
+      DB_HOST: postgres
+      DB_DATABASE: mymate
+      DB_USERNAME: mymate
+      DB_PASSWORD: mymate
+      REDIS_HOST: redis
+      # Any random string, but pick your own before going live.
+      REVERB_APP_SECRET: change-me
+      SANCTUM_STATEFUL_DOMAINS: localhost:9443,localhost,127.0.0.1
+      CORS_ALLOWED_ORIGINS: https://localhost:9443
+    ports:
+      # HTTPS on 9443 by default (self-signed cert). Change the host port with MYMATE_HTTPS_PORT.
+      - "${MYMATE_HTTPS_PORT:-9443}:443"
+      # Uncomment to also serve plain HTTP (e.g. behind a proxy that terminates TLS):
+      # - "${MYMATE_HTTP_PORT:-9080}:80"
+    # fping needs raw ICMP. NET_RAW is in Docker's default set already; the sysctl covers
+    # hosts that hand out unprivileged ping sockets instead.
+    cap_add:
+      - NET_RAW
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: mymate
+      POSTGRES_PASSWORD: mymate
+      POSTGRES_DB: mymate
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+volumes:
+  pgdata:

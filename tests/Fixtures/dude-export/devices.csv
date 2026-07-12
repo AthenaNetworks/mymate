@@ -1,0 +1,4 @@
+deviceID,name,dns,ip,device_type,parent_device
+100,router-a,,10.0.0.1,Router,
+200,switch-b,,10.0.0.2,Switch,router-a
+300,api-only,,10.0.0.3,RouterOS,router-a

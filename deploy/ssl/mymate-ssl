@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+#
+# mymate-ssl - configure TLS for a My Mate appliance (web UI + the /app Reverb and
+# /agent hub WebSockets, all on the same origin). One command, guided or direct:
+#
+#   mymate-ssl setup                                    # interactive wizard (start here)
+#   mymate-ssl self-signed    [host]                    # 0. built-in cert (secure by default)
+#   mymate-ssl cloudflared    <domain> [tunnel-token]   # 1. Cloudflare Tunnel (preferred)
+#   mymate-ssl reverse-proxy  <domain>                  # 2. behind your own TLS proxy
+#   mymate-ssl letsencrypt    <domain> <email>          # 3. public, Let's Encrypt
+#   mymate-ssl certificate    <domain> <cert> <key>     # 4. public, your own certificate
+#
+# A fresh install is HTTPS from first boot via a self-signed cert (method 0) - traffic is
+# encrypted before the admin ever logs in. `setup` walks you up to a trusted method.
+#
+# Methods 1 & 2 terminate TLS upstream: the box stays plain HTTP on :80 and the app
+# detects HTTPS from X-Forwarded-Proto (trusted proxies, set in bootstrap/app.php).
+# Methods 0/3/4 terminate TLS in nginx here (nginx-tls.conf.tmpl).
+#
+# Run as root on the appliance. Idempotent - re-run to change method or renew config.
+set -euo pipefail
+
+APP_DIR=/opt/mymate
+NGINX_SITE=/etc/nginx/sites-available/mymate
+NGINX_LINK=/etc/nginx/sites-enabled/mymate
+TLS_TMPL="$(dirname "$(readlink -f "$0")")/nginx-tls.conf.tmpl"
+# The pristine plain-HTTP site. Packaged installs get it at /usr/share/mymate (deploy/build
+# is excluded from the app tree); fall back to the repo path when run from a source checkout.
+PLAIN_SITE=/usr/share/mymate/nginx-mymate.conf
+[ -r "$PLAIN_SITE" ] || PLAIN_SITE="$(dirname "$(readlink -f "$0")")/../build/files/nginx-mymate.conf"
+SS_DIR=/etc/mymate/tls           # built-in self-signed cert lives here (per-instance)
+SS_CRT="$SS_DIR/self-signed.crt"
+SS_KEY="$SS_DIR/self-signed.key"
+
+c() { printf '\033[36m>>>\033[0m %s\n' "$*"; }
+warn() { printf '\033[33m!  \033[0m %s\n' "$*"; }
+die() { printf '\033[31mError:\033[0m %s\n' "$*" >&2; exit 1; }
+
+preflight() {
+    [ "$(id -u)" = 0 ] || die "run as root (sudo mymate-ssl ...)"
+    [ -d "$APP_DIR" ] || die "$APP_DIR not found - is My Mate installed here?"
+}
+
+# Run artisan as the account that owns .env (the php-fpm pool user: 'mymate' on a
+# packaged install), so the .env rewrite keeps the right ownership.
+APP_USER="$(stat -c '%U' "$APP_DIR/.env" 2>/dev/null || echo root)"
+artisan() { sudo -u "$APP_USER" php "$APP_DIR/artisan" "$@"; }
+
+# Tolerant of nginx not yet running (first-boot ordering): a good config is reloaded, or
+# started if the daemon is down. A BAD config is a hard error.
+reload_nginx() {
+    nginx -t || die "nginx config test failed - check 'nginx -t'"
+    systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+    c "nginx reloaded"
+}
+enable_site() { ln -sf "$NGINX_SITE" "$NGINX_LINK"; }
+
+# Best guess at this machine's identity for the self-signed SANs / configure-host.
+detect_host() {
+    local h
+    h="$(hostname -f 2>/dev/null || hostname 2>/dev/null || true)"
+    [ -n "$h" ] && [ "$h" != localhost ] && { echo "$h"; return; }
+    hostname -I 2>/dev/null | awk '{print $1}' | grep . || echo localhost
+}
+
+# Point the app at the public hostname over https (APP_URL / Sanctum / CORS / secure cookie).
+configure_host_https() {
+    local domain="$1"
+    c "pointing the app at https://$domain"
+    artisan mymate:configure-host "$domain" --https
+    restart_engine
+}
+
+restart_engine() {
+    # First-boot provisioning runs ordered *before* these services and must not restart them
+    # (it would deadlock) - they start fresh right after, reading the new .env. It sets
+    # MYMATE_SSL_NO_RESTART=1 to skip this.
+    [ "${MYMATE_SSL_NO_RESTART:-0}" = 1 ] && return 0
+    # Reverb bakes the scheme into the browser's WS URL; the engine daemons cache config.
+    systemctl restart mymate-reverb mymate-horizon mymate-loop mymate-agent-hub 2>/dev/null || true
+}
+
+render_tls_site() {
+    local domain="$1" cert="$2" key="$3"
+    [ -r "$cert" ] || die "certificate not readable: $cert"
+    [ -r "$key" ]  || die "private key not readable: $key"
+    c "installing the HTTPS nginx site for $domain"
+    sed -e "s#__SERVER_NAME__#$domain#g" \
+        -e "s#__SSL_CERT__#$cert#g" \
+        -e "s#__SSL_KEY__#$key#g" \
+        "$TLS_TMPL" > "$NGINX_SITE"
+    enable_site
+}
+
+install_plain_site() {
+    local domain="$1"
+    c "installing the plain HTTP nginx site (TLS terminates upstream)"
+    # server_name _ accepts the proxied host; the app enforces the real hostname via Sanctum.
+    cp "$PLAIN_SITE" "$NGINX_SITE"
+    enable_site
+}
+
+# --- method 0: built-in self-signed (secure by default) -----------------------
+# Encrypts day-1 traffic with a per-instance cert (browser shows a one-time trust
+# warning). Idempotent: reuses an existing cert unless it's missing or doesn't cover
+# this host, so upgrades never change a fingerprint the operator has trusted.
+cmd_self_signed() {
+    local host="${1:-$(detect_host)}"
+
+    if ! ss_cert_covers "$host"; then
+        c "generating a self-signed certificate for $host"
+        install -d -m 700 "$SS_DIR"
+        local ip="" san="DNS:$host,DNS:localhost,IP:127.0.0.1"
+        ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        [ -n "$ip" ] && san="$san,IP:$ip"
+        openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+            -keyout "$SS_KEY" -out "$SS_CRT" \
+            -subj "/CN=$host" -addext "subjectAltName=$san" >/dev/null 2>&1 \
+            || die "openssl failed to generate the self-signed certificate"
+        chmod 600 "$SS_KEY"; chmod 644 "$SS_CRT"
+    else
+        c "reusing the existing self-signed certificate for $host"
+    fi
+
+    render_tls_site "$host" "$SS_CRT" "$SS_KEY"
+    reload_nginx
+    configure_host_https "$host"
+    c "Done. The console is on HTTPS with the built-in certificate."
+    warn "Your browser will warn it's 'not trusted' the first time - that's expected for a"
+    warn "self-signed cert. For a trusted one (no warning), run:  sudo mymate-ssl setup"
+    warn "Agents must set MYMATE_INSECURE=1 to trust it, or use a real cert (methods 1-4)."
+}
+
+# True if the self-signed cert exists and its SANs already cover $host.
+ss_cert_covers() {
+    [ -r "$SS_CRT" ] || return 1
+    openssl x509 -in "$SS_CRT" -noout -ext subjectAltName 2>/dev/null | grep -qiE "(DNS|IP Address):$1(,|$| )"
+}
+
+# --- method 1: Cloudflare Tunnel ----------------------------------------------
+cmd_cloudflared() {
+    local domain="${1:-}" token="${2:-}"
+    [ -n "$domain" ] || die "usage: mymate-ssl cloudflared <domain> [tunnel-token]"
+
+    install_plain_site "$domain"
+    reload_nginx
+
+    if ! command -v cloudflared >/dev/null 2>&1; then
+        warn "cloudflared is not installed. Install it from Cloudflare's apt repo:"
+        echo "     https://pkg.cloudflare.com/  (package: cloudflared)"
+    fi
+    if [ -n "$token" ]; then
+        c "installing the cloudflared service with the supplied tunnel token"
+        cloudflared service install "$token"
+        systemctl enable --now cloudflared 2>/dev/null || true
+    else
+        warn "No tunnel token supplied. In the Cloudflare Zero Trust dashboard:"
+        echo "     1. Networks -> Tunnels -> Create a tunnel (cloudflared)."
+        echo "     2. Add a public hostname: $domain  ->  Service: HTTP  ->  http://localhost:80"
+        echo "        (WebSockets for /app and /agent traverse the tunnel automatically.)"
+        echo "     3. Run the install command it shows, or re-run:"
+        echo "        mymate-ssl cloudflared $domain <tunnel-token>"
+    fi
+
+    configure_host_https "$domain"
+    c "Done. Agents connect to  wss://$domain/agent"
+}
+
+# --- method 2: behind your own reverse proxy ----------------------------------
+cmd_reverse_proxy() {
+    local domain="${1:-}"
+    [ -n "$domain" ] || die "usage: mymate-ssl reverse-proxy <domain>"
+
+    install_plain_site "$domain"
+    reload_nginx
+    configure_host_https "$domain"
+
+    cat <<EOF
+
+$(c "Point your TLS-terminating proxy at this box on port 80. It must:")
+   - forward Host: $domain
+   - set  X-Forwarded-Proto: https   and   X-Forwarded-For: <client>
+   - STRIP any client-supplied X-Forwarded-* before setting its own
+   - pass WebSocket upgrades for /app (Reverb) and /agent (hub)
+
+Example (nginx in front):
+   location / {
+       proxy_pass http://MYMATE_BOX_IP:80;
+       proxy_set_header Host $domain;
+       proxy_set_header X-Forwarded-Proto https;
+       proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade \$http_upgrade;
+       proxy_set_header Connection "upgrade";
+   }
+
+Agents connect to  wss://$domain/agent
+EOF
+}
+
+# --- method 3: public, Let's Encrypt ------------------------------------------
+cmd_letsencrypt() {
+    local domain="${1:-}" email="${2:-}"
+    { [ -n "$domain" ] && [ -n "$email" ]; } || die "usage: mymate-ssl letsencrypt <domain> <email>"
+
+    command -v certbot >/dev/null 2>&1 || { c "installing certbot"; apt-get update -qq && apt-get install -y certbot; }
+
+    # The existing :80 site serves /opt/mymate/public and allows /.well-known, so a
+    # webroot challenge works without taking nginx down.
+    [ -e "$NGINX_SITE" ] || install_plain_site "$domain"
+    enable_site; reload_nginx
+    c "obtaining a certificate for $domain (webroot challenge)"
+    certbot certonly --webroot -w "$APP_DIR/public" -d "$domain" \
+        --non-interactive --agree-tos -m "$email"
+
+    local live="/etc/letsencrypt/live/$domain"
+    render_tls_site "$domain" "$live/fullchain.pem" "$live/privkey.pem"
+
+    # Reload nginx after each renewal so the new cert is picked up.
+    mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+    printf '#!/bin/sh\nnginx -t && systemctl reload nginx\n' \
+        > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+    chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
+    reload_nginx
+    configure_host_https "$domain"
+    c "Done. Auto-renewal is handled by certbot's timer. Agents connect to  wss://$domain/agent"
+}
+
+# --- method 4: public, your own certificate -----------------------------------
+cmd_certificate() {
+    local domain="${1:-}" cert="${2:-}" key="${3:-}"
+    { [ -n "$domain" ] && [ -n "$cert" ] && [ -n "$key" ]; } \
+        || die "usage: mymate-ssl certificate <domain> <fullchain.pem> <privkey.pem>"
+
+    render_tls_site "$domain" "$(readlink -f "$cert")" "$(readlink -f "$key")"
+    reload_nginx
+    configure_host_https "$domain"
+    c "Done. Renew by replacing the cert/key files and running: systemctl reload nginx"
+    c "Agents connect to  wss://$domain/agent"
+}
+
+# --- interactive wizard -------------------------------------------------------
+cmd_setup() {
+    [ -t 0 ] || die "setup is interactive - run it in a terminal, or use a direct method (mymate-ssl --help)"
+
+    local cur; cur="$(grep -E '^APP_URL=' "$APP_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '"')"
+    echo
+    c "My Mate TLS setup"
+    echo "   Current console URL: ${cur:-unknown}"
+    if [ -r "$SS_CRT" ]; then echo "   Current certificate: built-in self-signed"; fi
+    cat <<'EOF'
+
+   How do you want to serve My Mate securely? (secures the console AND the agent tunnel)
+
+     1) Cloudflare Tunnel      - recommended; no public ports, works behind NAT
+     2) My own reverse proxy   - you already run Traefik / nginx / a load balancer
+     3) Let's Encrypt          - the box is public at a DNS name (free auto-renewing cert)
+     4) My own certificate     - you have a cert file to install (wildcard / corporate CA)
+     0) Self-signed            - quick + encrypted now, browser shows a one-time warning
+
+EOF
+    local choice; read -rp "   Choose [1/2/3/4/0] (default 1): " choice
+    choice="${choice:-1}"
+
+    case "$choice" in
+        1)  local d t
+            read -rp "   Public hostname (e.g. mon.example.com): " d
+            read -rp "   Cloudflare tunnel token (blank to set up in the dashboard first): " t
+            [ -n "$d" ] || die "a hostname is required"
+            cmd_cloudflared "$d" "$t" ;;
+        2)  local d; read -rp "   Public hostname your proxy serves (e.g. mon.example.com): " d
+            [ -n "$d" ] || die "a hostname is required"
+            cmd_reverse_proxy "$d" ;;
+        3)  local d e
+            read -rp "   Public DNS name pointing at this box (e.g. mon.example.com): " d
+            read -rp "   Email for Let's Encrypt renewal notices: " e
+            { [ -n "$d" ] && [ -n "$e" ]; } || die "hostname and email are required"
+            cmd_letsencrypt "$d" "$e" ;;
+        4)  local d cert key
+            read -rp "   Hostname on the certificate (e.g. mon.example.com): " d
+            read -rp "   Path to fullchain PEM: " cert
+            read -rp "   Path to private key PEM: " key
+            { [ -n "$d" ] && [ -n "$cert" ] && [ -n "$key" ]; } || die "hostname, cert and key are required"
+            cmd_certificate "$d" "$cert" "$key" ;;
+        0)  local d; read -rp "   Hostname/IP to serve on [$(detect_host)]: " d
+            cmd_self_signed "${d:-$(detect_host)}" ;;
+        *)  die "unknown choice: $choice" ;;
+    esac
+}
+
+usage() {
+    cat <<'EOF'
+mymate-ssl - configure TLS for a My Mate appliance (web UI + the /app Reverb and
+/agent hub WebSockets, all on the same origin). One command, guided or direct:
+
+  mymate-ssl setup                                    # interactive wizard (start here)
+  mymate-ssl self-signed    [host]                    # 0. built-in cert (secure by default)
+  mymate-ssl cloudflared    <domain> [tunnel-token]   # 1. Cloudflare Tunnel (preferred)
+  mymate-ssl reverse-proxy  <domain>                  # 2. behind your own TLS proxy
+  mymate-ssl letsencrypt    <domain> <email>          # 3. public, Let's Encrypt
+  mymate-ssl certificate    <domain> <cert> <key>     # 4. public, your own certificate
+
+A fresh install is already HTTPS via a self-signed cert; `setup` walks you up to a
+trusted method. Methods 1 & 2 terminate TLS upstream (box stays HTTP on :80; the app
+reads X-Forwarded-Proto); methods 0/3/4 terminate in nginx. See deploy/ssl/README.md.
+Run as root on the appliance. Idempotent - re-run to change method or renew.
+EOF
+    exit "${1:-0}"
+}
+
+case "${1:-}" in
+    setup)         preflight; cmd_setup ;;
+    self-signed)   preflight; shift; cmd_self_signed "$@" ;;
+    cloudflared)   preflight; shift; cmd_cloudflared "$@" ;;
+    reverse-proxy) preflight; shift; cmd_reverse_proxy "$@" ;;
+    letsencrypt)   preflight; shift; cmd_letsencrypt "$@" ;;
+    certificate)   preflight; shift; cmd_certificate "$@" ;;
+    ''|-h|--help|help) usage 0 ;;
+    *) warn "unknown method: $1"; usage 1 ;;
+esac

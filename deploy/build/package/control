@@ -1,0 +1,23 @@
+Package: mymate
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Athena Networks <sales@athenanetworks.com.au>
+Installed-Size: @INSTALLED_SIZE@
+Depends: php8.4-fpm, php8.4-cli, php8.4-pgsql, php8.4-redis, php8.4-snmp,
+ php8.4-mbstring, php8.4-xml, php8.4-curl, php8.4-bcmath, php8.4-gd,
+ php8.4-zip, php8.4-intl,
+ postgresql, postgresql-client, redis-server, nginx,
+ libcap2-bin, openssl, adduser, ca-certificates, netbase
+Recommends: certbot, python3-certbot-nginx
+Section: net
+Priority: optional
+Homepage: https://github.com/AthenaNetworks/mymate
+Description: My Mate - modern network monitor (The Dude replacement)
+ My Mate is a live, web-based network monitor: it maps your network, pings every
+ device for up/down, polls interface throughput over SNMP or the RouterOS API, and
+ colours each link green-to-red by utilisation in real time - with alerting,
+ history, auto-discovery and multi-site maps.
+ .
+ This package installs a self-contained instance (PostgreSQL, Redis, nginx,
+ php-fpm and the background engine), provisioned automatically on install. Free
+ and open source - no device limits.

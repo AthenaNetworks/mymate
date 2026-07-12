@@ -1,0 +1,111 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Actions\Backup\RunDeviceBackup;
+use App\Enums\BackupStatus;
+use App\Enums\PollMethod;
+use App\Models\Credential;
+use App\Models\Device;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
+
+/**
+ * The RunDeviceBackup action: registers the device with Rusted, triggers
+ * the capture, and mirrors the result onto the device. Rusted's HTTP API is faked.
+ */
+class RunDeviceBackupTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config()->set('mymate.backup.url', 'http://127.0.0.1:8410');
+        config()->set('mymate.backup.token', 'test-token');
+    }
+
+    private function routerosDevice(): Device
+    {
+        $cred = Credential::factory()->routeros()->create();
+
+        return Device::factory()->create([
+            'poll_method' => PollMethod::RouterOs,
+            'credential_id' => $cred->id,
+            'backup_enabled' => true,
+            'backup_driver' => 'mikrotik_routeros',
+        ]);
+    }
+
+    public function test_a_successful_backup_marks_ok_with_commit(): void
+    {
+        Http::fake([
+            '*/api/credentials' => Http::response(['status' => 'ok'], 200),
+            '*/api/devices/*/backup' => Http::response(['status' => 'success', 'commit' => 'deadbeef', 'message' => 'captured'], 200),
+            '*' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $device = $this->routerosDevice();
+        app(RunDeviceBackup::class)($device);
+
+        $device->refresh();
+        $this->assertSame(BackupStatus::Ok, $device->backup_status);
+        $this->assertSame('deadbeef', $device->backup_commit);
+        $this->assertNotNull($device->backup_at);
+    }
+
+    public function test_unchanged_backup_maps_to_unchanged(): void
+    {
+        Http::fake([
+            '*/api/devices/*/backup' => Http::response(['status' => 'unchanged', 'commit' => 'oldhash'], 200),
+            '*' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $device = $this->routerosDevice();
+        app(RunDeviceBackup::class)($device);
+
+        $this->assertSame(BackupStatus::Unchanged, $device->refresh()->backup_status);
+    }
+
+    public function test_a_failed_capture_marks_failed_and_rethrows(): void
+    {
+        Http::fake([
+            '*/api/devices/*/backup' => Http::response('ssh: connection refused', 500),
+            '*' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $device = $this->routerosDevice();
+
+        try {
+            app(RunDeviceBackup::class)($device);
+            $this->fail('Expected the failed backup to throw.');
+        } catch (\Throwable) {
+            // expected - the Job's failed() handler relies on this
+        }
+
+        $this->assertSame(BackupStatus::Failed, $device->refresh()->backup_status);
+        $this->assertNotNull($device->backup_message);
+    }
+
+    public function test_missing_credential_and_no_fallback_fails_cleanly(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+
+        // SNMP device, no username on its credential, no Settings SSH fallback -> can't back up.
+        $device = Device::factory()->create([
+            'poll_method' => PollMethod::Snmp,
+            'backup_enabled' => true,
+            'backup_driver' => 'mikrotik_routeros',
+        ]);
+
+        try {
+            app(RunDeviceBackup::class)($device);
+            $this->fail('Expected a credential-resolution failure.');
+        } catch (\Throwable) {
+            // expected
+        }
+
+        $this->assertSame(BackupStatus::Failed, $device->refresh()->backup_status);
+    }
+}

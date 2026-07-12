@@ -1,0 +1,3 @@
+deviceID,device,ip,if_index,name,speed_bps
+100,router-a,10.0.0.1,1,ether1,1000000000
+200,switch-b,10.0.0.2,5,ether5,1000000000
