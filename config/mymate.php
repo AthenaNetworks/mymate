@@ -75,6 +75,62 @@ return [
         ],
     ],
 
+    // Device resource metrics - CPU / memory / temperature. Polled on their own
+    // (slower) cadence than throughput; latest values cached on the device row and
+    // trend samples appended to device_metric_samples. Off by env if you don't want it.
+    'device_metrics' => [
+        'enabled' => (bool) env('MYMATE_DEVICE_METRICS', true),
+        // Seconds between metric polls. Slower than throughput - cpu/mem/temp move
+        // gradually and the SNMP walks (hrProcessorLoad, hrStorage) aren't free.
+        'interval' => (int) env('MYMATE_DEVICE_METRICS_INTERVAL', 30),
+        'broadcast' => (bool) env('MYMATE_BROADCAST_METRICS', true),
+
+        // Per-vendor SNMP OID profiles. Picked by a case-insensitive substring match on
+        // the device's detected `vendor` (CaptureDeviceFacts), falling back to `default`
+        // (host-resources MIB) for anything unmatched. Each profile declares how to read
+        // each metric; unsupported metrics are just left null.
+        //
+        //   cpu_walk    walk this column and average the numeric values -> cpu %
+        //   cpu_oids    GET these scalars, first numeric wins -> cpu %
+        //   mem         'hrstorage' (host-MIB storage, RAM row) | 'cisco' (pool used/free)
+        //   mem_*_walk  used/free columns for the 'cisco' strategy
+        //   temp_oids   GET these scalars, take the max -> temp (÷ temp_divisor)
+        //   temp_walk   walk this column, take the max -> temp (÷ temp_divisor)
+        'profiles' => [
+            'mikrotik' => [
+                'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
+                'mem' => 'hrstorage',
+                // mtxrHlProcessorTemperature, then board temperature (whichever answers).
+                'temp_oids' => ['.1.3.6.1.4.1.14988.1.1.3.11.0', '.1.3.6.1.4.1.14988.1.1.3.10.0'],
+                'temp_divisor' => 1,
+            ],
+            'cisco' => [
+                'cpu_oids' => ['.1.3.6.1.4.1.9.9.109.1.1.1.1.7.1'], // cpmCPUTotal5minRev
+                'mem' => 'cisco',
+                'mem_used_walk' => '.1.3.6.1.4.1.9.9.48.1.1.1.5',   // ciscoMemoryPoolUsed
+                'mem_free_walk' => '.1.3.6.1.4.1.9.9.48.1.1.1.6',   // ciscoMemoryPoolFree
+                'temp_walk' => '.1.3.6.1.4.1.9.9.13.1.3.1.3',       // ciscoEnvMonTemperatureValue
+                'temp_divisor' => 1,
+            ],
+            // Host-resources MIB - net-snmp/Linux/Windows servers and anything that
+            // implements it. No portable temperature OID, so temp stays null here.
+            'default' => [
+                'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
+                'mem' => 'hrstorage',
+                'temp_oids' => [],
+                'temp_divisor' => 1,
+            ],
+        ],
+
+        // host-MIB storage columns for the 'hrstorage' memory strategy - walk descr to
+        // find the physical-RAM row, then used/size. Swap/virtual/cached rows are skipped.
+        'hrstorage' => [
+            'descr' => '.1.3.6.1.2.1.25.2.3.1.3',  // hrStorageDescr
+            'size' => '.1.3.6.1.2.1.25.2.3.1.5',   // hrStorageSize (in alloc units)
+            'used' => '.1.3.6.1.2.1.25.2.3.1.6',   // hrStorageUsed
+        ],
+    ],
+
     // Auto-discovery. A separate `scan` worker sweeps authorized subnets,
     // probes responders against the credential pool, and queues matches for review.
     // Safety (NFR-10): bounded blast radius + lockout-aware credential trials.

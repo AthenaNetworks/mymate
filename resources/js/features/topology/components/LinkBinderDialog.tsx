@@ -37,7 +37,9 @@ export function EndPicker({
     const ifs = useDeviceInterfaces(device?.id ?? null);
     const discover = useDiscoverDevice();
     const [open, setOpen] = useState(false);
-    const empty = !ifs.isLoading && (ifs.data?.length ?? 0) === 0;
+    // Ping-only devices have no interfaces by design - the link binds to the device only.
+    const pingOnly = device?.poll_method === 'none';
+    const empty = !pingOnly && !ifs.isLoading && (ifs.data?.length ?? 0) === 0;
     const selected = ifs.data?.find((i) => String(i.id) === value);
 
     const buttonText = selected ? ifaceLabel(selected) : ifs.isLoading ? 'Loading interfaces...' : 'Select interface';
@@ -49,8 +51,12 @@ export function EndPicker({
                 <span className="truncate text-white/35">{device?.mgmt_ip}</span>
             </span>
 
-            {/* Empty -> offer on-demand discovery + show why it\'s empty. */}
-            {empty ? (
+            {/* Ping-only -> no interface to pick; the link binds to the device itself. */}
+            {pingOnly ? (
+                <div className={`${field} flex items-center gap-2 text-white/45`}>
+                    Ping-only device - linked without an interface
+                </div>
+            ) : empty ? (
                 <div className="space-y-1.5">
                     <button
                         type="button"
@@ -143,20 +149,23 @@ export function LinkBinderDialog({
     const create = useCreateLink();
     const busy = create.isPending;
     const isError = create.isError;
-    const ready = aIf !== '' && bIf !== '' && !busy;
+    // A ping-only end contributes no interface, so it's ready without a selection.
+    const aPingOnly = aDev?.poll_method === 'none';
+    const bPingOnly = bDev?.poll_method === 'none';
+    const ready = (aPingOnly || aIf !== '') && (bPingOnly || bIf !== '') && !busy;
 
     // Read-only viewers can\'t create links (the backend 403s it); render nothing
     // actionable if the dialog is somehow reached.
     if (!isAdmin) return null;
 
     function confirm() {
-        if (aIf === '' || bIf === '') return;
+        if ((!aPingOnly && aIf === '') || (!bPingOnly && bIf === '')) return;
         create.mutate(
             {
                 a_device_id: pending.aDeviceId,
-                a_interface_id: Number(aIf),
+                a_interface_id: aPingOnly ? null : Number(aIf),
                 b_device_id: pending.bDeviceId,
-                b_interface_id: Number(bIf),
+                b_interface_id: bPingOnly ? null : Number(bIf),
             },
             { onSuccess: onClose },
         );
@@ -194,7 +203,7 @@ export function LinkBinderDialog({
 
                     {isError && (
                         <p className="mt-3 text-xs text-rose-400/90">
-                            Couldn\'t create the link - they may already be linked, or an interface doesn\'t match its device.
+                            Couldn't create the link - they may already be linked, or an interface doesn't match its device.
                         </p>
                     )}
 

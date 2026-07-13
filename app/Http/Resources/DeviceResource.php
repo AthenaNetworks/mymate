@@ -40,6 +40,11 @@ class DeviceResource extends JsonResource
             // Interface-discovery visibility.
             'discovery_error' => $this->discovery_error,
             'discovered_at' => $this->discovered_at,
+            // Resource metrics (latest poll) - the map tile can show any of these.
+            'cpu_pct' => $this->cpu_pct,
+            'mem_used_pct' => $this->mem_used_pct,
+            'temp_c' => $this->temp_c,
+            'metrics_at' => $this->metrics_at,
             // Config-backup mirror - last run cached from Rusted.
             'backup_enabled' => (bool) $this->backup_enabled,
             'backup_driver' => $this->backup_driver,

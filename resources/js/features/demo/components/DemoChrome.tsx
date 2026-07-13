@@ -234,7 +234,7 @@ function Contact() {
                 </div>
                 <input className={field} placeholder="Company (optional)" value={form.company} onChange={set('company')} />
                 <textarea className={field} rows={4} placeholder="How can we help?" value={form.message} onChange={set('message')} required />
-                {contact.isError && <p className="text-xs text-rose-400/90">Sorry - that didn\'t send. Please try again.</p>}
+                {contact.isError && <p className="text-xs text-rose-400/90">Sorry - that didn't send. Please try again.</p>}
                 <button
                     type="submit"
                     disabled={!ready}

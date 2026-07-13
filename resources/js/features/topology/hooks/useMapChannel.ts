@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { deviceKeys } from '../../devices/api/getDevices';
 import { linkKeys } from '../api/getLinks';
-import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import type { Device, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
 type DeviceStatusChangedPayload = {
     id: number;
@@ -48,6 +48,21 @@ export function useMapChannel(
 
         channel.listen('.InterfaceUtilUpdated', (e: InterfaceUtilUpdatedPayload) => {
             onUtil?.(e);
+        });
+
+        // Live cpu/mem/temp -> folded into the devices cache so both the map tiles and the
+        // inspector show current values (slower cadence than util, so a cache write per
+        // frame is cheap). Coalesced across devices in one event.
+        channel.listen('.DeviceMetricsUpdated', (e: DeviceMetricsUpdatedPayload) => {
+            const byId = new Map(e.devices.map((f) => [f.device_id, f]));
+            qc.setQueryData<Device[]>(
+                deviceKeys.list(),
+                (prev) =>
+                    prev?.map((d) => {
+                        const f = byId.get(d.id);
+                        return f ? { ...d, cpu_pct: f.cpu_pct, mem_used_pct: f.mem_used_pct, temp_c: f.temp_c } : d;
+                    }) ?? prev,
+            );
         });
 
         const connection = (

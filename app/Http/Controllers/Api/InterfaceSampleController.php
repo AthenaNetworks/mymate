@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\History\GetDeviceMetricSamples;
 use App\Actions\History\GetDeviceSamples;
 use App\Actions\History\GetInterfaceSamples;
 use App\Http\Controllers\Controller;
@@ -31,6 +32,17 @@ class InterfaceSampleController extends Controller
      * bucket (util averaged). Backs the inspector's device-level chart.
      */
     public function device(Request $request, Device $device, GetDeviceSamples $get): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+
+        return response()->json(['data' => $get($device->id, $from, $to)]);
+    }
+
+    /**
+     * GET /api/devices/{device}/metric-samples?from&to
+     * Bucketed cpu/mem/temp history for the device - backs the inspector's resource chart.
+     */
+    public function metrics(Request $request, Device $device, GetDeviceMetricSamples $get): JsonResponse
     {
         [$from, $to] = $this->window($request);
 

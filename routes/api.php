@@ -97,6 +97,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         ->name('interfaces.samples');
     Route::get('devices/{device}/samples', [InterfaceSampleController::class, 'device'])
         ->name('devices.samples');
+    // Recent history: bucketed cpu/mem/temp series for one device (resource chart).
+    Route::get('devices/{device}/metric-samples', [InterfaceSampleController::class, 'metrics'])
+        ->name('devices.metric-samples');
 
     // Topology links (interface-to-interface). Update re-binds either end.
     Route::apiResource('links', LinkController::class)->only(['index', 'store', 'update', 'destroy']);

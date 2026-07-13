@@ -111,7 +111,7 @@ export function SubnetManager({
                         ))}
                     </select>
                 )}
-                {create.isError && <p className="px-1 text-xs text-rose-400/90">Couldn\'t add - enter a valid IPv4 CIDR (and not a duplicate).</p>}
+                {create.isError && <p className="px-1 text-xs text-rose-400/90">Couldn't add - enter a valid IPv4 CIDR (and not a duplicate).</p>}
             </form>
             )}
 

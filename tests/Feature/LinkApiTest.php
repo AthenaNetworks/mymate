@@ -250,6 +250,41 @@ class LinkApiTest extends TestCase
         $this->assertDatabaseMissing('links', ['id' => $link->id]);
     }
 
+    public function test_creates_a_one_ended_link_to_a_ping_only_device(): void
+    {
+        // A ping-only device (poll_method=none) has no interfaces - it links from the
+        // real end only, so b_interface_id is null and the link speed comes from A.
+        [$a, $b, $aIf] = $this->twoLinkableDevices();
+        $b->update(['poll_method' => 'none']);
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => null,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.a_interface_id', $aIf->id)
+            ->assertJsonPath('data.b_interface_id', null)
+            ->assertJsonPath('data.b_interface', null)
+            ->assertJsonPath('data.eff_ab_mbps', 1000); // derived from the single (A) end
+
+        $this->assertDatabaseHas('links', ['a_interface_id' => $aIf->id, 'b_interface_id' => null]);
+    }
+
+    public function test_rejects_a_duplicate_one_ended_link_in_either_direction(): void
+    {
+        [$a, $b, $aIf] = $this->twoLinkableDevices();
+        $b->update(['poll_method' => 'none']);
+        Link::create(['a_device_id' => $a->id, 'a_interface_id' => $aIf->id, 'b_device_id' => $b->id, 'b_interface_id' => null]);
+
+        // Same devices + the same null end, reversed - a duplicate, not a second link.
+        $this->postJson('/api/links', [
+            'a_device_id' => $b->id, 'a_interface_id' => null,
+            'b_device_id' => $a->id, 'b_interface_id' => $aIf->id,
+        ])->assertStatus(422)->assertJsonValidationErrors(['a_interface_id']);
+
+        $this->assertSame(1, Link::count());
+    }
+
     public function test_lists_a_devices_interfaces_for_the_binder(): void
     {
         $device = Device::factory()->create();

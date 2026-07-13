@@ -17,12 +17,14 @@ import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
 import { useDiscoverDevice } from '../api/discoverDevice';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useUpgradeDevices } from '../../devices/api/upgradeDevices';
+import { useCredentials } from '../../settings/api/credentials';
 import { useLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
 import { useMap, useAddDeviceToMap, useRemoveDeviceFromMap } from '../../maps/api/maps';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { ChartModal } from './ChartModal';
 import { BackupSection } from '../../backups/components/BackupSection';
+import { DeviceResources } from './DeviceResources';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
 import { useDeviceSamples } from '../api/getDeviceSamples';
@@ -120,6 +122,38 @@ function PollMethodPicker({ device }: { device: Device }) {
             >
                 {POLL_METHOD_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
+// Editable "Credential" cell: assign the SNMP community / RouterOS login the poller
+// authenticates with. Hidden for ping-only devices (nothing to authenticate). Without a
+// credential, interface discovery fails with "no SNMP community", so this is the fix.
+function CredentialPicker({ device }: { device: Device }) {
+    const update = useUpdateDevice();
+    const { data: credentials } = useCredentials();
+    const matching = (credentials ?? []).filter((c) => c.type === device.poll_method);
+
+    return (
+        <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/30">Credential</p>
+            <select
+                value={device.credential_id ?? ''}
+                onChange={(e) => {
+                    const value = e.target.value === '' ? null : Number(e.target.value);
+                    if (value === device.credential_id) return;
+                    update.mutate(
+                        { id: device.id, credential_id: value },
+                        { onError: () => pushToast({ title: 'Couldn\'t change credential', tone: 'down' }) },
+                    );
+                }}
+                className="-ml-1 mt-0.5 w-full truncate rounded-md bg-white/[0.03] px-1 py-0.5 text-sm text-white/85 outline-none ring-1 ring-white/10 transition hover:ring-white/25 focus:ring-emerald-400/50"
+            >
+                <option value="">{matching.length > 0 ? 'None' : 'None - add one in Settings'}</option>
+                {matching.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
             </select>
         </div>
@@ -603,6 +637,7 @@ export function DeviceInspector() {
                 ) : (
                     <Detail label="Poll method" value={pollLabel[device.poll_method] ?? device.poll_method} />
                 )}
+                {isAdmin && !pingOnly && <CredentialPicker device={device} />}
                 <Detail label="Parent" value={device.parent_name ?? '-'} />
             </div>
 
@@ -626,6 +661,12 @@ export function DeviceInspector() {
                     />
                 </div>
             </Section>
+            )}
+
+            {!pingOnly && (
+                <Section title="Resources">
+                    <DeviceResources device={device} />
+                </Section>
             )}
 
             {pingOnly ? (
@@ -670,9 +711,9 @@ export function DeviceInspector() {
                             return (
                                 <div key={l.id} className="flex items-center gap-1.5 text-xs">
                                     <span className="min-w-0 flex-1 truncate text-white/80">
-                                        {localIf.name}
+                                        {localIf?.name ?? '(no interface)'}
                                         <span className="text-white/35"> → {peerNm}</span>
-                                        <span className="text-white/30"> - {peerIf.name}</span>
+                                        {peerIf && <span className="text-white/30"> - {peerIf.name}</span>}
                                     </span>
                                     {isAdmin && (
                                         <>
@@ -684,7 +725,7 @@ export function DeviceInspector() {
                                                 <PencilSimple weight="bold" className="h-3.5 w-3.5" />
                                             </button>
                                             <button
-                                                onClick={() => setDeletingLink({ id: l.id, label: `${localIf.name} -> ${peerNm}` })}
+                                                onClick={() => setDeletingLink({ id: l.id, label: `${localIf?.name ?? '(no interface)'} -> ${peerNm}` })}
                                                 title="Delete link"
                                                 className="rounded-md p-1 text-white/40 transition-colors hover:bg-rose-500/10 hover:text-rose-300"
                                             >

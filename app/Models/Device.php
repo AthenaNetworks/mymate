@@ -24,6 +24,7 @@ class Device extends Model
         'device_type', 'parent_device_id', 'vendor', 'model', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
+        'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at',
         'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
     ];
 
@@ -38,6 +39,10 @@ class Device extends Model
         'map_y' => 'float',
         'uptime_seconds' => 'integer',
         'uptime_at' => 'datetime',
+        'cpu_pct' => 'float',
+        'mem_used_pct' => 'float',
+        'temp_c' => 'float',
+        'metrics_at' => 'datetime',
         'upgrade_at' => 'datetime',
         'discovered_at' => 'datetime',
         'backup_enabled' => 'boolean',

@@ -11,6 +11,8 @@ export type View = 'map' | 'dashboard' | 'devices' | 'discovery' | 'outages' | '
 /** Per-device inspector view prefs. */
 export type ChartMode = 'util' | 'rate';
 export type IfaceFilter = 'all' | 'linked' | 'traffic';
+/** Which resource a device's map tile shows. Re-exported from types for store use. */
+export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
 
 /** Map link geometry - curved bezier (default) or straight point-to-point. */
 export type EdgeStyle = 'curved' | 'straight';
@@ -30,6 +32,7 @@ type ShellState = {
     // returns a stable scalar - a fresh object per render would loop useSyncExternalStore.
     chartModeById: Record<number, ChartMode>;
     ifaceFilterById: Record<number, IfaceFilter>;
+    tileMetricById: Record<number, TileMetric>; // which resource each map tile shows
     edgeStyle: EdgeStyle; // map link geometry - curved (default) or straight
     layoutKind: LayoutKind; // last-chosen auto-layout algorithm
     wallboard: boolean; // big-screen / TV presentation mode
@@ -72,6 +75,7 @@ type Persisted = Pick<
     | 'activeMapId'
     | 'chartModeById'
     | 'ifaceFilterById'
+    | 'tileMetricById'
     | 'edgeStyle'
     | 'layoutKind'
     | 'wallboard'
@@ -99,6 +103,7 @@ let state: ShellState = {
     activeMapId: saved.activeMapId ?? null,
     chartModeById: saved.chartModeById ?? {},
     ifaceFilterById: saved.ifaceFilterById ?? {},
+    tileMetricById: saved.tileMetricById ?? {},
     edgeStyle: saved.edgeStyle ?? 'curved',
     layoutKind: saved.layoutKind ?? 'smart',
     wallboard: saved.wallboard ?? false,
@@ -112,13 +117,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, edgeStyle, layoutKind, wallboard,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, layoutKind, wallboard,
             dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, edgeStyle, layoutKind, wallboard,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, layoutKind, wallboard,
                 dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -225,6 +230,18 @@ export function setDeviceIfaceFilter(id: number, filter: IfaceFilter): void {
 
 export function useDeviceIfaceFilter(id: number): IfaceFilter {
     return useSyncExternalStore(subscribe, () => state.ifaceFilterById[id] ?? 'all');
+}
+
+// Per-device map-tile resource: throughput (default) / cpu / mem / temp. Persisted so a
+// tile keeps showing the metric the operator picked across reloads.
+export function setDeviceTileMetric(id: number, metric: TileMetric): void {
+    if ((state.tileMetricById[id] ?? 'throughput') === metric) return;
+    state = { ...state, tileMetricById: { ...state.tileMetricById, [id]: metric } };
+    emit();
+}
+
+export function useDeviceTileMetric(id: number): TileMetric {
+    return useSyncExternalStore(subscribe, () => state.tileMetricById[id] ?? 'throughput');
 }
 
 // Map edge geometry: curved (bezier, default) or straight. Global +

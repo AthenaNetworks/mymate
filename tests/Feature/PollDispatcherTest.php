@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\PollMethod;
+use App\Jobs\PollDeviceMetricsBatchJob;
 use App\Jobs\PollInterfacesBatchJob;
 use App\Models\Device;
 use App\Services\Polling\PollDispatcher;
@@ -13,6 +14,29 @@ use Tests\TestCase;
 class PollDispatcherTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_metrics_dispatch_shards_pollable_devices_onto_the_poll_queue(): void
+    {
+        config(['mymate.poll.shards' => 4]);
+        Queue::fake();
+
+        $ids = Device::factory()->count(9)->create(['poll_method' => PollMethod::Snmp])->pluck('id')
+            ->merge(Device::factory()->count(3)->create(['poll_method' => PollMethod::RouterOs])->pluck('id'))
+            ->sort()->values()->all();
+        // Ping-only devices have no metrics driver - never dispatched.
+        Device::factory()->count(2)->create(['poll_method' => PollMethod::None]);
+
+        $shardsUsed = app(PollDispatcher::class)->dispatchMetrics();
+
+        $jobs = Queue::pushed(PollDeviceMetricsBatchJob::class);
+        $this->assertCount($shardsUsed, $jobs);
+
+        $dispatchedIds = $jobs->flatMap(fn (PollDeviceMetricsBatchJob $j) => $j->deviceIds)->sort()->values()->all();
+        $this->assertSame($ids, $dispatchedIds);
+        foreach ($jobs as $job) {
+            $this->assertSame('poll', $job->queue);
+        }
+    }
 
     public function test_shards_pollable_devices_into_batch_jobs_covering_each_once(): void
     {

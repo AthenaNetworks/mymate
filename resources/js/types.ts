@@ -53,6 +53,12 @@ export interface Device {
     // Interface-discovery visibility.
     discovery_error: string | null;
     discovered_at: string | null;
+    // Resource metrics (latest poll) - the map tile can show any of these. Null = not
+    // read (unsupported OID / never polled), never treated as zero.
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
+    metrics_at: string | null;
     // Config-backup mirror - last Rusted run, cached on the device.
     backup_enabled: boolean;
     backup_driver: string | null;
@@ -127,11 +133,13 @@ export interface NetworkInterface {
 export interface Link {
     id: number;
     a_device_id: number;
-    a_interface_id: number;
+    // Interface ends are null for a ping-only device (no interfaces) - the link then
+    // draws device-to-device and takes its throughput from whichever end has one.
+    a_interface_id: number | null;
     b_device_id: number;
-    b_interface_id: number;
-    a_interface: NetworkInterface;
-    b_interface: NetworkInterface;
+    b_interface_id: number | null;
+    a_interface: NetworkInterface | null;
+    b_interface: NetworkInterface | null;
     // Per-link bandwidth override + resolved effective speed per direction.
     // bw_* null = derive from the slowest end; eff_* is the value util% is computed against.
     bw_ab_mbps: number | null;
@@ -286,6 +294,31 @@ export interface InterfaceSample {
     util_out: number | null;
     bps_in: number | null;
     bps_out: number | null;
+}
+
+// Which resource a device's map tile shows. 'throughput' = busiest-interface util
+// (the default, unchanged); the rest come from the device-metrics pipeline.
+export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
+
+// Live device-metrics event (App\Events\DeviceMetricsUpdated) - coalesced across devices.
+export interface DeviceMetricsFrame {
+    device_id: number;
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
+}
+
+export interface DeviceMetricsUpdatedPayload {
+    devices: DeviceMetricsFrame[];
+    device_count: number;
+}
+
+// Recent history - a bucketed cpu/mem/temp point from the device metric-samples endpoint.
+export interface DeviceMetricSample {
+    ts: string;
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
 }
 
 // Auto-discovery - mirrors SubnetResource / DiscoveryCandidateResource.

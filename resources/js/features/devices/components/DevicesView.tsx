@@ -283,7 +283,7 @@ export function DevicesView() {
                     message={
                         <>
                             Delete <span className="font-semibold text-white/85">{deleting.name}</span>? It will stop being monitored and be removed
-                            from every map. This can\'t be undone.
+                            from every map. This can't be undone.
                         </>
                     }
                     confirmLabel="Delete"

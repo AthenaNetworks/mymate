@@ -59,7 +59,8 @@ class LoopCommand extends Command
         if ($this->option('once')) {
             PingSweepJob::dispatch();
             $n = $this->dispatchPoll();
-            $this->info("Dispatched one ping sweep + {$n} poll batch job(s).");
+            $m = $this->dispatchMetrics();
+            $this->info("Dispatched one ping sweep + {$n} poll + {$m} metrics batch job(s).");
 
             return self::SUCCESS;
         }
@@ -85,6 +86,7 @@ class LoopCommand extends Command
         ManageHistoryPartitionsJob::dispatch();
         $settings = app(Settings::class);
         $lastPoll = 0.0;
+        $lastMetrics = 0.0;
         $lastDiscover = microtime(true);
         $lastScanCheck = 0.0;
         $lastHistory = microtime(true);
@@ -93,6 +95,7 @@ class LoopCommand extends Command
             // Re-read cadences each cycle so a Settings change applies without a restart.
             $pingInterval = max(1, $settings->getInt('ping.interval', 5));
             $pollInterval = max(1, $settings->getInt('poll.interval', 12));
+            $metricsInterval = max(5, (int) config('mymate.device_metrics.interval', 30));
             $discoverInterval = max(60, $settings->getInt('poll.discover_interval', 600));
             $scanCheckInterval = max(5, $settings->getInt('discovery.check_interval', 30));
             $historyInterval = max(60, $settings->getInt('history.maintain_interval', 3600));
@@ -109,6 +112,11 @@ class LoopCommand extends Command
                 }
                 EvaluateAlertsJob::dispatch(); // evaluate alert policies on the poll cadence
                 $lastPoll = $now;
+            }
+            // Device resource metrics (cpu/mem/temp) on their own slower cadence.
+            if (config('mymate.device_metrics.enabled', true) && $now - $lastMetrics >= $metricsInterval) {
+                EngineLog::debug('loop: metrics dispatched', ['shards' => $this->dispatchMetrics()]);
+                $lastMetrics = $now;
             }
             if ($now - $lastDiscover >= $discoverInterval) {
                 EngineLog::debug('loop: discovery dispatched', ['devices' => $this->dispatchDiscovery()]);
@@ -135,6 +143,12 @@ class LoopCommand extends Command
     private function dispatchPoll(): int
     {
         return app(PollDispatcher::class)->dispatch();
+    }
+
+    /** Dispatch the sharded device-metrics (cpu/mem/temp) batch jobs. Returns shard count. */
+    private function dispatchMetrics(): int
+    {
+        return app(PollDispatcher::class)->dispatchMetrics();
     }
 
     /** Dispatch an interface-discovery job per pollable device. */
