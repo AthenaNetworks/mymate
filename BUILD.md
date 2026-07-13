@@ -170,6 +170,22 @@ docker build -t athenanetworks/mymate:dev .
 
 CI does all of this on a tag and attaches the results to the GitHub release.
 
+## Cutting a release
+
+A release is a git tag (`vX.Y.Z`); pushing it triggers the CI workflow above,
+which builds everything and creates the GitHub release. Before you tag:
+
+1. **Update [CHANGELOG.md](CHANGELOG.md).** Rename the `Unreleased` section to the
+   new version with today's date, and add the compare link at the bottom. Keep
+   entries grouped under Added / Changed / Fixed and written for a human deciding
+   whether to upgrade. If you've been adding notes under `Unreleased` as you merged
+   changes there's nothing to reconstruct; otherwise `git log <last-tag>..HEAD` is
+   the source of truth for what to write.
+2. **Bump the `VERSION` file** (repo root) to the same number. The build stamps this
+   into the package and the in-app update check compares against it, so it has to
+   match the tag.
+3. Commit those two, then tag: `git tag vX.Y.Z && git push --tags`.
+
 ## Layout
 
 ```
