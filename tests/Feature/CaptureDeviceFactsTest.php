@@ -28,8 +28,8 @@ class CaptureDeviceFactsTest extends TestCase
         ]);
 
         $this->app->instance(RouterOsClient::class, new FakeRouterOsClient([
-            '/system/resource' => [['board-name' => 'CCR2004-16-12S+', 'uptime' => '1w2d3h4m5s']],
-            '/system/routerboard' => [['model' => 'CCR2004-16-12S+']],
+            '/system/resource/print' => [['board-name' => 'CCR2004-16-12S+', 'uptime' => '1w2d3h4m5s']],
+            '/system/routerboard/print' => [['model' => 'CCR2004-16-12S+']],
         ]));
 
         app(CaptureDeviceFacts::class)($device);
@@ -84,8 +84,8 @@ class CaptureDeviceFactsTest extends TestCase
         ]);
 
         $this->app->instance(RouterOsClient::class, new FakeRouterOsClient([
-            '/system/resource' => [['board-name' => 'CCR2004', 'uptime' => '5m']],
-            '/system/routerboard' => [['model' => 'CCR2004']],
+            '/system/resource/print' => [['board-name' => 'CCR2004', 'uptime' => '5m']],
+            '/system/routerboard/print' => [['model' => 'CCR2004']],
         ]));
 
         app(CaptureDeviceFacts::class)($device);

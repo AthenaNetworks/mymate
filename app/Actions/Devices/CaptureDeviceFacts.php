@@ -88,8 +88,9 @@ class CaptureDeviceFacts
         ));
 
         try {
-            $res = $conn->query('/system/resource')[0] ?? [];
-            $board = $conn->query('/system/routerboard')[0] ?? [];
+            // The API needs the /print action (a bare "/system/resource" traps).
+            $res = $conn->query('/system/resource/print')[0] ?? [];
+            $board = $conn->query('/system/routerboard/print')[0] ?? [];
             $model = $board['model'] ?? $board['board-name'] ?? $res['board-name'] ?? null;
             $uptime = isset($res['uptime']) ? self::parseRouterOsUptime((string) $res['uptime']) : null;
 

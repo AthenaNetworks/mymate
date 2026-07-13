@@ -20,7 +20,9 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
         $conn = $this->client->open(RouterOsTarget::fromDevice($device));
 
         try {
-            $res = $conn->query('/system/resource')[0] ?? [];
+            // The API needs the /print action - a bare "/system/resource" traps with
+            // "no such command" and the whole read silently comes back null.
+            $res = $conn->query('/system/resource/print')[0] ?? [];
 
             $cpu = isset($res['cpu-load']) && is_numeric($res['cpu-load']) ? (float) $res['cpu-load'] : null;
 
@@ -45,7 +47,7 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
     private function temperature(\App\Services\RouterOs\RouterOsConnection $conn): ?float
     {
         try {
-            $rows = $conn->query('/system/health');
+            $rows = $conn->query('/system/health/print');
         } catch (\Throwable) {
             return null;
         }
