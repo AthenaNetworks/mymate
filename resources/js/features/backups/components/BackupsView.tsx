@@ -128,14 +128,35 @@ function ScheduleCard({ isAdmin }: { isAdmin: boolean }) {
     );
 }
 
+type PanelMode = 'diff' | 'compare' | 'config';
+
 function VersionPanel({ device }: { device: Device }) {
     const { data: versions, isLoading } = useDeviceVersions(device.id);
     const [focus, setFocus] = useState<string | null>(null);
-    const [mode, setMode] = useState<'diff' | 'config'>('diff');
+    const [mode, setMode] = useState<PanelMode>('diff');
+    const [cmpFrom, setCmpFrom] = useState<string | null>(null);
+    const [cmpTo, setCmpTo] = useState<string | null>(null);
     const commit = focus ?? versions?.[0]?.commit ?? null;
 
+    // Compare defaults: previous version -> latest (falls back to the only version).
+    const from = cmpFrom ?? versions?.[1]?.commit ?? versions?.[0]?.commit ?? null;
+    const to = cmpTo ?? versions?.[0]?.commit ?? null;
+    const compareReady = mode === 'compare' && from !== null && to !== null && from !== to;
+
     const diff = useDeviceDiff(device.id, mode === 'diff' ? commit : null, null);
+    const compareDiff = useDeviceDiff(device.id, compareReady ? from : null, compareReady ? to : null);
     const config = useDeviceConfigAt(device.id, mode === 'config' ? commit : null);
+
+    // In compare mode, clicking a version row sets the "to" end (compare an old version to it).
+    function onRowClick(hash: string) {
+        if (mode === 'compare') setCmpTo(hash);
+        else setFocus(hash);
+    }
+    const highlighted = (hash: string) => (mode === 'compare' ? hash === from || hash === to : hash === commit);
+
+    const versionOptions = (versions ?? []).map((v) => (
+        <option key={v.commit} value={v.commit}>{v.commit} - {v.date}</option>
+    ));
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -145,17 +166,27 @@ function VersionPanel({ device }: { device: Device }) {
                     <p className="text-xs text-white/40">{device.mgmt_ip} - backup history</p>
                 </div>
                 <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 ring-1 ring-white/10">
-                    {(['diff', 'config'] as const).map((m) => (
+                    {(['diff', 'compare', 'config'] as const).map((m) => (
                         <button
                             key={m}
                             onClick={() => setMode(m)}
                             className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${mode === m ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white/80'}`}
                         >
-                            {m === 'diff' ? 'Changes' : 'Full config'}
+                            {m === 'diff' ? 'Changes' : m === 'compare' ? 'Compare' : 'Full config'}
                         </button>
                     ))}
                 </div>
             </div>
+
+            {/* Compare: pick two versions (from -> to). */}
+            {mode === 'compare' && (
+                <div className="mb-3 flex items-center gap-2 text-xs text-white/50">
+                    <span>From</span>
+                    <select className={field} value={from ?? ''} onChange={(e) => setCmpFrom(e.target.value)}>{versionOptions}</select>
+                    <span>to</span>
+                    <select className={field} value={to ?? ''} onChange={(e) => setCmpTo(e.target.value)}>{versionOptions}</select>
+                </div>
+            )}
 
             <div className="flex min-h-0 flex-1 gap-3">
                 {/* Version list. */}
@@ -168,12 +199,14 @@ function VersionPanel({ device }: { device: Device }) {
                         versions.map((v) => (
                             <button
                                 key={v.commit}
-                                onClick={() => setFocus(v.commit)}
-                                className={`w-full rounded-lg px-2.5 py-2 text-left ring-1 transition ${commit === v.commit ? 'bg-emerald-500/10 ring-emerald-400/25' : 'bg-white/[0.03] ring-white/[0.06] hover:bg-white/[0.05]'}`}
+                                onClick={() => onRowClick(v.commit)}
+                                className={`w-full rounded-lg px-2.5 py-2 text-left ring-1 transition ${highlighted(v.commit) ? 'bg-emerald-500/10 ring-emerald-400/25' : 'bg-white/[0.03] ring-white/[0.06] hover:bg-white/[0.05]'}`}
                             >
                                 <div className="flex items-center gap-1.5 text-[11px] text-white/45">
                                     <GitCommit weight="bold" className="h-3 w-3" />
                                     <span className="font-mono">{v.commit}</span>
+                                    {mode === 'compare' && v.commit === from && <span className="rounded bg-rose-500/15 px-1 text-[9px] text-rose-300">from</span>}
+                                    {mode === 'compare' && v.commit === to && <span className="rounded bg-emerald-500/15 px-1 text-[9px] text-emerald-300">to</span>}
                                     <span className="ml-auto">{v.date}</span>
                                 </div>
                                 <div className="mt-0.5 truncate text-[11px] text-white/60">{v.subject}</div>
@@ -184,14 +217,24 @@ function VersionPanel({ device }: { device: Device }) {
 
                 {/* Diff / config viewer. */}
                 <div className="min-w-0 flex-1 overflow-hidden rounded-xl bg-[#0b0b0f] ring-1 ring-white/10">
-                    {commit === null ? (
+                    {mode === 'config' ? (
+                        commit === null ? (
+                            <p className="p-4 text-xs text-white/35">No version selected.</p>
+                        ) : config.data ? (
+                            <pre className="overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/75">{config.data}</pre>
+                        ) : (
+                            <p className="p-4 text-xs text-white/35">{config.isLoading ? 'Loading...' : 'No config at this version.'}</p>
+                        )
+                    ) : mode === 'compare' ? (
+                        from === to ? (
+                            <p className="p-4 text-xs text-white/35">Pick two different versions to compare.</p>
+                        ) : (
+                            <DiffView text={compareDiff.data} />
+                        )
+                    ) : commit === null ? (
                         <p className="p-4 text-xs text-white/35">No version selected.</p>
-                    ) : mode === 'diff' ? (
-                        <DiffView text={diff.data} />
-                    ) : config.data ? (
-                        <pre className="overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/75">{config.data}</pre>
                     ) : (
-                        <p className="p-4 text-xs text-white/35">{config.isLoading ? 'Loading...' : 'No config at this version.'}</p>
+                        <DiffView text={diff.data} />
                     )}
                 </div>
             </div>
