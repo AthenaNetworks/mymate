@@ -59,6 +59,14 @@ MYMATE_SSL_NO_RESTART=1 mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1 \
 as_app "php artisan migrate --force --no-interaction" || true
 as_app "php artisan config:clear" || true
 
+# 4b. Re-provision the backup engine so this instance gets its OWN rusted token + backup
+# repo (the template's were stripped by the LXC build). Only touches rusted-api, not the
+# engine services this unit is ordered Before=, so no deadlock. Best-effort.
+if [ -x /usr/local/bin/rusted ] && [ -f "$APP/deploy/rusted/provision.sh" ]; then
+    APP_DIR="$APP" APP_USER=mymate bash "$APP/deploy/rusted/provision.sh" \
+        || echo "my-mate: WARNING backup engine setup failed - configure it later in Settings." >&2
+fi
+
 touch "$MARKER"
 
 # php-fpm may have started before us; it re-reads .env per request, but restart it for a

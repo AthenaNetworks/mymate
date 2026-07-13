@@ -53,5 +53,23 @@ php artisan migrate --force || echo "mymate: migrate failed - will retry next bo
 php artisan config:clear >/dev/null 2>&1 || true
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
+# Backup engine (Rusted): generate a config with its own token on first start, init the
+# db + git backup repo, and point My Mate at it so backups just work. Mount /etc/rusted and
+# /var/lib/rusted as volumes to keep the token + captured configs across container recreation
+# (otherwise a fresh token is generated each start - harmless, My Mate is re-pointed below).
+if [ -x /usr/local/bin/rusted ]; then
+    if [ ! -f /etc/rusted/config.toml ]; then
+        echo "mymate: initialising the Rusted backup engine"
+        rusted config init --global --data-dir /var/lib/rusted >/dev/null 2>&1 || true
+        # Rusted defaults to :8080 (taken by Reverb here) - bind loopback:8410 instead.
+        sed -i 's|^api_addr[[:space:]]*=.*|api_addr  = "127.0.0.1:8410"|' /etc/rusted/config.toml 2>/dev/null || true
+        rusted --config /etc/rusted/config.toml init >/dev/null 2>&1 || true
+        chown -R www-data:www-data /etc/rusted /var/lib/rusted 2>/dev/null || true
+    fi
+    # Always re-point My Mate at the current token so the two never drift apart.
+    php artisan mymate:backup:configure --url http://127.0.0.1:8410 --from-rusted /etc/rusted/config.toml >/dev/null 2>&1 \
+        || echo "mymate: backup engine not auto-configured - set it in Settings"
+fi
+
 echo "mymate: starting services"
 exec "$@"

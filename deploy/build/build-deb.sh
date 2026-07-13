@@ -33,6 +33,10 @@ ARCH="${ARCH:-amd64}"
 # regenerate with build-fping.sh. Falls back to a system build if the vendored one is absent.
 FPING_BIN="${FPING_BIN:-$SCRIPT_DIR/vendor/fping}"
 [ -f "$FPING_BIN" ] || FPING_BIN=/usr/local/sbin/fping
+# Optional Rusted backup-engine binary. When present it's bundled to /usr/local/bin/rusted
+# and postinst auto-provisions backups; when absent the package still installs fine (backups
+# just start unconfigured). Build it with deploy/rusted/build-rusted.sh.
+RUSTED_BIN="${RUSTED_BIN:-$REPO_ROOT/deploy/rusted/vendor/rusted}"
 REVERB_KEY="${REVERB_KEY:-mymate}"
 PHP_VERSION="${PHP_VERSION:-8.4}"
 
@@ -71,6 +75,7 @@ tar -C "$REPO_ROOT" \
     --exclude='./build' \
     --exclude='./dist' \
     --exclude='./deploy/build' \
+    --exclude='./deploy/rusted/vendor' \
     --exclude='./vendor' \
     --exclude='./agent' \
     --exclude='./PRD.md' \
@@ -125,6 +130,13 @@ say "Building frontend assets"
 # --- 4. System files into the stage --------------------------------------
 say "Laying system files (systemd, nginx, php-fpm, fping)"
 install -Dm755 "$FPING_BIN"                       "$STAGE/usr/local/sbin/fping"
+# Rusted backup engine (optional) - postinst runs deploy/rusted/provision.sh to wire it up.
+if [ -f "$RUSTED_BIN" ]; then
+    install -Dm755 "$RUSTED_BIN"                  "$STAGE/usr/local/bin/rusted"
+    say "Bundled the Rusted backup engine"
+else
+    warn "Rusted binary not found ($RUSTED_BIN) - backups will need manual setup. Build it with deploy/rusted/build-rusted.sh."
+fi
 install -Dm644 "$FILES_DIR/nginx-mymate.conf"     "$STAGE/etc/nginx/sites-available/mymate"
 # Pristine copy mymate-ssl reads to revert to plain HTTP (methods 1 & 2, and LXC reset) -
 # deploy/build is excluded from the app tree, so the helper can't read it from there.

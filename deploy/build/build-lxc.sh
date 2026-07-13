@@ -77,6 +77,11 @@ $PODMAN exec "$NAME" bash -c '
     # first-boot flips it back to self-signed HTTPS for the real host.
     rm -rf /etc/mymate/tls 2>/dev/null || true
     cp /usr/share/mymate/nginx-mymate.conf /etc/nginx/sites-available/mymate 2>/dev/null || true
+    # Strip the baked Rusted token + backup data so every clone gets its own on first boot
+    # (the binary stays; first-boot re-runs provision.sh to regenerate config + rewire).
+    systemctl disable rusted-api >/dev/null 2>&1 || true
+    rm -f /etc/rusted/config.toml 2>/dev/null || true
+    rm -rf /var/lib/rusted/rusted.db /var/lib/rusted/backups 2>/dev/null || true
 '
 
 # --- 4. export the rootfs as a Proxmox template --------------------------
