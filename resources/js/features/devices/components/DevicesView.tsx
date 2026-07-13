@@ -47,7 +47,7 @@ export function DevicesView() {
         // Dependency pre-flight: show what will upgrade vs be skipped first.
         let plan;
         try {
-            plan = await preflight.mutateAsync(ids);
+            plan = await preflight.mutateAsync({ deviceIds: ids });
         } catch {
             pushToast({ title: 'Couldn\'t check upgrade dependencies', tone: 'down' });
             return;

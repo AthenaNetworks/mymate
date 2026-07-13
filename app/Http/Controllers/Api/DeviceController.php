@@ -66,9 +66,10 @@ class DeviceController extends Controller
      */
     public function upgradePreflight(UpgradeDevicesRequest $request, UpgradePreflight $preflight): JsonResponse
     {
-        $ids = array_map('intval', $request->validated()['device_ids']);
+        $data = $request->validated();
+        $ids = array_map('intval', $data['device_ids']);
 
-        return response()->json($preflight($ids));
+        return response()->json($preflight($ids, (bool) ($data['preserve_order'] ?? false)));
     }
 
     /**
@@ -89,7 +90,7 @@ class DeviceController extends Controller
         ]);
 
         if ($data['ordered'] ?? false) {
-            BulkUpgradeJob::dispatch($ids);
+            BulkUpgradeJob::dispatch($ids, (bool) ($data['explicit_order'] ?? false));
         } else {
             foreach ($ids as $id) {
                 UpgradeDeviceJob::dispatch($id);
