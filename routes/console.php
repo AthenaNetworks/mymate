@@ -17,4 +17,7 @@ Schedule::job(new ManageHistoryPartitionsJob)->daily()->name('history-partitions
 // Device config backups: nightly, fan out one backup job per
 // backup-enabled device onto the isolated `backup` queue (the SSH capture runs in the
 // Rusted sidecar). Off-peak so a slow fleet-wide sweep doesn't compete with the day.
-Schedule::command('mymate:backup:run --all')->dailyAt('02:30')->name('device-backups')->withoutOverlapping();
+// Runs hourly; the command fires only when the operator-configured cadence
+// (App\Support\BackupSchedule, editable on the Backups page) is due - so changing the
+// schedule takes effect without restarting the scheduler.
+Schedule::command('mymate:backup:run --scheduled')->hourly()->name('device-backups')->withoutOverlapping();

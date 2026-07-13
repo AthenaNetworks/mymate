@@ -65,6 +65,29 @@ class DeviceApiTest extends TestCase
         $this->assertDatabaseHas('devices', ['id' => $device->id, 'name' => 'New']);
     }
 
+    public function test_it_attaches_a_dedicated_ssh_credential(): void
+    {
+        $device = Device::factory()->create();
+        $ssh = \App\Models\Credential::factory()->ssh()->create();
+
+        $this->putJson("/api/devices/{$device->id}", ['ssh_credential_id' => $ssh->id])
+            ->assertOk()
+            ->assertJsonPath('data.ssh_credential_id', $ssh->id);
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'ssh_credential_id' => $ssh->id]);
+    }
+
+    public function test_it_toggles_monitoring(): void
+    {
+        $device = Device::factory()->create(['monitored' => true]);
+
+        $this->putJson("/api/devices/{$device->id}", ['monitored' => false])
+            ->assertOk()
+            ->assertJsonPath('data.monitored', false);
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'monitored' => false]);
+    }
+
     public function test_it_persists_position(): void
     {
         $device = Device::factory()->create(['map_x' => 0, 'map_y' => 0]);

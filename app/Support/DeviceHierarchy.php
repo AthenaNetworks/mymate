@@ -24,14 +24,30 @@ class DeviceHierarchy
      */
     public function orderDownstreamFirst(array $deviceIds): array
     {
+        $depths = $this->depths();
+        $depth = fn (int $id): int => $depths[$id] ?? 0;
+
+        $ids = array_values(array_unique(array_map('intval', $deviceIds)));
+        usort($ids, fn (int $a, int $b): int => $depth($b) <=> $depth($a) ?: $a <=> $b);
+
+        return $ids;
+    }
+
+    /**
+     * Hops-to-root depth for every device (via `parent_device_id`). A leaf/CPE has the
+     * highest depth, the core the lowest - the "distance" a rolling upgrade orders by.
+     * Cycle-guarded.
+     *
+     * @return array<int, int> id => depth
+     */
+    public function depths(): array
+    {
         /** @var array<int, int|null> $parents id => parent_device_id */
         $parents = Device::query()->pluck('parent_device_id', 'id')->all();
 
-        $depthCache = [];
-        $depth = function (int $id) use ($parents, &$depthCache): int {
-            if (isset($depthCache[$id])) {
-                return $depthCache[$id];
-            }
+        $cache = [];
+        foreach (array_keys($parents) as $id) {
+            $id = (int) $id;
             $d = 0;
             $seen = [];
             $cur = $id;
@@ -43,13 +59,9 @@ class DeviceHierarchy
                 $cur = (int) $parents[$cur];
                 $d++;
             }
+            $cache[$id] = $d;
+        }
 
-            return $depthCache[$id] = $d;
-        };
-
-        $ids = array_values(array_unique(array_map('intval', $deviceIds)));
-        usort($ids, fn (int $a, int $b): int => $depth($b) <=> $depth($a) ?: $a <=> $b);
-
-        return $ids;
+        return $cache;
     }
 }

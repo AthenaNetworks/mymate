@@ -24,10 +24,14 @@ class RunBulkUpgrade
         private UpgradePreflight $preflight,
     ) {}
 
-    /** @param list<int> $deviceIds */
-    public function __invoke(array $deviceIds): void
+    /**
+     * @param list<int> $deviceIds
+     * @param bool $preserveOrder keep the given order (operator re-ordered by hand) instead
+     *                            of re-sorting furthest-downstream-first
+     */
+    public function __invoke(array $deviceIds, bool $preserveOrder = false): void
     {
-        $plan = ($this->preflight)($deviceIds);
+        $plan = ($this->preflight)($deviceIds, $preserveOrder);
 
         // Mark skipped devices so their queued spinner clears with the reason.
         foreach ($plan['plan'] as $row) {

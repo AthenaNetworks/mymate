@@ -139,6 +139,16 @@ ICMPERR
         systemctl restart "$svc" >/dev/null 2>&1 || true
     done
 
+    # --- 7c. backup engine (Rusted) -------------------------------------
+    # If the bundled rusted binary is present, provision it (loopback API + generated
+    # token) and wire My Mate up so device backups work out of the box. Best-effort:
+    # backups are optional, so a failure here must never fail the install.
+    if [ -x /usr/local/bin/rusted ] && [ -f "$APP/deploy/rusted/provision.sh" ]; then
+        echo "my-mate: provisioning the Rusted backup engine"
+        APP_DIR="$APP" APP_USER="$RUN_USER" bash "$APP/deploy/rusted/provision.sh" \
+            || echo "my-mate: WARNING backup engine setup failed - configure it later in Settings." >&2
+    fi
+
     # --- 7b. HTTPS by default (self-signed) - encrypt day-1 traffic -----
     # Secure before the admin ever logs in: a per-instance self-signed cert so the console
     # (and the /agent tunnel) is HTTPS out of the box. The operator upgrades to a trusted

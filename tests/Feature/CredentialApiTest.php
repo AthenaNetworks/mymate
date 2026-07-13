@@ -54,6 +54,22 @@ class CredentialApiTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors(['snmp_community']);
     }
 
+    public function test_creates_an_ssh_credential_for_backups(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/credentials', [
+            'name' => 'Backup SSH', 'type' => 'ssh', 'username' => 'backup', 'password' => 'sup3r-secret-1',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.type', 'ssh')
+            ->assertJsonPath('data.has_secret', true);
+
+        // SSH needs a username + password, like RouterOS.
+        $this->postJson('/api/credentials', ['name' => 'Y', 'type' => 'ssh'])
+            ->assertStatus(422)->assertJsonValidationErrors(['username', 'password']);
+    }
+
     public function test_deletes_a_credential(): void
     {
         $this->actingAsUser();

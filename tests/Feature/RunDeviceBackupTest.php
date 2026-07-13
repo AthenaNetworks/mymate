@@ -88,6 +88,28 @@ class RunDeviceBackupTest extends TestCase
         $this->assertNotNull($device->backup_message);
     }
 
+    public function test_a_dedicated_ssh_credential_is_preferred_over_the_poll_credential(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+
+        $poll = Credential::factory()->routeros()->create(['username' => 'polluser']);
+        $ssh = Credential::factory()->ssh()->create(['username' => 'sshuser', 'password' => 'sshpass']);
+        $device = Device::factory()->create([
+            'poll_method' => PollMethod::RouterOs,
+            'credential_id' => $poll->id,
+            'ssh_credential_id' => $ssh->id,
+            'backup_enabled' => true,
+            'backup_driver' => 'mikrotik_routeros',
+        ]);
+
+        app(RunDeviceBackup::class)($device);
+
+        // The credential Rusted is told to use must be the SSH one, not the poll one.
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/api/credentials')
+            && ($req['name'] ?? null) === "mymate-cred-{$ssh->id}"
+            && ($req['username'] ?? null) === 'sshuser');
+    }
+
     public function test_missing_credential_and_no_fallback_fails_cleanly(): void
     {
         Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);

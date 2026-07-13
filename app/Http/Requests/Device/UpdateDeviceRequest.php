@@ -21,7 +21,10 @@ class UpdateDeviceRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', new ManageableIp],
             'poll_method' => ['sometimes', 'required', Rule::enum(PollMethod::class)],
+            // Enable/disable monitoring - false pauses throughput + metrics polling.
+            'monitored' => ['sometimes', 'boolean'],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
+            'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['sometimes', 'numeric'],
             'map_y' => ['sometimes', 'numeric'],

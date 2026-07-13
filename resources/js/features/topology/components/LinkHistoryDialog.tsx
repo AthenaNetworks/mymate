@@ -155,12 +155,15 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
     const bDev = devices.find((d) => d.id === link.b_device_id);
     const aName = aDev?.name ?? `device ${link.a_device_id}`;
     const bName = bDev?.name ?? `device ${link.b_device_id}`;
-    const [aIf, setAIf] = useState(String(link.a_interface_id));
-    const [bIf, setBIf] = useState(String(link.b_interface_id));
+    const [aIf, setAIf] = useState(link.a_interface_id != null ? String(link.a_interface_id) : '');
+    const [bIf, setBIf] = useState(link.b_interface_id != null ? String(link.b_interface_id) : '');
     const [bwAb, setBwAb] = useState(link.bw_ab_mbps != null ? String(link.bw_ab_mbps) : '');
     const [bwBa, setBwBa] = useState(link.bw_ba_mbps != null ? String(link.bw_ba_mbps) : '');
     const update = useUpdateLink();
-    const ready = aIf !== '' && bIf !== '' && !update.isPending;
+    // A ping-only end has no interface to pick, so it's ready without a selection.
+    const aPingOnly = aDev?.poll_method === 'none';
+    const bPingOnly = bDev?.poll_method === 'none';
+    const ready = (aPingOnly || aIf !== '') && (bPingOnly || bIf !== '') && !update.isPending;
 
     const parse = (v: string): number | null => {
         const n = Number(v.trim());
@@ -173,9 +176,9 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
             {
                 id: link.id,
                 a_device_id: link.a_device_id,
-                a_interface_id: Number(aIf),
+                a_interface_id: aPingOnly ? null : Number(aIf),
                 b_device_id: link.b_device_id,
-                b_interface_id: Number(bIf),
+                b_interface_id: bPingOnly ? null : Number(bIf),
                 bw_ab_mbps: parse(bwAb),
                 bw_ba_mbps: parse(bwBa),
             },
@@ -204,7 +207,7 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
 
             {update.isError && (
                 <p className="text-xs text-rose-400/90">
-                    Couldn\'t update the link - they may already be linked, or an interface doesn\'t match its device.
+                    Couldn't update the link - they may already be linked, or an interface doesn't match its device.
                 </p>
             )}
 

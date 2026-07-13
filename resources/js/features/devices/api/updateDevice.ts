@@ -7,8 +7,12 @@ type UpdateDeviceInput = {
     id: number;
     device_type?: DeviceType;
     name?: string;
+    mgmt_ip?: string;
+    monitored?: boolean;
     parent_device_id?: number | null;
     poll_method?: PollMethod;
+    credential_id?: number | null;
+    ssh_credential_id?: number | null;
 };
 
 /** Patch a device (e.g. reclassify its type). Invalidates the device list so the map

@@ -86,10 +86,20 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         ->name('devices.backup.config');
     Route::post('devices/{device}/backups', [DeviceBackupController::class, 'run'])
         ->middleware('throttle:10,1')->name('devices.backups.run');
+    // Bootstrap key-based SSH on a MikroTik over the API (installs a generated key).
+    Route::post('devices/{device}/provision-ssh-key', [DeviceBackupController::class, 'provisionKey'])
+        ->middleware('throttle:6,1')->name('devices.provision-ssh-key');
     Route::get('devices/{device}/backups', [DeviceBackupController::class, 'history'])
         ->name('devices.backups.history');
     Route::get('devices/{device}/backups/latest', [DeviceBackupController::class, 'latest'])
         ->name('devices.backups.latest');
+    // Git-backed version history + view an old version + diff between versions.
+    Route::get('devices/{device}/backups/versions', [DeviceBackupController::class, 'versions'])
+        ->name('devices.backups.versions');
+    Route::get('devices/{device}/backups/config', [DeviceBackupController::class, 'configAt'])
+        ->name('devices.backups.config-at');
+    Route::get('devices/{device}/backups/diff', [DeviceBackupController::class, 'diff'])
+        ->name('devices.backups.diff');
 
     // Recent history: a bucketed util/bps series for one interface, or the
     // whole device's total throughput (bps summed across its interfaces).
@@ -97,6 +107,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         ->name('interfaces.samples');
     Route::get('devices/{device}/samples', [InterfaceSampleController::class, 'device'])
         ->name('devices.samples');
+    // Recent history: bucketed cpu/mem/temp series for one device (resource chart).
+    Route::get('devices/{device}/metric-samples', [InterfaceSampleController::class, 'metrics'])
+        ->name('devices.metric-samples');
 
     // Topology links (interface-to-interface). Update re-binds either end.
     Route::apiResource('links', LinkController::class)->only(['index', 'store', 'update', 'destroy']);
@@ -130,6 +143,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // reachability check. Token/password encrypted at rest, never returned.
     Route::get('settings/backup', [BackupSettingController::class, 'show'])->name('settings.backup.show');
     Route::put('settings/backup', [BackupSettingController::class, 'update'])->name('settings.backup.update');
+    Route::get('settings/backup-schedule', [BackupSettingController::class, 'schedule'])->name('settings.backup.schedule.show');
+    Route::put('settings/backup-schedule', [BackupSettingController::class, 'updateSchedule'])->name('settings.backup.schedule.update');
+    Route::post('backups/run-all', [BackupSettingController::class, 'runAll'])
+        ->middleware('throttle:6,1')->name('backups.run-all');
     Route::post('settings/backup/test', [BackupSettingController::class, 'test'])
         ->middleware('throttle:6,1')->name('settings.backup.test');
     Route::apiResource('credentials', CredentialController::class)->only(['index', 'store', 'update', 'destroy']);

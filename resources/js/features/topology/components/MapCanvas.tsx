@@ -64,8 +64,8 @@ const edgeBtn = (active: boolean): string =>
 // carries its effective speed per direction: the link override, else
 // the slower of the two end interfaces - what util% is computed against.
 type EdgeMeta = {
-    aIf: number;
-    bIf: number;
+    aIf: number | null; // null = ping-only end (no interface, no throughput)
+    bIf: number | null;
     aDev: number;
     bDev: number;
     effAb: number | null; // A->B effective speed (Mbps) - util_ab denominator
@@ -83,10 +83,17 @@ const metaOf = (l: Link): EdgeMeta => ({
     effBa: l.eff_ba_mbps,
 });
 
-const linkUtil = (l: Link): UtilMap => ({
-    [l.a_interface_id]: { in: l.a_interface.util_in, out: l.a_interface.util_out, bin: l.a_interface.bps_in, bout: l.a_interface.bps_out },
-    [l.b_interface_id]: { in: l.b_interface.util_in, out: l.b_interface.util_out, bin: l.b_interface.bps_in, bout: l.b_interface.bps_out },
-});
+const linkUtil = (l: Link): UtilMap => {
+    const m: UtilMap = {};
+    // Skip ping-only ends (no interface -> nothing to key or fold).
+    if (l.a_interface_id !== null && l.a_interface) {
+        m[l.a_interface_id] = { in: l.a_interface.util_in, out: l.a_interface.util_out, bin: l.a_interface.bps_in, bout: l.a_interface.bps_out };
+    }
+    if (l.b_interface_id !== null && l.b_interface) {
+        m[l.b_interface_id] = { in: l.b_interface.util_in, out: l.b_interface.util_out, bin: l.b_interface.bps_in, bout: l.b_interface.bps_out };
+    }
+    return m;
+};
 
 // Max of a list ignoring null/undefined; null when there\'s nothing to compare.
 const maxNum = (vals: Array<number | null | undefined>): number | null => {
@@ -100,8 +107,8 @@ const maxNum = (vals: Array<number | null | undefined>): number | null => {
 //    speed, so the edge stays NEUTRAL (never ramped/green) per spec.
 //  - mbps (label): the busiest directional throughput (shown always, even with no speed).
 function computeData(meta: EdgeMeta, util: UtilMap, statusById: Record<number, DeviceStatus>): UtilEdgeData & EdgeMeta {
-    const a = util[meta.aIf];
-    const b = util[meta.bIf];
+    const a = meta.aIf !== null ? util[meta.aIf] : undefined;
+    const b = meta.bIf !== null ? util[meta.bIf] : undefined;
 
     // Directional throughput (bits/sec): A->B = traffic leaving A (a.bout) ~ arriving at B
     // (b.bin); B->A = b.bout ~ a.bin. Max to be robust to one end lacking a sample.
@@ -215,6 +222,9 @@ export function MapCanvas() {
                 status: d.status,
                 device_type: d.device_type,
                 util: deviceUtilRef.current[d.id] ?? null,
+                cpu: d.cpu_pct,
+                mem: d.mem_used_pct,
+                temp: d.temp_c,
             },
         }));
         const perDevice: Record<number, number> = {};
@@ -275,6 +285,7 @@ export function MapCanvas() {
                     [l.a_device_id, l.a_interface],
                     [l.b_device_id, l.b_interface],
                 ] as const) {
+                    if (!iface) continue; // ping-only end - no interface util to seed
                     const m = Math.max(iface.util_in ?? -1, iface.util_out ?? -1);
                     if (m >= 0) base[dev] = base[dev] != null ? Math.max(base[dev]!, m) : m;
                 }

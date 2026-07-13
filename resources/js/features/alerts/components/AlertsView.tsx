@@ -167,7 +167,7 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         <span>
                             Suppress dependents
                             <span className="mt-0.5 block text-[11px] text-white/35">
-                                Don\'t alert on devices behind a down parent - only the root-cause device fires.
+                                Don't alert on devices behind a down parent - only the root-cause device fires.
                             </span>
                         </span>
                         <input
@@ -469,7 +469,7 @@ export function AlertsView() {
                     icon={<Trash weight="light" className="h-5 w-5" />}
                     message={
                         <>
-                            Delete the policy <span className="font-semibold text-white/85">{deletingPolicy.name}</span>? This can\'t be undone.
+                            Delete the policy <span className="font-semibold text-white/85">{deletingPolicy.name}</span>? This can't be undone.
                         </>
                     }
                     confirmLabel="Delete"

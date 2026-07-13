@@ -8,38 +8,45 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Roll the interface_samples daily partitions forward and drop expired ones
- *. Idempotent - safe to run repeatedly (loop cadence,
- * scheduler, or `mymate:loop --partitions`). Retention = drop partitions whose day
- * is older than `history.retention_days`.
+ * Roll the daily history partitions forward and drop expired ones for every
+ * RANGE-partitioned samples table (interface_samples + device_metric_samples).
+ * Idempotent - safe to run repeatedly (loop cadence, scheduler, or
+ * `mymate:loop --partitions`). Retention = drop partitions whose day is older than
+ * `history.retention_days`.
  */
 class ManageHistoryPartitions
 {
+    /** Parent tables that are daily-partitioned; each partition is "{table}_YYYYMMDD". */
+    private const TABLES = ['interface_samples', 'device_metric_samples'];
+
     /** @return array{created:int, dropped:int} */
     public function __invoke(): array
     {
         $ahead = max(0, (int) config('mymate.history.partitions_ahead', 3));
         // Retention is operator-editable - read the live Settings value.
         $retentionDays = max(1, app(Settings::class)->getInt('history.retention_days', 14));
+        $cutoff = now()->startOfDay()->subDays($retentionDays);
 
-        // Ensure [yesterday .. today+ahead] exist (yesterday covers writes that land
-        // just after a UTC-midnight rollover).
         $created = 0;
-        for ($i = -1; $i <= $ahead; $i++) {
-            if ($this->ensureDailyPartition(now()->startOfDay()->addDays($i))) {
-                $created++;
+        $dropped = 0;
+        foreach (self::TABLES as $table) {
+            // Ensure [yesterday .. today+ahead] exist (yesterday covers writes that land
+            // just after a UTC-midnight rollover).
+            for ($i = -1; $i <= $ahead; $i++) {
+                if ($this->ensureDailyPartition($table, now()->startOfDay()->addDays($i))) {
+                    $created++;
+                }
             }
+            $dropped += $this->dropPartitionsBefore($table, $cutoff);
         }
-
-        $dropped = $this->dropPartitionsBefore(now()->startOfDay()->subDays($retentionDays));
 
         return ['created' => $created, 'dropped' => $dropped];
     }
 
     /** Create the daily partition for $day if absent. Returns true if it created one. */
-    private function ensureDailyPartition(Carbon $day): bool
+    private function ensureDailyPartition(string $table, Carbon $day): bool
     {
-        $name = 'interface_samples_'.$day->format('Ymd');
+        $name = $table.'_'.$day->format('Ymd');
         if (Schema::hasTable($name)) {
             return false;
         }
@@ -48,20 +55,21 @@ class ManageHistoryPartitions
         $to = $day->copy()->addDay()->format('Y-m-d 00:00:00');
 
         DB::statement(
-            "CREATE TABLE IF NOT EXISTS \"{$name}\" PARTITION OF interface_samples FOR VALUES FROM ('{$from}') TO ('{$to}')"
+            "CREATE TABLE IF NOT EXISTS \"{$name}\" PARTITION OF {$table} FOR VALUES FROM ('{$from}') TO ('{$to}')"
         );
 
         return true;
     }
 
-    /** Drop every daily partition whose day is strictly before $cutoffDay. */
-    private function dropPartitionsBefore(Carbon $cutoffDay): int
+    /** Drop every daily partition of $table whose day is strictly before $cutoffDay. */
+    private function dropPartitionsBefore(string $table, Carbon $cutoffDay): int
     {
         $cutoff = (int) $cutoffDay->format('Ymd');
+        $prefixLen = strlen($table) + 1; // "{table}_"
         $dropped = 0;
 
-        foreach ($this->partitionNames() as $name) {
-            $datePart = substr($name, strlen('interface_samples_'));
+        foreach ($this->partitionNames($table) as $name) {
+            $datePart = substr($name, $prefixLen);
             if (strlen($datePart) !== 8 || ! ctype_digit($datePart)) {
                 continue; // not a YYYYMMDD daily partition - leave it alone
             }
@@ -74,16 +82,16 @@ class ManageHistoryPartitions
         return $dropped;
     }
 
-    /** @return list<string> child partition table names of interface_samples */
-    private function partitionNames(): array
+    /** @return list<string> child partition table names of $table */
+    private function partitionNames(string $table): array
     {
         $rows = DB::select(<<<'SQL'
             SELECT c.relname AS name
             FROM pg_inherits i
             JOIN pg_class c ON c.oid = i.inhrelid
             JOIN pg_class p ON p.oid = i.inhparent
-            WHERE p.relname = 'interface_samples'
-        SQL);
+            WHERE p.relname = ?
+        SQL, [$table]);
 
         return array_map(static fn ($r): string => $r->name, $rows);
     }

@@ -59,6 +59,25 @@ class RustedClient
         return $this->client()->get('/api/drivers')->throw()->json() ?? [];
     }
 
+    /**
+     * Install a generated SSH key on a RouterOS device over its API and get the private key
+     * back, so the device can be backed up over SSH (RouterOS won't export over the API).
+     *
+     * @return array{user:string, private_key:string, ssh_port:int, ssh_enabled:bool, ssh_enabled_by:bool}
+     */
+    public function provisionMikrotikSshKey(string $host, int $port, string $username, string $password): array
+    {
+        return $this->client()
+            ->post('/api/provision/mikrotik-ssh-key', [
+                'host' => $host,
+                'port' => $port,
+                'username' => $username,
+                'password' => $password,
+            ])
+            ->throw()
+            ->json();
+    }
+
     /** Upsert a Rusted credential (name-keyed). @param array<string,mixed> $payload */
     public function putCredential(array $payload): void
     {
@@ -101,6 +120,43 @@ class RustedClient
     public function latestConfig(string $name): ?string
     {
         $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/config');
+        if ($res->status() === 404) {
+            return null;
+        }
+
+        return $res->throw()->body();
+    }
+
+    /**
+     * Config version history (git log of the device's config file), newest first.
+     *
+     * @return array<int, array{commit:string, date:string, subject:string}>
+     */
+    public function versions(string $name): array
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/versions');
+        if ($res->status() === 404) {
+            return [];
+        }
+
+        return $res->throw()->json() ?? [];
+    }
+
+    /** Config text at a specific commit, or null if not found (404). */
+    public function configAt(string $name, string $commit): ?string
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/config', ['commit' => $commit]);
+        if ($res->status() === 404) {
+            return null;
+        }
+
+        return $res->throw()->body();
+    }
+
+    /** Unified diff of a device's config. `from` alone shows what that backup changed. */
+    public function diff(string $name, string $from, string $to = ''): ?string
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/diff', array_filter(['from' => $from, 'to' => $to]));
         if ($res->status() === 404) {
             return null;
         }

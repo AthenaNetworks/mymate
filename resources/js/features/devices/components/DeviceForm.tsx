@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Plus } from '@phosphor-icons/react';
 import { useCreateDevice } from '../api/createDevice';
 import { useAgents } from '../../settings/api/agents';
+import { useCredentials } from '../../settings/api/credentials';
 import { useIsAdmin } from '../../auth/api/auth';
 import type { DeviceType, PollMethod } from '../../../types';
 
@@ -22,11 +23,25 @@ export function DeviceForm() {
     const isAdmin = useIsAdmin();
     const create = useCreateDevice();
     const { data: agents } = useAgents();
+    const { data: credentials } = useCredentials();
     const [name, setName] = useState('');
     const [mgmtIp, setMgmtIp] = useState('');
     const [pollMethod, setPollMethod] = useState<PollMethod>('snmp');
     const [deviceType, setDeviceType] = useState<DeviceType>('unknown');
     const [agentId, setAgentId] = useState<string>(''); // '' = polled centrally
+    const [credentialId, setCredentialId] = useState<string>(''); // '' = none picked yet
+
+    // Throughput polling needs a matching credential (SNMP community / RouterOS login).
+    // Ping-only devices don't poll, so there's nothing to authenticate with.
+    const needsCredential = pollMethod !== 'none';
+    const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
+
+    // Switching poll method invalidates a credential of the old type - clear it so we
+    // never submit e.g. a RouterOS credential against an SNMP device.
+    function changePollMethod(m: PollMethod) {
+        setPollMethod(m);
+        setCredentialId('');
+    }
 
     function submit(e: FormEvent) {
         e.preventDefault();
@@ -35,8 +50,9 @@ export function DeviceForm() {
             {
                 name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                 agent_id: agentId === '' ? null : Number(agentId),
+                credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
             },
-            { onSuccess: () => { setName(''); setMgmtIp(''); setDeviceType('unknown'); setAgentId(''); } },
+            { onSuccess: () => { setName(''); setMgmtIp(''); setDeviceType('unknown'); setAgentId(''); setCredentialId(''); } },
         );
     }
 
@@ -47,11 +63,31 @@ export function DeviceForm() {
         <form onSubmit={submit} className="space-y-2.5">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className={field} />
             <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} placeholder="Management IP" className={field} />
-            <select value={pollMethod} onChange={(e) => setPollMethod(e.target.value as PollMethod)} className={field}>
+            <select value={pollMethod} onChange={(e) => changePollMethod(e.target.value as PollMethod)} className={field}>
                 <option value="snmp">SNMP</option>
                 <option value="routeros">RouterOS API</option>
                 <option value="none">Ping only (no throughput)</option>
             </select>
+
+            {/* Credential for the chosen poll method. Without one, interface discovery
+                fails ("no SNMP community"), so we surface it here rather than after the fact. */}
+            {needsCredential && (
+                matchingCreds.length > 0 ? (
+                    <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} className={field}>
+                        <option value="">Select a {pollMethod === 'snmp' ? 'SNMP' : 'RouterOS'} credential</option>
+                        {matchingCreds.map((c) => (
+                            <option key={c.id} value={c.id}>
+                                {c.name}
+                            </option>
+                        ))}
+                    </select>
+                ) : (
+                    <p className="px-1 text-xs text-amber-300/80">
+                        No {pollMethod === 'snmp' ? 'SNMP' : 'RouterOS'} credential yet - add one under Settings first, or discovery won't have anything to authenticate with.
+                    </p>
+                )
+            )}
+
             <select value={deviceType} onChange={(e) => setDeviceType(e.target.value as DeviceType)} className={field}>
                 {DEVICE_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>

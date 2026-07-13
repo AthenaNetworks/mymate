@@ -29,11 +29,13 @@ export interface Device {
     name: string;
     mgmt_ip: string;
     poll_method: PollMethod;
+    monitored: boolean; // false = polling paused (no throughput/metrics collected)
     status: DeviceStatus;
     last_change: string | null;
     map_x: number;
     map_y: number;
     credential_id: number | null;
+    ssh_credential_id: number | null; // dedicated SSH cred for backups (separate from poll cred)
     agent_id: number | null;
     // NOC-console metadata.
     device_type: DeviceType;
@@ -53,6 +55,12 @@ export interface Device {
     // Interface-discovery visibility.
     discovery_error: string | null;
     discovered_at: string | null;
+    // Resource metrics (latest poll) - the map tile can show any of these. Null = not
+    // read (unsupported OID / never polled), never treated as zero.
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
+    metrics_at: string | null;
     // Config-backup mirror - last Rusted run, cached on the device.
     backup_enabled: boolean;
     backup_driver: string | null;
@@ -83,6 +91,23 @@ export const RUSTED_DRIVERS: { value: string; label: string }[] = [
     { value: 'vyos', label: 'VyOS' },
     { value: 'generic', label: 'Generic' },
 ];
+
+/** One stored config version (a git commit of the device's config file). */
+export interface BackupVersion {
+    commit: string;
+    date: string;
+    subject: string;
+}
+
+/** Automatic-backup schedule (App\Support\BackupSchedule). */
+export type BackupFrequency = 'hourly' | 'every_6h' | 'every_12h' | 'daily' | 'weekly';
+export interface BackupScheduleConfig {
+    enabled: boolean;
+    frequency: BackupFrequency;
+    hour: number;
+    weekday: number;
+    last_run_at: string | null;
+}
 
 /** One row of a device\'s backup history (proxied from Rusted). */
 export interface BackupHistoryEntry {
@@ -127,11 +152,13 @@ export interface NetworkInterface {
 export interface Link {
     id: number;
     a_device_id: number;
-    a_interface_id: number;
+    // Interface ends are null for a ping-only device (no interfaces) - the link then
+    // draws device-to-device and takes its throughput from whichever end has one.
+    a_interface_id: number | null;
     b_device_id: number;
-    b_interface_id: number;
-    a_interface: NetworkInterface;
-    b_interface: NetworkInterface;
+    b_interface_id: number | null;
+    a_interface: NetworkInterface | null;
+    b_interface: NetworkInterface | null;
     // Per-link bandwidth override + resolved effective speed per direction.
     // bw_* null = derive from the slowest end; eff_* is the value util% is computed against.
     bw_ab_mbps: number | null;
@@ -153,7 +180,7 @@ export interface EngineSetting {
 export interface Credential {
     id: number;
     name: string;
-    type: 'snmp' | 'routeros';
+    type: 'snmp' | 'routeros' | 'ssh';
     api_port: number;
     has_secret: boolean;
     device_count: number;
@@ -286,6 +313,31 @@ export interface InterfaceSample {
     util_out: number | null;
     bps_in: number | null;
     bps_out: number | null;
+}
+
+// Which resource a device's map tile shows. 'throughput' = busiest-interface util
+// (the default, unchanged); the rest come from the device-metrics pipeline.
+export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
+
+// Live device-metrics event (App\Events\DeviceMetricsUpdated) - coalesced across devices.
+export interface DeviceMetricsFrame {
+    device_id: number;
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
+}
+
+export interface DeviceMetricsUpdatedPayload {
+    devices: DeviceMetricsFrame[];
+    device_count: number;
+}
+
+// Recent history - a bucketed cpu/mem/temp point from the device metric-samples endpoint.
+export interface DeviceMetricSample {
+    ts: string;
+    cpu_pct: number | null;
+    mem_used_pct: number | null;
+    temp_c: number | null;
 }
 
 // Auto-discovery - mirrors SubnetResource / DiscoveryCandidateResource.

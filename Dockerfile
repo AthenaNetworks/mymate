@@ -27,6 +27,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL https://github.com/schweikert/fping/releases/download/v5.5/fping-5.5.tar.gz | tar xz \
     && cd fping-5.5 && ./configure --prefix=/usr/local && make && make install
 
+# --- 2b. rusted backup engine (Go; the 1.26 toolchain is auto-fetched) --------
+FROM golang:1.24-bookworm AS rusted
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && git clone --depth 1 https://github.com/JoshFinlayAU/rusted.git /src
+WORKDIR /src
+RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
+
 # --- 3. composer (named stage so `COPY --from=composer` works everywhere) -----
 FROM composer:2 AS composer
 
@@ -37,7 +44,7 @@ FROM php:8.4-fpm-bookworm AS runtime
 # in the base image).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        nginx supervisor tini postgresql-client procps libcap2-bin ca-certificates \
+        nginx supervisor tini postgresql-client procps libcap2-bin ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions via the maintained installer - it pulls the right C libraries, builds redis
@@ -73,6 +80,11 @@ RUN composer dump-autoload --optimize --no-dev \
 COPY --from=assets /app/public/build ./public/build
 COPY --from=fping /usr/local/sbin/fping /usr/local/sbin/fping
 RUN setcap cap_net_raw+ep /usr/local/sbin/fping
+
+# Rusted backup engine + its data dirs (the entrypoint generates the config on first start).
+COPY --from=rusted /rusted /usr/local/bin/rusted
+RUN mkdir -p /var/lib/rusted/backups /etc/rusted \
+    && chown -R www-data:www-data /var/lib/rusted /etc/rusted
 
 # Container config + entrypoint.
 COPY docker/nginx.conf /etc/nginx/nginx.conf

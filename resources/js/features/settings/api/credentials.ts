@@ -17,7 +17,7 @@ export function useCredentials() {
 export interface CredentialInput {
     id?: number;
     name: string;
-    type: 'snmp' | 'routeros';
+    type: 'snmp' | 'routeros' | 'ssh';
     snmp_community?: string;
     username?: string;
     password?: string;

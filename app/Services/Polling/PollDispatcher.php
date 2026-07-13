@@ -3,6 +3,7 @@
 namespace App\Services\Polling;
 
 use App\Enums\PollMethod;
+use App\Jobs\PollDeviceMetricsBatchJob;
 use App\Jobs\PollInterfacesBatchJob;
 use App\Models\Device;
 
@@ -43,6 +44,38 @@ class PollDispatcher
 
         foreach ($byShard as $shard => $shardIds) {
             PollInterfacesBatchJob::dispatch($shard, $shardIds);
+        }
+
+        return count($byShard);
+    }
+
+    /**
+     * Shard the same pollable fleet into device-metrics (cpu/mem/temp) batch jobs. Same
+     * shard key as throughput so a device's metrics and throughput land on matching shard
+     * numbers; dispatched on the (slower) device-metrics cadence from the loop.
+     *
+     * @return int number of batch jobs dispatched (non-empty shards)
+     */
+    public function dispatchMetrics(): int
+    {
+        $shards = max(1, (int) config('mymate.poll.shards', 16));
+
+        $ids = Device::where('monitored', true)
+            ->whereNull('agent_id')
+            ->whereIn('poll_method', PollMethod::throughputMethods())
+            ->pluck('id');
+        if ($ids->isEmpty()) {
+            return 0;
+        }
+
+        /** @var array<int, list<int>> $byShard */
+        $byShard = [];
+        foreach ($ids as $id) {
+            $byShard[crc32((string) $id) % $shards][] = (int) $id;
+        }
+
+        foreach ($byShard as $shard => $shardIds) {
+            PollDeviceMetricsBatchJob::dispatch($shard, $shardIds);
         }
 
         return count($byShard);

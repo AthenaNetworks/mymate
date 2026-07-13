@@ -5,9 +5,9 @@ import { linkKeys } from './getLinks';
 
 export interface CreateLinkInput {
     a_device_id: number;
-    a_interface_id: number;
+    a_interface_id: number | null; // null = ping-only end (no interface)
     b_device_id: number;
-    b_interface_id: number;
+    b_interface_id: number | null;
 }
 
 export function useCreateLink() {

@@ -14,11 +14,13 @@ class DeviceResource extends JsonResource
             'name' => $this->name,
             'mgmt_ip' => $this->mgmt_ip,
             'poll_method' => $this->poll_method->value,
+            'monitored' => (bool) $this->monitored,
             'status' => $this->status->value,
             'last_change' => $this->last_change,
             'map_x' => $this->map_x,
             'map_y' => $this->map_y,
             'credential_id' => $this->credential_id,
+            'ssh_credential_id' => $this->ssh_credential_id,
             'agent_id' => $this->agent_id,
             // NOC-console metadata.
             'device_type' => $this->device_type?->value ?? 'unknown',
@@ -40,6 +42,11 @@ class DeviceResource extends JsonResource
             // Interface-discovery visibility.
             'discovery_error' => $this->discovery_error,
             'discovered_at' => $this->discovered_at,
+            // Resource metrics (latest poll) - the map tile can show any of these.
+            'cpu_pct' => $this->cpu_pct,
+            'mem_used_pct' => $this->mem_used_pct,
+            'temp_c' => $this->temp_c,
+            'metrics_at' => $this->metrics_at,
             // Config-backup mirror - last run cached from Rusted.
             'backup_enabled' => (bool) $this->backup_enabled,
             'backup_driver' => $this->backup_driver,

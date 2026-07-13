@@ -23,6 +23,11 @@ class UpgradeDevicesRequest extends FormRequest
             // Ordered = upgrade downstream-first, waiting for each device to recover
             // before its parent (one BulkUpgradeJob). Unordered = one job per device.
             'ordered' => ['sometimes', 'boolean'],
+            // Keep device_ids in the given order instead of re-sorting furthest-first
+            // (the rolling-upgrades page after a manual re-order). Only meaningful with ordered.
+            'explicit_order' => ['sometimes', 'boolean'],
+            // Also accepted by the preflight endpoint to preview in the given order.
+            'preserve_order' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -17,10 +17,11 @@ class StoreCredentialRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', Rule::in(['snmp', 'routeros'])],
+            'type' => ['required', Rule::in(['snmp', 'routeros', 'ssh'])],
             'snmp_community' => ['nullable', 'string', 'required_if:type,snmp'],
-            'username' => ['nullable', 'string', 'required_if:type,routeros'],
-            'password' => ['nullable', 'string', 'required_if:type,routeros'],
+            // RouterOS + SSH creds are username/password logins.
+            'username' => ['nullable', 'string', Rule::requiredIf(fn () => in_array($this->input('type'), ['routeros', 'ssh'], true))],
+            'password' => ['nullable', 'string', Rule::requiredIf(fn () => in_array($this->input('type'), ['routeros', 'ssh'], true))],
             'api_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
         ];
     }

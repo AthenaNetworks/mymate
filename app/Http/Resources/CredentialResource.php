@@ -18,7 +18,9 @@ class CredentialResource extends JsonResource
             'name' => $this->name,
             'type' => $this->type,
             'api_port' => $this->api_port,
-            'has_secret' => $this->type === 'snmp' ? filled($this->snmp_community) : filled($this->password),
+            'has_secret' => $this->type === 'snmp'
+                ? filled($this->snmp_community)
+                : (filled($this->password) || filled($this->private_key)),
             'device_count' => $this->devices_count ?? 0,
         ];
     }

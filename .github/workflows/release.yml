@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: npm }
       - run: npm ci
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25' }
+      - name: Build the Rusted backup engine (bundled so backups work out of the box)
+        continue-on-error: true   # optional - the .deb still installs (backups just unconfigured)
+        run: deploy/rusted/build-rusted.sh
       - name: Build the .deb
         run: VERSION="${GITHUB_REF_NAME#v}" deploy/build/build-deb.sh
       - uses: actions/upload-artifact@v4
@@ -45,6 +50,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '20', cache: npm }
       - run: npm ci
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.25' }
+      - name: Build the Rusted backup engine (bundled so backups work out of the box)
+        continue-on-error: true
+        run: deploy/rusted/build-rusted.sh
       - name: Install container tooling
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends podman zstd nftables passt
       - name: Build the .deb (input to the template)

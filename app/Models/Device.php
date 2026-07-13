@@ -19,11 +19,12 @@ class Device extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'agent_id',
+        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'map_x', 'map_y',
         'device_type', 'parent_device_id', 'vendor', 'model', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
+        'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at',
         'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
     ];
 
@@ -38,6 +39,10 @@ class Device extends Model
         'map_y' => 'float',
         'uptime_seconds' => 'integer',
         'uptime_at' => 'datetime',
+        'cpu_pct' => 'float',
+        'mem_used_pct' => 'float',
+        'temp_c' => 'float',
+        'metrics_at' => 'datetime',
         'upgrade_at' => 'datetime',
         'discovered_at' => 'datetime',
         'backup_enabled' => 'boolean',
@@ -59,6 +64,12 @@ class Device extends Model
     public function credential(): BelongsTo
     {
         return $this->belongsTo(Credential::class);
+    }
+
+    /** Dedicated SSH credential for config backups (separate from the poll credential). */
+    public function sshCredential(): BelongsTo
+    {
+        return $this->belongsTo(Credential::class, 'ssh_credential_id');
     }
 
     /** The remote agent that polls this device, or null when polled centrally. */

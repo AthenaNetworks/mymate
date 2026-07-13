@@ -9,14 +9,16 @@ import { apiClient } from '../../../lib/apiClient';
 export interface UpgradeDevicesInput {
     deviceIds: number[];
     ordered?: boolean; // upgrade downstream-first, waiting for each to recover
+    explicitOrder?: boolean; // keep deviceIds order as-is (operator re-ordered by hand)
 }
 
 export function useUpgradeDevices() {
     return useMutation({
-        mutationFn: async ({ deviceIds, ordered }: UpgradeDevicesInput): Promise<{ queued: number; ordered: boolean }> => {
+        mutationFn: async ({ deviceIds, ordered, explicitOrder }: UpgradeDevicesInput): Promise<{ queued: number; ordered: boolean }> => {
             const { data } = await apiClient.post<{ queued: number; ordered: boolean }>('/devices/upgrade', {
                 device_ids: deviceIds,
                 ordered: ordered ?? false,
+                explicit_order: explicitOrder ?? false,
             });
             return data;
         },
@@ -30,6 +32,13 @@ export interface UpgradePlanRow {
     name: string;
     action: 'upgrade' | 'skip';
     reason: string | null;
+    // Topology context so the operator can eyeball the order (furthest-out first).
+    status: 'up' | 'down' | 'unknown';
+    depth: number; // hops to the root - higher = further downstream
+    os_version: string | null;
+    latest_version: string | null;
+    parent_name: string | null;
+    neighbours: string[]; // linked peer device names
 }
 export interface UpgradePlan {
     order: number[];
@@ -39,8 +48,13 @@ export interface UpgradePlan {
 
 export function useUpgradePreflight() {
     return useMutation({
-        mutationFn: async (deviceIds: number[]): Promise<UpgradePlan> => {
-            const { data } = await apiClient.post<UpgradePlan>('/devices/upgrade/preflight', { device_ids: deviceIds });
+        // preserveOrder true = preview in the given order (after a manual re-order) instead
+        // of re-sorting furthest-first.
+        mutationFn: async ({ deviceIds, preserveOrder }: { deviceIds: number[]; preserveOrder?: boolean }): Promise<UpgradePlan> => {
+            const { data } = await apiClient.post<UpgradePlan>('/devices/upgrade/preflight', {
+                device_ids: deviceIds,
+                preserve_order: preserveOrder ?? false,
+            });
             return data;
         },
     });

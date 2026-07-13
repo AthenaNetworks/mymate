@@ -23,6 +23,23 @@ inspector shows it without hitting Rusted on every render.
 
 ---
 
+## Automatic (the packages do this for you)
+
+The `.deb`, the Proxmox LXC template and the Docker image **bundle the rusted binary and
+provision it on install** - a loopback API on `:8410` with a generated token, wired into My
+Mate - so backups just work with no setup. The LXC/Docker paths regenerate the token
+per-instance so clones never share one. You only need the manual steps below when running
+**from source**, or to re-provision by hand:
+
+```sh
+sudo deploy/rusted/provision.sh          # build/install rusted, config, service, wire My Mate
+# (uses a bundled binary if present via RUSTED_BIN, else builds from RUSTED_SRC)
+```
+
+The rest of this doc is the manual/from-source path and the reference for how it all fits.
+
+---
+
 ## 1. Install the Rusted sidecar
 
 Rusted isn't bundled (it's a separate Go binary). Build + install it once on the My Mate host:

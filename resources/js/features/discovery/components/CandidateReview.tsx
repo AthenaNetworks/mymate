@@ -61,7 +61,7 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
             {scanning && (
                 <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 ring-1 ring-emerald-400/20">
                     <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" />
-                    Scanning subnets - new devices appear here as they\'re found.
+                    Scanning subnets - new devices appear here as they're found.
                 </div>
             )}
 
