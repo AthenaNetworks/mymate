@@ -22,6 +22,7 @@ class StoreDeviceRequest extends FormRequest
             'mgmt_ip' => ['required', 'string', 'max:45', 'ip', new ManageableIp],
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
+            'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['nullable', 'numeric'],
             'map_y' => ['nullable', 'numeric'],

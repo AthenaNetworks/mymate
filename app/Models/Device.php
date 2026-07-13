@@ -19,7 +19,7 @@ class Device extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'agent_id',
+        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'map_x', 'map_y',
         'device_type', 'parent_device_id', 'vendor', 'model', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
@@ -64,6 +64,12 @@ class Device extends Model
     public function credential(): BelongsTo
     {
         return $this->belongsTo(Credential::class);
+    }
+
+    /** Dedicated SSH credential for config backups (separate from the poll credential). */
+    public function sshCredential(): BelongsTo
+    {
+        return $this->belongsTo(Credential::class, 'ssh_credential_id');
     }
 
     /** The remote agent that polls this device, or null when polled centrally. */

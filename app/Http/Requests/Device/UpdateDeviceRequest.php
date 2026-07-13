@@ -24,6 +24,7 @@ class UpdateDeviceRequest extends FormRequest
             // Enable/disable monitoring - false pauses throughput + metrics polling.
             'monitored' => ['sometimes', 'boolean'],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
+            'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['sometimes', 'numeric'],
             'map_y' => ['sometimes', 'numeric'],

@@ -13,11 +13,12 @@ use RuntimeException;
  * Rusted engine. Idempotent: called before every backup run so Rusted's
  * inventory always matches My Mate's (name, host, driver, enabled flag, credential).
  *
- * Credential resolution ("reuse device creds + a Settings fallback", the chosen model):
- *  1. the device's own My Mate credential if it carries an SSH-usable username/password
+ * Credential resolution (device-specific first, then a Settings fallback):
+ *  1. the device's dedicated SSH credential if set - pushed as `mymate-cred-{id}`;
+ *  2. else the device's own poll credential if it carries an SSH-usable username/password
  *     (RouterOS-API logins double as SSH logins) - pushed as `mymate-cred-{id}`;
- *  2. else the default SSH credential from Settings - pushed as `mymate-default`;
- *  3. else fail loudly - a backup can't run without a login.
+ *  3. else the default SSH credential from Settings - pushed as `mymate-default`;
+ *  4. else fail loudly - a backup can't run without a login.
  *
  * Secrets are only ever sent onward to the (localhost, trusted) Rusted API - never logged.
  */
@@ -60,16 +61,18 @@ class RegisterBackupDevice
      */
     private function resolveCredential(Device $device): array
     {
-        $cred = $device->credential;
+        // 1. a dedicated SSH credential wins; 2. else the poll credential if SSH-usable.
         // Accessing username/password triggers the model's `encrypted` cast (decrypt).
-        if ($cred !== null && (string) $cred->username !== '') {
-            return ["mymate-cred-{$cred->id}", [
-                'name' => "mymate-cred-{$cred->id}",
-                'username' => (string) $cred->username,
-                'password' => (string) $cred->password,
-                'enable' => '',
-                'private_key' => '',
-            ]];
+        foreach ([$device->sshCredential, $device->credential] as $cred) {
+            if ($cred !== null && (string) $cred->username !== '') {
+                return ["mymate-cred-{$cred->id}", [
+                    'name' => "mymate-cred-{$cred->id}",
+                    'username' => (string) $cred->username,
+                    'password' => (string) $cred->password,
+                    'enable' => '',
+                    'private_key' => '',
+                ]];
+            }
         }
 
         $fallback = $this->settings->defaultSshCredential();

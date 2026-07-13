@@ -34,11 +34,13 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const [pollMethod, setPollMethod] = useState<PollMethod>(device.poll_method);
     const [deviceType, setDeviceType] = useState<DeviceType>(device.device_type);
     const [credentialId, setCredentialId] = useState<string>(device.credential_id != null ? String(device.credential_id) : '');
+    const [sshCredentialId, setSshCredentialId] = useState<string>(device.ssh_credential_id != null ? String(device.ssh_credential_id) : '');
     const [parentId, setParentId] = useState<string>(device.parent_device_id != null ? String(device.parent_device_id) : '');
     const [monitored, setMonitored] = useState<boolean>(device.monitored);
 
     const needsCredential = pollMethod !== 'none';
     const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
+    const sshCreds = (credentials ?? []).filter((c) => c.type === 'ssh');
     const parentOptions = (devices ?? []).filter((d) => d.id !== device.id); // a device can't be its own parent
 
     function changePollMethod(m: PollMethod) {
@@ -61,6 +63,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                 device_type: deviceType,
                 monitored,
                 credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
+                ssh_credential_id: sshCredentialId === '' ? null : Number(sshCredentialId),
                 parent_device_id: parentId === '' ? null : Number(parentId),
             },
             {
@@ -133,6 +136,21 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                                     <option key={t.value} value={t.value}>{t.label}</option>
                                 ))}
                             </select>
+                        </label>
+
+                        {/* Dedicated SSH credential for config backups (separate from the poll cred). */}
+                        <label className="space-y-1 block">
+                            <span className={label}>SSH credential (for backups)</span>
+                            {sshCreds.length > 0 ? (
+                                <select value={sshCredentialId} onChange={(e) => setSshCredentialId(e.target.value)} className={field}>
+                                    <option value="">None - fall back to the poll credential</option>
+                                    {sshCreds.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <p className="px-1 text-xs text-white/40">No SSH credentials yet - add one (type "SSH") under Settings.</p>
+                            )}
                         </label>
 
                         <label className="space-y-1 block">

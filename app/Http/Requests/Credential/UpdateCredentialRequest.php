@@ -21,7 +21,7 @@ class UpdateCredentialRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'type' => ['sometimes', 'required', Rule::in(['snmp', 'routeros'])],
+            'type' => ['sometimes', 'required', Rule::in(['snmp', 'routeros', 'ssh'])],
             'snmp_community' => ['nullable', 'string'],
             'username' => ['nullable', 'string'],
             'password' => ['nullable', 'string'],

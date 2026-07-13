@@ -33,4 +33,15 @@ class CredentialFactory extends Factory
             'password' => fake()->password(),
         ]);
     }
+
+    /** An SSH credential (user/pass) for config backups. */
+    public function ssh(): static
+    {
+        return $this->state(fn () => [
+            'type' => 'ssh',
+            'snmp_community' => null,
+            'username' => fake()->userName(),
+            'password' => fake()->password(),
+        ]);
+    }
 }

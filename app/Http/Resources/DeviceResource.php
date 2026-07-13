@@ -20,6 +20,7 @@ class DeviceResource extends JsonResource
             'map_x' => $this->map_x,
             'map_y' => $this->map_y,
             'credential_id' => $this->credential_id,
+            'ssh_credential_id' => $this->ssh_credential_id,
             'agent_id' => $this->agent_id,
             // NOC-console metadata.
             'device_type' => $this->device_type?->value ?? 'unknown',

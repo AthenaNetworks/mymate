@@ -35,6 +35,7 @@ export interface Device {
     map_x: number;
     map_y: number;
     credential_id: number | null;
+    ssh_credential_id: number | null; // dedicated SSH cred for backups (separate from poll cred)
     agent_id: number | null;
     // NOC-console metadata.
     device_type: DeviceType;
@@ -162,7 +163,7 @@ export interface EngineSetting {
 export interface Credential {
     id: number;
     name: string;
-    type: 'snmp' | 'routeros';
+    type: 'snmp' | 'routeros' | 'ssh';
     api_port: number;
     has_secret: boolean;
     device_count: number;

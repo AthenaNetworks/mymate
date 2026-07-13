@@ -304,9 +304,10 @@ function CredentialForm({ initial, onDone }: { initial?: Credential; onDone: () 
     return (
         <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
             <input className={field} placeholder="Name" value={form.name} onChange={(e) => set('name', e.target.value)} />
-            <select className={field} value={form.type} onChange={(e) => set('type', e.target.value as 'snmp' | 'routeros')}>
+            <select className={field} value={form.type} onChange={(e) => set('type', e.target.value as 'snmp' | 'routeros' | 'ssh')}>
                 <option value="snmp">SNMP</option>
                 <option value="routeros">RouterOS API</option>
+                <option value="ssh">SSH (for backups)</option>
             </select>
             {form.type === 'snmp' ? (
                 <input
@@ -490,7 +491,7 @@ function CredentialsSection() {
                             <Key weight="light" className="h-4 w-4 shrink-0 text-white/40" />
                             <span className="min-w-0 flex-1 truncate text-sm text-white/85">
                                 {c.name}
-                                <span className="text-white/35"> - {c.type === 'snmp' ? 'SNMP' : 'RouterOS'}</span>
+                                <span className="text-white/35"> - {c.type === 'snmp' ? 'SNMP' : c.type === 'ssh' ? 'SSH' : 'RouterOS'}</span>
                                 {c.device_count > 0 && <span className="text-white/30"> - {c.device_count} device(s)</span>}
                             </span>
                             {!c.has_secret && <span className="text-[10px] text-amber-300/80">no secret</span>}
