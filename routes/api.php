@@ -42,6 +42,10 @@ Route::post('contact', [ContactController::class, 'store'])->middleware('throttl
 // - GETs pass, any write from a non-admin is 403 (except their own password).
 Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(function (): void {
     Route::get('user', [AuthController::class, 'user'])->name('user');
+
+    // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
+    Route::get('update-check', \App\Http\Controllers\Api\UpdateCheckController::class)
+        ->middleware('throttle:20,1')->name('update-check');
     // Self-service password change.
     Route::put('account/password', [AuthController::class, 'updatePassword'])
         ->middleware('throttle:6,1')->name('account.password.update');
