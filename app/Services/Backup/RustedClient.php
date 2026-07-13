@@ -128,6 +128,43 @@ class RustedClient
     }
 
     /**
+     * Config version history (git log of the device's config file), newest first.
+     *
+     * @return array<int, array{commit:string, date:string, subject:string}>
+     */
+    public function versions(string $name): array
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/versions');
+        if ($res->status() === 404) {
+            return [];
+        }
+
+        return $res->throw()->json() ?? [];
+    }
+
+    /** Config text at a specific commit, or null if not found (404). */
+    public function configAt(string $name, string $commit): ?string
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/config', ['commit' => $commit]);
+        if ($res->status() === 404) {
+            return null;
+        }
+
+        return $res->throw()->body();
+    }
+
+    /** Unified diff of a device's config. `from` alone shows what that backup changed. */
+    public function diff(string $name, string $from, string $to = ''): ?string
+    {
+        $res = $this->client()->get('/api/devices/'.rawurlencode($name).'/diff', array_filter(['from' => $from, 'to' => $to]));
+        if ($res->status() === 404) {
+            return null;
+        }
+
+        return $res->throw()->body();
+    }
+
+    /**
      * Trigger a backup now and return Rusted's result ({status, message, commit, bytes, ...}).
      * Synchronous - Rusted SSHes to the device and captures the config before responding,
      * which is why callers run this on the isolated `backup` queue with a long timeout.

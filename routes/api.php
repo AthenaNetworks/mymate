@@ -93,6 +93,13 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         ->name('devices.backups.history');
     Route::get('devices/{device}/backups/latest', [DeviceBackupController::class, 'latest'])
         ->name('devices.backups.latest');
+    // Git-backed version history + view an old version + diff between versions.
+    Route::get('devices/{device}/backups/versions', [DeviceBackupController::class, 'versions'])
+        ->name('devices.backups.versions');
+    Route::get('devices/{device}/backups/config', [DeviceBackupController::class, 'configAt'])
+        ->name('devices.backups.config-at');
+    Route::get('devices/{device}/backups/diff', [DeviceBackupController::class, 'diff'])
+        ->name('devices.backups.diff');
 
     // Recent history: a bucketed util/bps series for one interface, or the
     // whole device's total throughput (bps summed across its interfaces).
@@ -136,6 +143,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // reachability check. Token/password encrypted at rest, never returned.
     Route::get('settings/backup', [BackupSettingController::class, 'show'])->name('settings.backup.show');
     Route::put('settings/backup', [BackupSettingController::class, 'update'])->name('settings.backup.update');
+    Route::get('settings/backup-schedule', [BackupSettingController::class, 'schedule'])->name('settings.backup.schedule.show');
+    Route::put('settings/backup-schedule', [BackupSettingController::class, 'updateSchedule'])->name('settings.backup.schedule.update');
+    Route::post('backups/run-all', [BackupSettingController::class, 'runAll'])
+        ->middleware('throttle:6,1')->name('backups.run-all');
     Route::post('settings/backup/test', [BackupSettingController::class, 'test'])
         ->middleware('throttle:6,1')->name('settings.backup.test');
     Route::apiResource('credentials', CredentialController::class)->only(['index', 'store', 'update', 'destroy']);

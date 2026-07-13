@@ -140,4 +140,50 @@ class DeviceBackupController extends Controller
 
         return response()->json(['data' => ['config' => $config]]);
     }
+
+    /** Config version history (git log) for a device, newest first. */
+    public function versions(Device $device, RustedClient $client, BackupSettings $settings): JsonResponse
+    {
+        if (! $settings->configured()) {
+            return response()->json(['data' => []]);
+        }
+
+        try {
+            $versions = $client->versions(RegisterBackupDevice::rustedName($device));
+        } catch (\Throwable $e) {
+            EngineLog::warning('backup: versions fetch failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+            $versions = [];
+        }
+
+        return response()->json(['data' => $versions]);
+    }
+
+    /** The stored config at a specific commit (?commit=), for viewing an old version. */
+    public function configAt(\Illuminate\Http\Request $request, Device $device, RustedClient $client): JsonResponse
+    {
+        $commit = (string) $request->query('commit', '');
+        $config = null;
+        try {
+            $config = $commit !== '' ? $client->configAt(RegisterBackupDevice::rustedName($device), $commit) : null;
+        } catch (\Throwable $e) {
+            EngineLog::warning('backup: config-at-commit failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['data' => ['config' => $config]]);
+    }
+
+    /** Unified diff of a device's config - ?from=<hash> alone shows what that backup changed. */
+    public function diff(\Illuminate\Http\Request $request, Device $device, RustedClient $client): JsonResponse
+    {
+        $from = (string) $request->query('from', '');
+        $to = (string) $request->query('to', '');
+        $diff = null;
+        try {
+            $diff = $from !== '' ? $client->diff(RegisterBackupDevice::rustedName($device), $from, $to) : null;
+        } catch (\Throwable $e) {
+            EngineLog::warning('backup: diff failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+        }
+
+        return response()->json(['data' => ['diff' => $diff]]);
+    }
 }

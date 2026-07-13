@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\RunDeviceBackupJob;
 use App\Models\Device;
+use App\Support\BackupSchedule;
 use Illuminate\Console\Command;
 
 /**
@@ -16,12 +17,25 @@ use Illuminate\Console\Command;
  */
 class RunBackupsCommand extends Command
 {
-    protected $signature = 'mymate:backup:run {--all : back up every backup-enabled device} {--device= : back up a single device by id}';
+    protected $signature = 'mymate:backup:run
+        {--all : back up every backup-enabled device}
+        {--device= : back up a single device by id}
+        {--scheduled : run only if the configured schedule is due now (used by the scheduler)}';
 
     protected $description = 'Queue config backups (via the Rusted engine) for backup-enabled devices';
 
-    public function handle(): int
+    public function handle(BackupSchedule $schedule): int
     {
+        // Scheduler tick: only fire when the operator's configured cadence is due.
+        if ($this->option('scheduled')) {
+            if (! $schedule->due(now())) {
+                return self::SUCCESS;
+            }
+            $schedule->markRan(now());
+
+            return $this->runAll();
+        }
+
         $deviceId = $this->option('device');
 
         if ($deviceId !== null) {
@@ -43,6 +57,12 @@ class RunBackupsCommand extends Command
             return self::FAILURE;
         }
 
+        return $this->runAll();
+    }
+
+    /** Fan out a backup job for every backup-enabled device. */
+    private function runAll(): int
+    {
         $ids = Device::query()->where('backup_enabled', true)->pluck('id');
         foreach ($ids as $id) {
             RunDeviceBackupJob::dispatch($id);

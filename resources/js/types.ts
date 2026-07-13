@@ -92,6 +92,23 @@ export const RUSTED_DRIVERS: { value: string; label: string }[] = [
     { value: 'generic', label: 'Generic' },
 ];
 
+/** One stored config version (a git commit of the device's config file). */
+export interface BackupVersion {
+    commit: string;
+    date: string;
+    subject: string;
+}
+
+/** Automatic-backup schedule (App\Support\BackupSchedule). */
+export type BackupFrequency = 'hourly' | 'every_6h' | 'every_12h' | 'daily' | 'weekly';
+export interface BackupScheduleConfig {
+    enabled: boolean;
+    frequency: BackupFrequency;
+    hour: number;
+    weekday: number;
+    last_run_at: string | null;
+}
+
 /** One row of a device\'s backup history (proxied from Rusted). */
 export interface BackupHistoryEntry {
     started_at: string | null;

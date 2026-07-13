@@ -14,6 +14,7 @@ import { useOutages } from '../outages/api/getOutages';
 import { SettingsView } from '../settings/components/SettingsView';
 import { AlertsView } from '../alerts/components/AlertsView';
 import { UpgradesView } from '../upgrades/components/UpgradesView';
+import { BackupsView } from '../backups/components/BackupsView';
 import { ImportView } from '../import/components/ImportView';
 
 /**
@@ -67,6 +68,7 @@ export function AppShell() {
             {view === 'outages' && <OutagesView />}
             {view === 'alerts' && <AlertsView />}
             {view === 'upgrades' && <UpgradesView />}
+            {view === 'backups' && <BackupsView />}
             {view === 'settings' && <SettingsView />}
             {view === 'import' && <ImportView />}
         </main>

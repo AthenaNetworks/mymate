@@ -1,4 +1,4 @@
-import { MapTrifold, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
+import { MapTrifold, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
 import { useView, setView, useNavOpen, setNavOpen, type View } from '../../lib/shellStore';
 import { MapLegend } from './MapLegend';
 
@@ -10,6 +10,7 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
     { id: 'outages', label: 'Outages', icon: Warning },
     { id: 'alerts', label: 'Alerts', icon: Bell },
     { id: 'upgrades', label: 'Upgrades', icon: ArrowCircleUp },
+    { id: 'backups', label: 'Backups', icon: Archive },
     { id: 'import', label: 'Import', icon: DownloadSimple },
     { id: 'settings', label: 'Settings', icon: GearSix },
 ];

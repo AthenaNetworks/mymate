@@ -27,6 +27,40 @@ class BackupSettingController extends Controller
         return response()->json(['data' => $settings->publicView()]);
     }
 
+    /** Queue a backup now for every backup-enabled device. */
+    public function runAll(BackupSettings $settings): JsonResponse
+    {
+        if (! $settings->configured()) {
+            return response()->json(['message' => 'The backup engine (Rusted) is not configured yet.'], 422);
+        }
+        $ids = \App\Models\Device::where('backup_enabled', true)->pluck('id');
+        foreach ($ids as $id) {
+            \App\Jobs\RunDeviceBackupJob::dispatch($id);
+        }
+
+        return response()->json(['queued' => $ids->count()], 202);
+    }
+
+    /** The automatic-backup schedule (cadence + on/off). */
+    public function schedule(\App\Support\BackupSchedule $schedule): JsonResponse
+    {
+        return response()->json(['data' => $schedule->get()]);
+    }
+
+    /** Save the automatic-backup schedule. */
+    public function updateSchedule(\Illuminate\Http\Request $request, \App\Support\BackupSchedule $schedule): JsonResponse
+    {
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'frequency' => ['required', \Illuminate\Validation\Rule::in(\App\Support\BackupSchedule::FREQUENCIES)],
+            'hour' => ['required', 'integer', 'min:0', 'max:23'],
+            'weekday' => ['required', 'integer', 'min:0', 'max:6'],
+        ]);
+        $schedule->save($validated);
+
+        return response()->json(['data' => $schedule->get()]);
+    }
+
     /**
      * Reachability check - does Rusted answer on the configured URL/token? Returns only a
      * boolean (like {@see MailSettingController::test()}, no raw error is echoed so this
