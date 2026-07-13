@@ -75,6 +75,36 @@ class DeviceBackupController extends Controller
     }
 
     /**
+     * Bootstrap key-based SSH over the RouterOS API (MikroTik can't export over the API):
+     * Rusted installs a generated key and returns it; we store it as the device's SSH
+     * credential and switch it to SSH backups. Reports whether SSH had to be enabled.
+     */
+    public function provisionKey(Device $device, \App\Actions\Backup\ProvisionSshKey $provision, BackupSettings $settings): JsonResponse
+    {
+        if (! $settings->configured()) {
+            return response()->json(['message' => 'The backup engine (Rusted) is not configured yet - set it up in Settings.'], 422);
+        }
+
+        try {
+            $result = $provision($device);
+        } catch (\Throwable $e) {
+            EngineLog::warning('backup: ssh-key provisioning failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => $result['ssh_enabled_by']
+                ? "SSH key installed and the SSH service was enabled (port {$result['ssh_port']})."
+                : "SSH key installed (SSH already on, port {$result['ssh_port']}).",
+            'device' => new DeviceResource($device->fresh()),
+            'ssh_port' => $result['ssh_port'],
+            'ssh_enabled' => $result['ssh_enabled'],
+            'ssh_enabled_by' => $result['ssh_enabled_by'],
+        ]);
+    }
+
+    /**
      * Backup history for a device, proxied live from Rusted (newest first). Returns [] when
      * the engine is unconfigured/unreachable rather than erroring - the inspector just shows
      * "no history yet".

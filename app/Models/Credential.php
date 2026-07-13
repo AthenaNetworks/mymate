@@ -13,18 +13,19 @@ class Credential extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'type', 'snmp_community', 'username', 'password', 'api_port',
+        'name', 'type', 'snmp_community', 'username', 'password', 'private_key', 'api_port',
     ];
 
     protected $casts = [
         'snmp_community' => 'encrypted',
         'username' => 'encrypted',
         'password' => 'encrypted',
+        'private_key' => 'encrypted',
         'api_port' => 'integer',
     ];
 
     // Never expose secrets when serialised to JSON (e.g. via API resources).
-    protected $hidden = ['snmp_community', 'username', 'password'];
+    protected $hidden = ['snmp_community', 'username', 'password', 'private_key'];
 
     public function devices(): HasMany
     {

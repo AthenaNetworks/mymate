@@ -86,6 +86,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         ->name('devices.backup.config');
     Route::post('devices/{device}/backups', [DeviceBackupController::class, 'run'])
         ->middleware('throttle:10,1')->name('devices.backups.run');
+    // Bootstrap key-based SSH on a MikroTik over the API (installs a generated key).
+    Route::post('devices/{device}/provision-ssh-key', [DeviceBackupController::class, 'provisionKey'])
+        ->middleware('throttle:6,1')->name('devices.provision-ssh-key');
     Route::get('devices/{device}/backups', [DeviceBackupController::class, 'history'])
         ->name('devices.backups.history');
     Route::get('devices/{device}/backups/latest', [DeviceBackupController::class, 'latest'])

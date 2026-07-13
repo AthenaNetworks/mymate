@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowClockwise, CircleNotch, Eye, FloppyDisk, X } from '@phosphor-icons/react';
-import { useDeviceBackups, useDeviceLatestConfig, useRunBackup, useUpdateBackupConfig } from '../api/backups';
+import { useDeviceBackups, useDeviceLatestConfig, useProvisionSshKey, useRunBackup, useUpdateBackupConfig } from '../api/backups';
 import { pushToast } from '../../../lib/toast';
 import { relativeTime } from '../../../lib/relativeTime';
 import { RUSTED_DRIVERS, type BackupStatus, type Device } from '../../../types';
@@ -65,7 +65,22 @@ export function BackupSection({ device, isAdmin }: { device: Device; isAdmin: bo
     const { data: history } = useDeviceBackups(device.id);
     const updateConfig = useUpdateBackupConfig();
     const runBackup = useRunBackup();
+    const provision = useProvisionSshKey();
     const [viewing, setViewing] = useState(false);
+
+    // MikroTik can't export config over the API, so offer to bootstrap key-based SSH over
+    // the API (installs a generated key on the device) when the device has no SSH cred yet.
+    const canProvision = device.poll_method === 'routeros' && device.ssh_credential_id === null;
+
+    function provisionKey() {
+        provision.mutate(device.id, {
+            onSuccess: (r) => pushToast({ title: 'Key-based SSH ready', detail: r.message, tone: 'up' }),
+            onError: (e: unknown) => {
+                const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                pushToast({ title: 'Couldn\'t set up SSH key', detail: msg, tone: 'down' });
+            },
+        });
+    }
 
     const status = device.backup_status;
     const running = status === 'pending' || runBackup.isPending;
@@ -144,6 +159,23 @@ export function BackupSection({ device, isAdmin }: { device: Device; isAdmin: bo
                             <span className="truncate text-white/70">{suggested?.label ?? device.backup_driver ?? '-'}</span>
                         )}
                     </div>
+
+                    {/* MikroTik key-based-SSH bootstrap (RouterOS can't export over the API). */}
+                    {isAdmin && canProvision && (
+                        <button
+                            onClick={provisionKey}
+                            disabled={provision.isPending}
+                            title="Install an SSH key on this MikroTik over its API, then back it up over SSH"
+                            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-500/10 px-2 py-1.5 text-xs font-medium text-emerald-300 ring-1 ring-emerald-400/25 transition hover:bg-emerald-500/20 disabled:opacity-40"
+                        >
+                            {provision.isPending ? <CircleNotch weight="bold" className="h-3.5 w-3.5 animate-spin" /> : null}
+                            {provision.isPending ? 'Setting up SSH key...' : 'Set up key-based SSH (over API)'}
+                        </button>
+                    )}
+                    {isAdmin && device.poll_method === 'routeros' && device.ssh_credential_id !== null && (
+                        <p className="text-[11px] text-emerald-300/70">Key-based SSH is set up for this device.</p>
+                    )}
+
                     {device.backup_at && (
                         <div className="flex items-center justify-between text-xs">
                             <span className="text-white/45">Last run</span>

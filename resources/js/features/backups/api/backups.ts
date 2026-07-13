@@ -51,6 +51,21 @@ export function useUpdateBackupConfig() {
     });
 }
 
+/**
+ * Bootstrap key-based SSH on a MikroTik over its API (RouterOS can't export over the API).
+ * Rusted installs a generated key; My Mate stores it and switches the device to SSH backups.
+ */
+export function useProvisionSshKey() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (deviceId: number): Promise<{ message: string; ssh_enabled: boolean; ssh_enabled_by: boolean }> => {
+            const { data } = await apiClient.post(`/devices/${deviceId}/provision-ssh-key`);
+            return data;
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: deviceKeys.all }),
+    });
+}
+
 /** Queue a backup now. The device is marked `pending`; invalidate so the spinner shows. */
 export function useRunBackup() {
     const qc = useQueryClient();

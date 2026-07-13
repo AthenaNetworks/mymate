@@ -82,7 +82,6 @@ export const BACKUP_IN_PROGRESS: ReadonlySet<BackupStatus> = new Set(['pending']
  */
 export const RUSTED_DRIVERS: { value: string; label: string }[] = [
     { value: 'mikrotik_routeros', label: 'MikroTik RouterOS' },
-    { value: 'mikrotik_routeros_api', label: 'MikroTik RouterOS (API)' },
     { value: 'cisco_ios', label: 'Cisco IOS' },
     { value: 'cisco_nxos', label: 'Cisco Nexus (NX-OS)' },
     { value: 'cisco_asa', label: 'Cisco ASA' },
