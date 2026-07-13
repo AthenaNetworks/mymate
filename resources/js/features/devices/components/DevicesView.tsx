@@ -183,7 +183,16 @@ export function DevicesView() {
                                             <DeviceTypeBadge type={d.device_type} className="h-6 w-7 shrink-0" />
                                             <span className="min-w-0 flex-1">
                                                 <span className="block truncate text-sm font-medium text-white/85">{d.name}</span>
-                                                <span className="block truncate text-xs text-white/35">{d.mgmt_ip}</span>
+                                                <span className="flex items-center gap-2 truncate text-xs text-white/35">
+                                                    <span className="shrink-0">{d.mgmt_ip}</span>
+                                                    {(d.cpu_pct != null || d.mem_used_pct != null || d.temp_c != null) && (
+                                                        <span className="hidden items-center gap-2 truncate font-mono text-[10px] text-white/30 sm:inline-flex">
+                                                            {d.cpu_pct != null && <span>cpu {Math.round(d.cpu_pct)}%</span>}
+                                                            {d.mem_used_pct != null && <span>mem {Math.round(d.mem_used_pct)}%</span>}
+                                                            {d.temp_c != null && <span>{Math.round(d.temp_c)}&deg;</span>}
+                                                        </span>
+                                                    )}
+                                                </span>
                                             </span>
                                         </button>
                                         <div className="flex shrink-0 items-center gap-2.5">
