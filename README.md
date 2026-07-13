@@ -22,9 +22,19 @@ web app you can run anywhere.
   writes, per device failure isolation.
 - Subnet auto discovery with a review queue, so nothing gets added without you approving it.
 - Recent history charts per link, kept in time partitioned tables.
+- Device health at a glance: CPU, memory and temperature per device (SNMP or the RouterOS
+  API), shown right on the map tiles and charted in the inspector.
+- Ordered firmware upgrades: pick the devices and it works out the safe order (furthest out
+  first) and waits for each one to come back online before it touches the next, so a reboot
+  never cuts the path to gear that's still pending.
+- Config backups over SSH, driven by the bundled Rusted engine which sets itself up on
+  install. Back up on a schedule you choose, then browse every stored version and diff them
+  from the Backups page. For MikroTik (which won't hand its config over the API) it can
+  install an SSH key over the API so key based backups just work.
+- A heads up in Settings when a newer release is out.
 - Login with an in app operator list and a read only viewer tier.
-- Alerting (email, Slack, Teams, Messenger), outage history, bulk firmware upgrades, config
-  backups, multiple maps, and a wallboard/dashboard mode for the NOC screen.
+- Alerting (email, Slack, Teams, Messenger), outage history, multiple maps, and a
+  wallboard/dashboard mode for the NOC screen.
 
 ## Install
 
@@ -100,6 +110,7 @@ ranges to it in the console.
 |---|---|
 | [BUILD.md](BUILD.md) | Running from source and building the packages/image yourself |
 | [deploy/ssl/README.md](deploy/ssl/README.md) | HTTPS: Cloudflare Tunnel, reverse proxy, Let's Encrypt, own cert |
+| [deploy/rusted/README.md](deploy/rusted/README.md) | Config backups: the Rusted engine, how it's provisioned, and credentials |
 | [agent/README.md](agent/README.md) | The remote agent: deploy, configure, discover |
 
 ## Contributing
