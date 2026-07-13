@@ -20,6 +20,7 @@ class RustedDrivers
     /** Every driver Rusted ships (github.com/JoshFinlayAU/rusted -> docs/drivers.md). */
     public const ALL = [
         'mikrotik_routeros',
+        'mikrotik_routeros_api',
         'cisco_nxos',
         'juniper_junos',
         'cisco_ios',

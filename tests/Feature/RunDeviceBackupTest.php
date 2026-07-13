@@ -110,6 +110,27 @@ class RunDeviceBackupTest extends TestCase
             && ($req['username'] ?? null) === 'sshuser');
     }
 
+    public function test_the_api_driver_registers_with_the_routeros_transport(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);
+
+        $cred = Credential::factory()->routeros()->create();
+        $device = Device::factory()->create([
+            'poll_method' => PollMethod::RouterOs,
+            'credential_id' => $cred->id,
+            'backup_enabled' => true,
+            'backup_driver' => 'mikrotik_routeros_api',
+        ]);
+
+        app(RunDeviceBackup::class)($device);
+
+        // The device pushed to Rusted must pin the API transport + its default port.
+        Http::assertSent(fn ($req) => str_contains($req->url(), '/api/devices')
+            && ($req['transport'] ?? null) === 'routeros-api'
+            && ($req['port'] ?? null) === 8728
+            && ($req['driver'] ?? null) === 'mikrotik_routeros_api');
+    }
+
     public function test_missing_credential_and_no_fallback_fails_cleanly(): void
     {
         Http::fake(['*' => Http::response(['status' => 'ok'], 200)]);

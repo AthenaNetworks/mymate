@@ -39,11 +39,16 @@ class RegisterBackupDevice
         [$credentialName, $credentialPayload] = $this->resolveCredential($device);
         $this->client->putCredential($credentialPayload);
 
+        // The RouterOS-API driver backs up over the binary API instead of SSH; pick the
+        // matching Rusted transport + default port for it.
+        $overApi = $driver === 'mikrotik_routeros_api';
+
         $this->client->putDevice([
             'name' => self::rustedName($device),
             'host' => $device->mgmt_ip,
-            'port' => (int) config('mymate.backup.ssh_port', 22),
+            'port' => $overApi ? 8728 : (int) config('mymate.backup.ssh_port', 22),
             'driver' => $driver,
+            'transport' => $overApi ? 'routeros-api' : '',
             'credential' => $credentialName,
             'group' => (string) config('mymate.backup.group', 'mymate'),
             'enabled' => (bool) $device->backup_enabled,
