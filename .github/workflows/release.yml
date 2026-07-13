@@ -82,7 +82,10 @@ jobs:
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-24.04
-    needs: [build-deb, agent]  # LXC is optional - don't block the release on it
+    # Wait for build-lxc too so its artifact is uploaded before we download it (otherwise
+    # the release races ahead and the LXC template is missing). LXC stays optional: the `if`
+    # only requires deb + agent, so a failed/skipped LXC still publishes the release.
+    needs: [build-deb, agent, build-lxc]
     if: always() && needs.build-deb.result == 'success' && needs.agent.result == 'success'
     steps:
       - name: Download .deb
