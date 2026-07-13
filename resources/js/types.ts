@@ -186,6 +186,15 @@ export interface Credential {
     device_count: number;
 }
 
+// Update check - this install's version vs the latest GitHub release.
+export interface UpdateStatus {
+    current: string;
+    latest: string | null;
+    update_available: boolean;
+    url: string | null;
+    checked_at: string;
+}
+
 // Remote agents / probes.
 export interface Agent {
     id: number;

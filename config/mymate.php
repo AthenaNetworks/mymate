@@ -75,6 +75,17 @@ return [
         ],
     ],
 
+    // Update check: compare this install's version against the latest GitHub release so
+    // the console can flag when a newer version is out. The version comes from
+    // MYMATE_VERSION (stamped by the packaged build) or the repo-root VERSION file.
+    'update' => [
+        'enabled' => (bool) env('MYMATE_UPDATE_CHECK', true),
+        'repo' => env('MYMATE_UPDATE_REPO', 'AthenaNetworks/mymate'),
+        'version' => env('MYMATE_VERSION'),
+        // How long to cache the latest-release lookup (hours) - GitHub isn't hit per request.
+        'cache_hours' => (int) env('MYMATE_UPDATE_CACHE_HOURS', 12),
+    ],
+
     // Device resource metrics - CPU / memory / temperature. Polled on their own
     // (slower) cadence than throughput; latest values cached on the device row and
     // trend samples appended to device_metric_samples. Off by env if you don't want it.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, Broadcast, Copy, Envelope, Eye, EyeSlash, FloppyDisk, GearSix, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Trash, UsersThree } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, FloppyDisk, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Trash, UsersThree } from '@phosphor-icons/react';
 import { useSettings, useUpdateSettings } from '../api/getSettings';
+import { useUpdateCheck } from '../api/updateCheck';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
@@ -937,6 +938,49 @@ function AgentsSection() {
     );
 }
 
+/** Version + whether a newer release is available. */
+function AboutSection() {
+    const { data: u, isLoading } = useUpdateCheck();
+
+    return (
+        <div className="min-w-0 space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
+            <div className="flex items-center gap-2">
+                <Info weight="light" className="h-4 w-4 text-white/50" />
+                <h2 className="text-sm font-bold text-white">About</h2>
+            </div>
+            {isLoading || !u ? (
+                <p className="text-xs text-white/40">Checking for updates...</p>
+            ) : (
+                <div className="space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-white/45">Version</span>
+                        <span className="font-mono text-white/85">{u.current === 'dev' ? 'dev build' : `v${u.current}`}</span>
+                    </div>
+                    {u.update_available ? (
+                        <a
+                            href={u.url ?? '#'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-amber-300 ring-1 ring-amber-400/25 transition hover:bg-amber-500/20"
+                        >
+                            <span className="flex items-center gap-1.5">
+                                <CloudArrowDown weight="bold" className="h-3.5 w-3.5" /> Update available - {u.latest}
+                            </span>
+                            <ArrowRight weight="bold" className="h-3.5 w-3.5" />
+                        </a>
+                    ) : u.latest ? (
+                        <p className="flex items-center gap-1.5 text-emerald-300/80">
+                            <Check weight="bold" className="h-3.5 w-3.5" /> You're on the latest release.
+                        </p>
+                    ) : (
+                        <p className="text-white/35">Couldn't reach GitHub to check for updates.</p>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function SettingsView() {
     // Engine cadence, mail server and credentials are admin-only config.
     // A read-only operator keeps just self-service (change own password) and the roster.
@@ -965,6 +1009,7 @@ export function SettingsView() {
                     {isAdmin && <MailServerSection />}
                     {isAdmin && <BackupEngineSection />}
                     <AccountSection />
+                    <AboutSection />
                     <UsersSection />
                     <AgentsSection />
                     {isAdmin && (

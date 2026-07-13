@@ -104,6 +104,9 @@ mkdir -p "$APP/storage/logs" \
          "$APP/bootstrap/cache"
 find "$APP/storage" "$APP/bootstrap/cache" -type d -exec touch {}/.gitignore \; 2>/dev/null || true
 
+# Stamp the built version so the app (and its update check) knows what it is.
+echo "$VERSION" > "$APP/VERSION"
+
 # --- 2. Composer (production, no dev) -------------------------------------
 say "Installing PHP dependencies (--no-dev)"
 # Drop any framework caches carried over from the dev tree BEFORE composer runs. A stale
