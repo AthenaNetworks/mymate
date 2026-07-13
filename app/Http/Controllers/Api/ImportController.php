@@ -71,6 +71,8 @@ class ImportController extends Controller
             'stored_path' => $dir.'/dude.db',
             'mode' => $request->validated('mode'),
             'include_history' => $request->boolean('include_history', true),
+            'extract_timeout' => $request->validated('extract_timeout'), // null -> config default
+
             'status' => ImportStatus::Pending,
             'user_id' => $request->user()?->id,
         ]);

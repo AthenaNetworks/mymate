@@ -20,7 +20,8 @@ class DudeImportCommand extends Command
     protected $signature = 'mymate:dude-import
         {file : Path to the dude.db SQLite file}
         {--mode=upsert : upsert (keep existing, update-or-insert) or fresh (wipe first)}
-        {--no-history : Skip chart_values history (config only - much faster)}';
+        {--no-history : Skip chart_values history (config only - much faster)}
+        {--extract-timeout= : Max seconds for the extraction step (default from config; raise for very large databases)}';
 
     protected $description = 'Import a MikroTik "The Dude" database (devices, interfaces, links, maps, history).';
 
@@ -42,11 +43,16 @@ class DudeImportCommand extends Command
             return self::FAILURE;
         }
 
+        $extractTimeout = $this->option('extract-timeout') !== null
+            ? max(1, (int) $this->option('extract-timeout'))
+            : null;
+
         $run = ImportRun::create([
             'original_filename' => basename($file),
             'stored_path' => $file,
             'mode' => $mode->value,
             'include_history' => ! $this->option('no-history'),
+            'extract_timeout' => $extractTimeout,
             'status' => ImportStatus::Extracting->value,
             'started_at' => now(),
         ]);
@@ -55,7 +61,7 @@ class DudeImportCommand extends Command
         $t0 = microtime(true);
 
         try {
-            $exportDir = $extract($file, $run->include_history);
+            $exportDir = $extract($file, $run->include_history, $run->extract_timeout);
             $run->markStatus(ImportStatus::Importing);
 
             $this->info('Importing into My Mate ('.$mode->value.($run->include_history ? ', with history' : '').') ...');

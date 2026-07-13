@@ -16,6 +16,7 @@ class ImportRunResource extends JsonResource
             'original_filename' => $this->original_filename,
             'mode' => $this->mode->value,
             'include_history' => $this->include_history,
+            'extract_timeout' => $this->extract_timeout,
             'status' => $this->status->value,
             'stage' => $this->stage,
             'progress' => $this->progress,

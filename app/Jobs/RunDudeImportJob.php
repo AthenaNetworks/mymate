@@ -27,9 +27,15 @@ class RunDudeImportJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 3600;
+    public int $timeout;
 
-    public function __construct(public int $importRunId) {}
+    public function __construct(public int $importRunId)
+    {
+        // Whole-job ceiling (extract + import). Generous by default so a large history
+        // import - which the operator can grant a long extraction window - isn't killed
+        // by the worker before it finishes. See mymate.import.job_timeout.
+        $this->timeout = (int) config('mymate.import.job_timeout', 21600);
+    }
 
     public function handle(ExtractDudeDatabase $extract, ImportDudeDatabase $import): void
     {
@@ -57,7 +63,7 @@ class RunDudeImportJob implements ShouldQueue
             // Resolve via the same disk the upload was stored on. The `local` disk root
             // is storage/app/private (Laravel 11+), so a naive storage_path('app/'.$path)
             // would miss the /private segment and fail with "Dude database not found".
-            $exportDir = $extract(Storage::disk('local')->path($run->stored_path), $run->include_history);
+            $exportDir = $extract(Storage::disk('local')->path($run->stored_path), $run->include_history, $run->extract_timeout);
             $progress->checkCancelled(); // can't interrupt Python, but stop before importing
 
             $run->markStatus(ImportStatus::Importing);

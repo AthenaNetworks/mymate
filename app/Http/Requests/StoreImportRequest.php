@@ -26,6 +26,9 @@ class StoreImportRequest extends FormRequest
             'database' => ['required', 'file', 'max:'.$maxKb],
             'mode' => ['required', new Enum(ImportMode::class)],
             'include_history' => ['sometimes', 'boolean'],
+            // Per-run extraction time limit (seconds). Capped at 4h, leaving headroom
+            // for the import phase under the whole-job ceiling (mymate.import.job_timeout).
+            'extract_timeout' => ['sometimes', 'nullable', 'integer', 'min:60', 'max:14400'],
         ];
     }
 

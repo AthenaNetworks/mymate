@@ -287,7 +287,9 @@ return [
             'maxJobs' => 0,
             'memory' => 512,
             'tries' => 1,
-            'timeout' => 3600,
+            // Match the job's whole-job ceiling (mymate.import.job_timeout) so the worker
+            // never kills a long history import before the job's own timeout fires.
+            'timeout' => (int) env('MYMATE_IMPORT_JOB_TIMEOUT', 21600),
             'nice' => 0,
         ],
     ],

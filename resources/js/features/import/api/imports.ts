@@ -15,6 +15,7 @@ export type ImportRun = {
     original_filename: string;
     mode: ImportMode;
     include_history: boolean;
+    extract_timeout: number | null;
     status: ImportStatus;
     stage: string | null;
     progress: ImportProgress | null;
@@ -68,17 +69,20 @@ export type UploadInput = {
     file: File;
     mode: ImportMode;
     includeHistory: boolean;
+    /** Extraction time limit in seconds; omit/undefined to use the server default. */
+    extractTimeout?: number;
     onProgress?: (p: UploadProgress) => void;
 };
 
 export function useUploadImport() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ file, mode, includeHistory, onProgress }: UploadInput): Promise<ImportRun> => {
+        mutationFn: async ({ file, mode, includeHistory, extractTimeout, onProgress }: UploadInput): Promise<ImportRun> => {
             const form = new FormData();
             form.append('database', file);
             form.append('mode', mode);
             form.append('include_history', includeHistory ? '1' : '0');
+            if (extractTimeout) form.append('extract_timeout', String(extractTimeout));
             const { data } = await apiClient.post<{ data: ImportRun }>('/imports', form, {
                 onUploadProgress: (e) => {
                     if (!onProgress) return;

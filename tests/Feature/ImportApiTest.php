@@ -59,6 +59,47 @@ class ImportApiTest extends TestCase
         Queue::assertPushedOn('import', RunDudeImportJob::class);
     }
 
+    public function test_uploading_accepts_a_custom_extraction_timeout(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+
+        $this->postJson('/api/imports', [
+            'database' => $this->sqliteUpload(),
+            'mode' => 'upsert',
+            'extract_timeout' => 5400, // 90 minutes for a big-history import
+        ])->assertCreated()->assertJsonPath('data.extract_timeout', 5400);
+
+        $this->assertSame(5400, ImportRun::firstOrFail()->extract_timeout);
+    }
+
+    public function test_omitting_the_extraction_timeout_leaves_it_null_for_the_config_default(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+
+        $this->postJson('/api/imports', [
+            'database' => $this->sqliteUpload(),
+            'mode' => 'upsert',
+        ])->assertCreated()->assertJsonPath('data.extract_timeout', null);
+
+        $this->assertNull(ImportRun::firstOrFail()->extract_timeout);
+    }
+
+    public function test_rejects_an_out_of_range_extraction_timeout(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+
+        $this->postJson('/api/imports', [
+            'database' => $this->sqliteUpload(),
+            'mode' => 'upsert',
+            'extract_timeout' => 999999, // beyond the 4h cap
+        ])->assertStatus(422)->assertJsonValidationErrors('extract_timeout');
+
+        Queue::assertNothingPushed();
+    }
+
     public function test_dispatched_job_finds_the_stored_upload_and_completes(): void
     {
         // Regression: the upload is stored on the `local` disk (root storage/app/private

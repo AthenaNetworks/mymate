@@ -88,6 +88,7 @@ RUN mkdir -p /var/lib/rusted/backups /etc/rusted \
 
 # Container config + entrypoint.
 COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-mymate-uploads.ini
 COPY docker/supervisord.conf /etc/supervisor/conf.d/mymate.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh \

@@ -217,10 +217,17 @@ return [
         // Python 3 interpreter + the extractor script (repo-relative resolved at runtime).
         'python' => env('MYMATE_IMPORT_PYTHON', 'python3'),
         'extract_script' => env('MYMATE_IMPORT_SCRIPT', 'scripts/dude-extract.py'),
-        // Hard ceiling on the extraction subprocess (s) - big DBs + --charts are slow.
+        // Default ceiling on the extraction subprocess (s) when a run doesn't set its
+        // own. Big DBs + chart history are slow; the import screen lets each run raise
+        // this per-import (see StoreImportRequest / import_runs.extract_timeout).
         'extract_timeout' => (int) env('MYMATE_IMPORT_EXTRACT_TIMEOUT', 1800),
-        // Max upload size (KB) for an uploaded dude.db. Default 512 MB.
-        'max_upload_kb' => (int) env('MYMATE_IMPORT_MAX_UPLOAD_KB', 524288),
+        // Whole-job ceiling (s): extraction + import combined, enforced by the queue
+        // worker. Generous (6h) so a huge history import is never killed mid-flight -
+        // the import queue runs one job at a time, so a long run blocks nothing else.
+        'job_timeout' => (int) env('MYMATE_IMPORT_JOB_TIMEOUT', 21600),
+        // Max upload size (KB) for an uploaded dude.db. Default 4 GB - comfortably fits
+        // even the largest Dude databases (which are almost all chart history).
+        'max_upload_kb' => (int) env('MYMATE_IMPORT_MAX_UPLOAD_KB', 4194304),
         // chart_values rows are bulk-inserted in batches of this many.
         'history_batch' => (int) env('MYMATE_IMPORT_HISTORY_BATCH', 5000),
         // Map-coordinate compensation. Dude lays out tiny icons (~55-130px apart);

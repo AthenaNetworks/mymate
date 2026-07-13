@@ -41,7 +41,7 @@ server {
 
     # >= the php pool's upload_max_filesize/post_max_size and mymate.import.max_upload_kb
     # (a Dude database can be hundreds of MB).
-    client_max_body_size 1024m;
+    client_max_body_size 4096m;
 
     # Reverb WebSocket - the browser connects to wss://<host>/app on the same origin.
     location /app {

@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 class ImportRun extends Model
 {
     protected $fillable = [
-        'original_filename', 'stored_path', 'mode', 'include_history',
+        'original_filename', 'stored_path', 'mode', 'include_history', 'extract_timeout',
         'status', 'stage', 'progress', 'cancel_requested',
         'summary', 'error', 'user_id', 'started_at', 'finished_at',
     ];
@@ -25,6 +25,7 @@ class ImportRun extends Model
         'mode' => ImportMode::class,
         'status' => ImportStatus::class,
         'include_history' => 'boolean',
+        'extract_timeout' => 'integer',
         'cancel_requested' => 'boolean',
         'progress' => 'array',
         'summary' => 'array',

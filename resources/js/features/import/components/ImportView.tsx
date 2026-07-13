@@ -14,6 +14,10 @@ import { pushToast } from '../../../lib/toast';
 
 const card = 'rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.06]';
 
+const EXTRACT_MIN = 1;
+const EXTRACT_MAX = 240; // minutes (4h) - matches the server-side validation cap
+const clampMinutes = (m: number) => Math.min(EXTRACT_MAX, Math.max(EXTRACT_MIN, Number.isFinite(m) ? m : 30));
+
 const MB = 1_048_576;
 const fmtMB = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
 const fmtSpeed = (bytesPerSec: number) => (bytesPerSec > 0 ? `${(bytesPerSec / MB).toFixed(1)} MB/s` : '...');
@@ -133,6 +137,7 @@ export function ImportView() {
     const [file, setFile] = useState<File | null>(null);
     const [mode, setMode] = useState<ImportMode>('upsert');
     const [includeHistory, setIncludeHistory] = useState(true);
+    const [extractMinutes, setExtractMinutes] = useState(30);
     const [activeId, setActiveId] = useState<number | null>(null);
     const [uploadProg, setUploadProg] = useState<UploadProgress | null>(null);
     const fileInput = useRef<HTMLInputElement>(null);
@@ -144,7 +149,13 @@ export function ImportView() {
         if (!file) return;
         setUploadProg({ percent: 0, bytesPerSec: 0, loaded: 0, total: file.size });
         upload.mutate(
-            { file, mode, includeHistory, onProgress: setUploadProg },
+            {
+                file,
+                mode,
+                includeHistory,
+                extractTimeout: Math.round(clampMinutes(extractMinutes) * 60),
+                onProgress: setUploadProg,
+            },
             {
                 onSuccess: (run: ImportRun) => {
                     setActiveId(run.id);
@@ -246,6 +257,28 @@ export function ImportView() {
                         />
                         Import chart history (slower - large databases can take several minutes)
                     </label>
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/[0.02] px-3 py-2.5 ring-1 ring-white/[0.06]">
+                        <div>
+                            <div className="text-sm font-medium text-white/80">Extraction time limit</div>
+                            <div className="mt-0.5 text-xs text-white/45">
+                                How long the extraction step may run before it's stopped. Raise it for very large
+                                databases (lots of history).
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="number"
+                                min={EXTRACT_MIN}
+                                max={EXTRACT_MAX}
+                                value={extractMinutes}
+                                onChange={(e) => setExtractMinutes(Number(e.target.value))}
+                                onBlur={() => setExtractMinutes((m) => clampMinutes(m))}
+                                className="w-20 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-right text-sm tabular-nums text-white ring-1 ring-white/10 focus:outline-none focus:ring-emerald-400/40"
+                            />
+                            <span className="text-xs text-white/50">minutes</span>
+                        </div>
+                    </div>
 
                     <button
                         onClick={start}

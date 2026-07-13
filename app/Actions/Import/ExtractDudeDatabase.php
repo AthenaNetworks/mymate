@@ -19,9 +19,10 @@ class ExtractDudeDatabase
     /**
      * @param  string  $dbPath  absolute path to the uploaded dude.db
      * @param  bool  $withCharts  pass --charts (time-series; large + slow)
+     * @param  int|null  $timeout  extraction time limit (s); null uses the config default
      * @return string absolute path to the export directory holding the CSVs
      */
-    public function __invoke(string $dbPath, bool $withCharts = true): string
+    public function __invoke(string $dbPath, bool $withCharts = true, ?int $timeout = null): string
     {
         if (! is_file($dbPath)) {
             throw new RuntimeException("Dude database not found: {$dbPath}");
@@ -43,7 +44,7 @@ class ExtractDudeDatabase
         }
 
         $process = new Process($args, cwd: $workDir);
-        $process->setTimeout((float) config('mymate.import.extract_timeout', 1800));
+        $process->setTimeout((float) ($timeout ?? config('mymate.import.extract_timeout', 1800)));
         $process->run();
 
         if (! $process->isSuccessful()) {

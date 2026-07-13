@@ -52,6 +52,19 @@ class ExtractDudeDatabaseTest extends TestCase
         $this->deleteDir($dir);
     }
 
+    public function test_accepts_an_explicit_extraction_timeout(): void
+    {
+        $dir = $this->extractWorkDir('full.db');
+
+        // An explicit per-run timeout is honoured and otherwise behaves like the default.
+        $exportDir = app(ExtractDudeDatabase::class)($dir.'/dude.db', withCharts: true, timeout: 600);
+
+        $this->assertFileExists($exportDir.'/devices.csv');
+        $this->assertStringContainsString('router1', file_get_contents($exportDir.'/devices.csv'));
+
+        $this->deleteDir($dir);
+    }
+
     public function test_extraction_survives_a_database_missing_the_optional_tables(): void
     {
         // The reproduction of Dave's failure: no `outages`, no `chart_values_*` tables.
