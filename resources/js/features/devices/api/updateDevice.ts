@@ -7,6 +7,8 @@ type UpdateDeviceInput = {
     id: number;
     device_type?: DeviceType;
     name?: string;
+    mgmt_ip?: string;
+    monitored?: boolean;
     parent_device_id?: number | null;
     poll_method?: PollMethod;
     credential_id?: number | null;

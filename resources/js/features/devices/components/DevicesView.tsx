@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { TrashSimple, ArrowRight, ListDashes, DownloadSimple } from '@phosphor-icons/react';
+import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play } from '@phosphor-icons/react';
 import { useDevices } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
+import { useUpdateDevice } from '../api/updateDevice';
 import { useUpgradeDevices, useUpgradePreflight, type UpgradePlanRow } from '../api/upgradeDevices';
 import { DeviceForm } from './DeviceForm';
+import { DeviceEditModal } from './DeviceEditModal';
 import { useIsAdmin } from '../../auth/api/auth';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
@@ -20,6 +22,15 @@ export function DevicesView() {
     const isAdmin = useIsAdmin();
     const { data: devices, isLoading } = useDevices();
     const del = useDeleteDevice();
+    const update = useUpdateDevice();
+    const [editing, setEditing] = useState<Device | null>(null);
+
+    function toggleMonitored(d: Device) {
+        update.mutate(
+            { id: d.id, monitored: !d.monitored },
+            { onError: () => pushToast({ title: "Couldn't change monitoring", tone: 'down' }) },
+        );
+    }
     const upgrade = useUpgradeDevices();
     const preflight = useUpgradePreflight();
     const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -195,7 +206,31 @@ export function DevicesView() {
                                                     'SNMP'
                                                 )}
                                             </span>
+                                            {/* Enable/disable monitoring inline - paused devices poll nothing. */}
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => toggleMonitored(d)}
+                                                    title={d.monitored ? 'Monitoring on - click to pause' : 'Paused - click to resume'}
+                                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 transition-colors ${
+                                                        d.monitored
+                                                            ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-400/20 hover:bg-emerald-500/20'
+                                                            : 'bg-amber-500/10 text-amber-300 ring-amber-400/25 hover:bg-amber-500/20'
+                                                    }`}
+                                                >
+                                                    {d.monitored ? <Pause weight="bold" className="h-3 w-3" /> : <Play weight="bold" className="h-3 w-3" />}
+                                                    <span className="hidden sm:inline">{d.monitored ? 'Live' : 'Paused'}</span>
+                                                </button>
+                                            )}
                                             <div className="flex items-center gap-1">
+                                                {isAdmin && (
+                                                    <button
+                                                        onClick={() => setEditing(d)}
+                                                        title="Edit device"
+                                                        className="rounded-lg p-1 text-white/40 opacity-100 transition-all duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 lg:text-white/30 lg:opacity-0 lg:group-hover:opacity-100"
+                                                    >
+                                                        <PencilSimple weight="bold" className="h-4 w-4" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => open(d.id)}
                                                     title="Show on map"
@@ -275,6 +310,8 @@ export function DevicesView() {
                         onClose={() => setPendingUpgrade(null)}
                     />
                 ))}
+
+            {editing && <DeviceEditModal device={editing} onClose={() => setEditing(null)} />}
 
             {deleting && (
                 <ConfirmDialog

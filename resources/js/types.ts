@@ -29,6 +29,7 @@ export interface Device {
     name: string;
     mgmt_ip: string;
     poll_method: PollMethod;
+    monitored: boolean; // false = polling paused (no throughput/metrics collected)
     status: DeviceStatus;
     last_change: string | null;
     map_x: number;

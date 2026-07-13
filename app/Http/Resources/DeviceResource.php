@@ -14,6 +14,7 @@ class DeviceResource extends JsonResource
             'name' => $this->name,
             'mgmt_ip' => $this->mgmt_ip,
             'poll_method' => $this->poll_method->value,
+            'monitored' => (bool) $this->monitored,
             'status' => $this->status->value,
             'last_change' => $this->last_change,
             'map_x' => $this->map_x,
