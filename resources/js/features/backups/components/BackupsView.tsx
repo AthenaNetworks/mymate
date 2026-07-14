@@ -10,6 +10,7 @@ import {
     useDeviceConfigAt,
 } from '../api/backups';
 import { useIsAdmin } from '../../auth/api/auth';
+import { Toggle } from '../../../components/Toggle';
 import { StatusDot } from '../../../components/StatusDot';
 import { relativeTime } from '../../../lib/relativeTime';
 import { pushToast } from '../../../lib/toast';
@@ -64,17 +65,7 @@ function ScheduleCard({ isAdmin }: { isAdmin: boolean }) {
                 <span className="flex items-center gap-2 text-sm font-semibold text-white/85">
                     <Clock weight="light" className="h-4 w-4 text-white/50" /> Schedule
                 </span>
-                {isAdmin && (
-                    <button
-                        type="button"
-                        role="switch"
-                        aria-checked={schedule?.enabled ?? false}
-                        onClick={() => save({ enabled: !schedule?.enabled })}
-                        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${schedule?.enabled ? 'bg-emerald-500' : 'bg-white/15'}`}
-                    >
-                        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${schedule?.enabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                    </button>
-                )}
+                {isAdmin && <Toggle checked={schedule?.enabled ?? false} onChange={(v) => save({ enabled: v })} label="Backup schedule" />}
             </div>
 
             {schedule ? (

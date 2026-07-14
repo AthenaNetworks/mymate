@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { X, PencilSimple } from '@phosphor-icons/react';
 import { useUpdateDevice } from '../api/updateDevice';
+import { Toggle } from '../../../components/Toggle';
 import { useCredentials } from '../../settings/api/credentials';
 import { useDevices } from '../api/getDevices';
 import { pushToast } from '../../../lib/toast';
@@ -169,15 +170,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                                 <span className="block text-sm font-medium text-white/85">Monitored</span>
                                 <span className="block text-[11px] text-white/40">{monitored ? 'Polling throughput + metrics' : 'Paused - not polled'}</span>
                             </span>
-                            <button
-                                type="button"
-                                role="switch"
-                                aria-checked={monitored}
-                                onClick={() => setMonitored((m) => !m)}
-                                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${monitored ? 'bg-emerald-500' : 'bg-white/15'}`}
-                            >
-                                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${monitored ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                            </button>
+                            <Toggle checked={monitored} onChange={setMonitored} label="Monitoring" />
                         </div>
 
                         <div className="flex items-center justify-end gap-2.5 pt-1">
