@@ -7,6 +7,7 @@ import { useIsAdmin } from '../../auth/api/auth';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
 import { StatusDot } from '../../../components/StatusDot';
 import { ConfirmDialog } from '../../../components/Dialog';
+import { selectDevice, setView } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import { UPGRADE_IN_PROGRESS, type Device } from '../../../types';
 
@@ -102,6 +103,8 @@ export function UpgradesView() {
                     <p className="text-sm text-white/45">Upgrade RouterOS gear in order, furthest out first, one at a time.</p>
                 </div>
             </header>
+
+            <UpgradeQueue />
 
             {order === null ? (
                 <>
@@ -359,6 +362,37 @@ function ReviewStep({
 const optField =
     'rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40';
 
+/**
+ * The live upgrade queue - every device currently checking / downloading / rebooting. Shown at
+ * the top of the page so you can always come back to an in-flight run (the wizard below resets,
+ * this reads live device state). Click a device to jump to it on the map.
+ */
+function UpgradeQueue() {
+    const { data: devices } = useDevices();
+    const active = (devices ?? []).filter((d) => d.upgrade_status && UPGRADE_IN_PROGRESS.has(d.upgrade_status));
+    if (active.length === 0) return null;
+
+    return (
+        <div className="rounded-2xl bg-amber-500/[0.06] p-4 ring-1 ring-amber-400/20">
+            <p className="mb-2 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-amber-200/70">
+                <ArrowCircleUp weight="bold" className="h-3.5 w-3.5" /> Upgrade queue ({active.length} running)
+            </p>
+            <ul className="space-y-1">
+                {active.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm ring-1 ring-white/[0.06]">
+                        <button onClick={() => { selectDevice(d.id); setView('map'); }} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+                            <StatusDot status={d.status} />
+                            <span className="min-w-0 flex-1 truncate font-medium text-white/85">{d.name}</span>
+                            {d.upgrade_message && <span className="hidden truncate text-[11px] text-white/40 sm:inline">{d.upgrade_message}</span>}
+                        </button>
+                        <UpgradeStatusBadge device={d} />
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
 function UpgradeOptions({
     version,
     setVersion,
@@ -430,7 +464,12 @@ function PackageCache() {
             </div>
 
             <div className="mb-3 flex flex-wrap items-center gap-2">
-                <input value={v} onChange={(e) => setV(e.target.value.trim())} placeholder="version e.g. 7.15.3" className={`${optField} w-40`} />
+                <input list="ros-cache-versions" value={v} onChange={(e) => setV(e.target.value.trim())} placeholder="version e.g. 7.15.3" className={`${optField} w-40`} />
+                <datalist id="ros-cache-versions">
+                    {(catalog?.channels ?? []).map((ch) => (
+                        <option key={`${ch.major}-${ch.channel}`} value={ch.version}>{`v${ch.major} ${ch.channel}`}</option>
+                    ))}
+                </datalist>
                 <select value={arch} onChange={(e) => setArch(e.target.value)} className={optField}>
                     <option value="">arch...</option>
                     {(catalog?.arches ?? []).map((a) => (
