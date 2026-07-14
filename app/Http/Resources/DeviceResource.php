@@ -28,6 +28,9 @@ class DeviceResource extends JsonResource
             'parent_name' => $this->parent?->name,
             'vendor' => $this->vendor,
             'model' => $this->model,
+            'serial' => $this->serial,
+            'cpu' => $this->cpu,
+            'ram_bytes' => $this->ram_bytes,
             'uptime_seconds' => $this->uptime_seconds,
             'uptime_at' => $this->uptime_at,
             // Firmware upgrade tracking.

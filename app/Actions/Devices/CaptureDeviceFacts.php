@@ -94,9 +94,19 @@ class CaptureDeviceFacts
             $model = $board['model'] ?? $board['board-name'] ?? $res['board-name'] ?? null;
             $uptime = isset($res['uptime']) ? self::parseRouterOsUptime((string) $res['uptime']) : null;
 
+            $ram = (int) ($res['total-memory'] ?? 0);
+            $serial = trim((string) ($board['serial-number'] ?? ''));
+
             return [
                 'vendor' => 'MikroTik',
                 'model' => $model !== null ? trim((string) $model) : null,
+                'serial' => $serial !== '' ? $serial : null,
+                'cpu' => self::formatCpu(
+                    trim((string) ($res['cpu'] ?? '')),
+                    (int) ($res['cpu-count'] ?? 0),
+                    (int) ($res['cpu-frequency'] ?? 0),
+                ),
+                'ram_bytes' => $ram > 0 ? $ram : null,
                 'uptime_seconds' => $uptime,
                 'os_version' => UpgradeDevice::normalizeVersion((string) ($res['version'] ?? '')),
                 'device_type' => $this->routerOsType((string) ($model ?? ''))->value,
@@ -117,18 +127,55 @@ class CaptureDeviceFacts
 
         /** @var array<string, string> $oids */
         $oids = config('mymate.snmp.oids', []);
-        $res = $this->snmp->get($device->mgmt_ip, $community, [$oids['sys_descr'], $oids['sys_uptime']]);
+        $res = $this->snmp->get($device->mgmt_ip, $community, [$oids['sys_descr'], $oids['sys_uptime'], $oids['hr_memory']]);
 
         $descr = (string) ($res[$oids['sys_descr']] ?? '');
         $ticks = $res[$oids['sys_uptime']] ?? null;
 
+        // ENTITY-MIB gives a clean cross-vendor model + serial (chassis row). Walk each and
+        // take the first meaningful value. Falls back to null (never a wrong guess).
+        $model = self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model']));
+        $serial = self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_serial']));
+
+        // hrMemorySize is physical RAM in KB.
+        $memKb = $res[$oids['hr_memory']] ?? null;
+
         return [
             'vendor' => self::vendorFromSysDescr($descr),
-            // sysDescr model parsing is unreliable across vendors - leave for manual entry.
-            'model' => null,
+            'model' => $model,
+            'serial' => $serial,
+            'ram_bytes' => is_numeric($memKb) && (int) $memKb > 0 ? (int) $memKb * 1024 : null,
             'uptime_seconds' => $ticks !== null ? intdiv((int) $ticks, 100) : null, // TimeTicks (1/100s) -> s
             'device_type' => $this->snmpType($descr)->value,
         ];
+    }
+
+    /** First non-empty, non-placeholder value from an SNMP walk (skips "", "N/A", "none"). */
+    private static function firstMeaningful(array $walk): ?string
+    {
+        foreach ($walk as $value) {
+            $v = trim((string) $value);
+            if ($v !== '' && ! in_array(strtolower($v), ['n/a', 'none', 'unknown', '0'], true)) {
+                return mb_substr($v, 0, 128);
+            }
+        }
+
+        return null;
+    }
+
+    /** "ARM", 4, 880 -> "ARM 4-core @ 880 MHz". Any piece may be absent; null when all are. */
+    private static function formatCpu(string $name, int $count, int $freqMhz): ?string
+    {
+        $s = $name;
+        if ($count > 1) {
+            $s = trim("{$s} {$count}-core");
+        }
+        if ($freqMhz > 0) {
+            $freq = $freqMhz >= 1000 ? round($freqMhz / 1000, 1).' GHz' : "{$freqMhz} MHz";
+            $s = trim($s === '' ? $freq : "{$s} @ {$freq}");
+        }
+
+        return $s === '' ? null : $s;
     }
 
     /** "1w2d3h4m5s" -> seconds; null if nothing parses. */

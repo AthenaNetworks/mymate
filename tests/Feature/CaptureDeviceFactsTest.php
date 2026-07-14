@@ -42,6 +42,51 @@ class CaptureDeviceFactsTest extends TestCase
         $this->assertNotNull($device->uptime_at);
     }
 
+    public function test_routeros_facts_capture_serial_cpu_and_ram(): void
+    {
+        $cred = Credential::factory()->create(['type' => 'routeros', 'username' => 'admin', 'password' => 'pw']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::RouterOs, 'credential_id' => $cred->id]);
+
+        $this->app->instance(RouterOsClient::class, new FakeRouterOsClient([
+            '/system/resource/print' => [[
+                'board-name' => 'RB4011iGS+', 'cpu' => 'ARM', 'cpu-count' => '4', 'cpu-frequency' => '1400',
+                'total-memory' => (string) (1024 * 1024 * 1024),
+            ]],
+            '/system/routerboard/print' => [['model' => 'RB4011iGS+', 'serial-number' => 'ABC123']],
+        ]));
+
+        app(CaptureDeviceFacts::class)($device);
+        $device->refresh();
+
+        $this->assertSame('ABC123', $device->serial);
+        $this->assertSame('ARM 4-core @ 1.4 GHz', $device->cpu);
+        $this->assertSame(1024 * 1024 * 1024, $device->ram_bytes);
+    }
+
+    public function test_snmp_facts_capture_model_serial_and_ram_from_entity_and_host_mibs(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'Ubiquiti NanoStation',
+            $oids['sys_uptime'] => '100',
+            $oids['hr_memory'] => '65536', // KB -> 64 MB
+        ];
+        $snmp->walks[$oids['ent_model']] = [1 => '', 2 => 'NanoStation M5'];
+        $snmp->walks[$oids['ent_serial']] = [1 => 'SN-7788'];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+        $device->refresh();
+
+        $this->assertSame('NanoStation M5', $device->model);
+        $this->assertSame('SN-7788', $device->serial);
+        $this->assertSame(65536 * 1024, $device->ram_bytes);
+    }
+
     public function test_snmp_facts_populate_vendor_and_uptime(): void
     {
         $cred = Credential::factory()->create(['snmp_community' => 'public-test']);

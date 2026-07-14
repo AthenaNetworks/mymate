@@ -82,6 +82,11 @@ return [
             'sys_object_id' => '.1.3.6.1.2.1.1.2.0',
             'sys_descr' => '.1.3.6.1.2.1.1.1.0',
             'sys_uptime' => '.1.3.6.1.2.1.1.3.0',
+            // Hardware inventory (CaptureDeviceFacts): ENTITY-MIB model/serial (cross-vendor)
+            // + host-resources total RAM.
+            'ent_model' => '.1.3.6.1.2.1.47.1.1.1.1.13',  // entPhysicalModelName (walk; chassis row)
+            'ent_serial' => '.1.3.6.1.2.1.47.1.1.1.1.11', // entPhysicalSerialNum (walk; chassis row)
+            'hr_memory' => '.1.3.6.1.2.1.25.2.2.0',        // hrMemorySize (KWords/KB of physical RAM)
         ],
     ],
 

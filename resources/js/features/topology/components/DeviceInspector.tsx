@@ -49,6 +49,12 @@ const statusBadge: Record<DeviceStatus, { label: string; cls: string }> = {
 const actionBtn =
     'flex items-center justify-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 transition-all duration-300 ease-fluid hover:bg-white/[0.08] hover:text-white';
 
+function fmtBytes(b: number): string {
+    if (b >= 1024 ** 3) return `${(b / 1024 ** 3).toFixed(b < 10 * 1024 ** 3 ? 1 : 0)} GB`;
+    if (b >= 1024 ** 2) return `${Math.round(b / 1024 ** 2)} MB`;
+    return `${Math.round(b / 1024)} KB`;
+}
+
 function fmtUptime(seconds: number | null, at: string | null): string {
     if (seconds === null) return '-';
     const extra = at ? Math.max(0, (Date.now() - Date.parse(at)) / 1000) : 0;
@@ -640,6 +646,19 @@ export function DeviceInspector() {
                 {isAdmin && !pingOnly && <CredentialPicker device={device} />}
                 <Detail label="Parent" value={device.parent_name ?? '-'} />
             </div>
+
+            {(device.vendor || device.model || device.serial || device.cpu || device.ram_bytes) && (
+                <Section title="Hardware">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                        {device.vendor && <Detail label="Vendor" value={device.vendor} />}
+                        {device.model && <Detail label="Model" value={device.model} />}
+                        {device.cpu && <Detail label="CPU" value={device.cpu} />}
+                        {device.ram_bytes ? <Detail label="RAM" value={fmtBytes(device.ram_bytes)} mono /> : null}
+                        {device.serial && <Detail label="Serial" value={device.serial} mono />}
+                        {device.os_version && <Detail label="Firmware" value={device.os_version} mono />}
+                    </div>
+                </Section>
+            )}
 
             {!pingOnly && (
             <Section title="Total throughput" right={totalBps > 0 ? formatRate(totalBps) : undefined}>
