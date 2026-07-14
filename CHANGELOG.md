@@ -25,6 +25,11 @@ of commit subjects.
   part-way through. (#3)
 
 ### Fixed
+- Login on an LXC/VM would flash the first screen and bounce straight back to the
+  login page when the instance was reached by an address that wasn't baked into
+  `SANCTUM_STATEFUL_DOMAINS` at first boot (a changed/DHCP IP, a hostname or DNS
+  name). The app is served same-origin, so it now trusts the address the browser
+  actually uses for cookie auth - no `.env` editing needed. (#4)
 - Docker: `dude.db` uploads through the browser were capped at PHP's 2 MB default
   (the image had no upload override). The image now allows the full 4 GB.
 

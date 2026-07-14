@@ -59,6 +59,33 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        $this->trustSpaRequestHost();
+    }
+
+    /**
+     * The console (SPA) is always served same-origin - nginx serves the app shell and
+     * the API from the one host - so the address the browser actually uses is
+     * authoritative for cookie auth. Add it to Sanctum's stateful list at runtime so
+     * login works on whatever the instance is reached by (LXC/VM IP, hostname or DNS,
+     * or an IP that changed since first boot) without hand-editing
+     * SANCTUM_STATEFUL_DOMAINS. Without this, browsing to an address that isn't in the
+     * list leaves the session cookie unhonoured and login "flashes then bounces back".
+     *
+     * This is safe: being stateful only means the session cookie is honoured, and the
+     * browser scopes that cookie to the real origin - a spoofed Host header gains an
+     * attacker nothing, and bearer-token clients (agents) send no Referer/Origin so
+     * they're never treated as frontend requests. (GH #4)
+     */
+    private function trustSpaRequestHost(): void
+    {
+        $host = trim((string) request()->getHttpHost()); // host, or host:port for a non-standard port
+        if ($host === '') {
+            return;
+        }
+
+        $stateful = config('sanctum.stateful', []);
+        if (! in_array($host, $stateful, true)) {
+            config(['sanctum.stateful' => [...$stateful, $host]]);
+        }
     }
 }
