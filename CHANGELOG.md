@@ -16,13 +16,13 @@ of commit subjects.
 ### Added
 - The Dude import screen now has an **extraction time limit** control, so a very
   large `dude.db` (lots of chart history) can be given more time to reverse-engineer
-  instead of being cut off. Also available on the CLI as `--extract-timeout`.
+  instead of being cut off. Also available on the CLI as `--extract-timeout`. (#3)
 
 ### Changed
 - The default upload size limit for a `dude.db` is now 4 GB (was 512 MB), across the
   app, nginx and PHP, so even the largest databases upload without tuning. Imports
   also get a generous whole-job time budget so a big history import isn't killed
-  part-way through.
+  part-way through. (#3)
 
 ### Fixed
 - Docker: `dude.db` uploads through the browser were capped at PHP's 2 MB default
