@@ -5,7 +5,9 @@ namespace App\Services\Polling;
 use App\Enums\PollMethod;
 use App\Jobs\PollDeviceMetricsBatchJob;
 use App\Jobs\PollInterfacesBatchJob;
+use App\Jobs\PollSensorsBatchJob;
 use App\Models\Device;
+use App\Models\Sensor;
 
 /**
  * Shards the pollable fleet into N batch jobs by `crc32(device_id) % shards` and
@@ -76,6 +78,41 @@ class PollDispatcher
 
         foreach ($byShard as $shard => $shardIds) {
             PollDeviceMetricsBatchJob::dispatch($shard, $shardIds);
+        }
+
+        return count($byShard);
+    }
+
+    /**
+     * Custom SNMP sensors: shard the SNMP fleet and dispatch a sensor-poll job per shard.
+     * No-op (no jobs) when no sensors are defined, so it's cheap to call every metrics tick.
+     *
+     * @return int number of batch jobs dispatched (non-empty shards)
+     */
+    public function dispatchSensors(): int
+    {
+        if (! Sensor::where('enabled', true)->exists()) {
+            return 0;
+        }
+
+        $shards = max(1, (int) config('mymate.poll.shards', 16));
+
+        $ids = Device::where('monitored', true)
+            ->whereNull('agent_id')
+            ->whereIn('poll_method', PollMethod::throughputMethods())
+            ->pluck('id');
+        if ($ids->isEmpty()) {
+            return 0;
+        }
+
+        /** @var array<int, list<int>> $byShard */
+        $byShard = [];
+        foreach ($ids as $id) {
+            $byShard[crc32((string) $id) % $shards][] = (int) $id;
+        }
+
+        foreach ($byShard as $shard => $shardIds) {
+            PollSensorsBatchJob::dispatch($shard, $shardIds);
         }
 
         return count($byShard);

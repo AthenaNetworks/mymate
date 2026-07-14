@@ -117,6 +117,11 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Recent history: bucketed latency/loss/jitter series for one device (ping chart).
     Route::get('devices/{device}/ping-samples', [InterfaceSampleController::class, 'ping'])
         ->name('devices.ping-samples');
+    // Custom SNMP sensors: current readings for a device + one sensor's history series.
+    Route::get('devices/{device}/sensors', [\App\Http\Controllers\Api\SensorController::class, 'forDevice'])
+        ->name('devices.sensors');
+    Route::get('devices/{device}/sensors/{sensor}/samples', [InterfaceSampleController::class, 'sensor'])
+        ->name('devices.sensor-samples');
     // Recent history: bucketed cpu/mem/temp series for one device (resource chart).
     Route::get('devices/{device}/metric-samples', [InterfaceSampleController::class, 'metrics'])
         ->name('devices.metric-samples');
@@ -170,6 +175,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::apiResource('alert-transports', AlertTransportController::class)->only(['index', 'store', 'update', 'destroy']);
     // Maintenance windows: scheduled alert suppression for planned work.
     Route::apiResource('maintenance-windows', \App\Http\Controllers\Api\MaintenanceWindowController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+    // Custom SNMP sensors (user-defined OIDs).
+    Route::apiResource('sensors', \App\Http\Controllers\Api\SensorController::class)
         ->only(['index', 'store', 'update', 'destroy']);
     Route::post('alert-transports/{transport}/test', [AlertTransportController::class, 'test'])
         ->middleware('throttle:6,1')->name('alert-transports.test');

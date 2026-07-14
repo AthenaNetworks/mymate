@@ -14,6 +14,23 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Latency, jitter and packet-loss monitoring.** The ping sweep now records
+  round-trip time and loss per device (live values + history), charted in the
+  device inspector's Health section - shown for ping-only devices too. High-metric
+  alert rules gained latency and loss thresholds.
+- **Maintenance windows.** Schedule a span (with a device scope) during which alerts
+  are suppressed for the in-scope devices, so planned work doesn't page anyone - no
+  false alarms while it's on, and no false recovery when it ends. Managed on the
+  Alerts screen.
+- **Alert acknowledgement** and **more notification channels.** Mark a fired alert
+  as handled (recording who/when); and deliver via a generic Webhook, Discord,
+  Telegram or PagerDuty in addition to email/Slack/Teams/Messenger.
+- **Wireless / RF metrics.** Signal strength, SNR, connection quality and client
+  count for wireless gear, over the RouterOS API (MikroTik) or SNMP profiles, in the
+  Health section and pushed live to the map.
+- **Custom SNMP sensors.** Define your own OIDs to poll and graph (interface errors,
+  PoE draw, UPS charge, a probe - anything the gear exposes), scoped to devices,
+  with the value shown in the inspector. Managed in Settings.
 - Alert rules for **failed config backups** and **high device metrics** (CPU,
   memory or temperature over a threshold). Both support the same targeting
   (all / device type / map / specific devices), sustained-duration gate and

@@ -270,6 +270,26 @@ export interface AlertScope {
     device_ids?: number[];
 }
 
+/** A custom SNMP sensor definition (user-defined OID polled on the in-scope devices). */
+export interface Sensor {
+    id: number;
+    name: string;
+    oid: string;
+    unit: string | null;
+    divisor: number;
+    scope: AlertScope;
+    enabled: boolean;
+}
+
+/** The current value of one custom sensor on one device. */
+export interface DeviceSensorReading {
+    sensor_id: number;
+    name: string;
+    unit: string | null;
+    value: number | null;
+    read_at: string;
+}
+
 /** A scheduled maintenance window - suppresses alerts for its scope while active. */
 export interface MaintenanceWindow {
     id: number;

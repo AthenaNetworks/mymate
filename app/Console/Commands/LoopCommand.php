@@ -114,9 +114,11 @@ class LoopCommand extends Command
                 EvaluateAlertsJob::dispatch(); // evaluate alert policies on the poll cadence
                 $lastPoll = $now;
             }
-            // Device resource metrics (cpu/mem/temp) on their own slower cadence.
+            // Device resource metrics (cpu/mem/temp) on their own slower cadence, plus any
+            // custom SNMP sensors (a no-op when none are defined).
             if (config('mymate.device_metrics.enabled', true) && $now - $lastMetrics >= $metricsInterval) {
                 EngineLog::debug('loop: metrics dispatched', ['shards' => $this->dispatchMetrics()]);
+                app(PollDispatcher::class)->dispatchSensors();
                 $lastMetrics = $now;
             }
             if ($now - $lastDiscover >= $discoverInterval) {

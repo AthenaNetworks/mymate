@@ -3,6 +3,7 @@ import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, En
 import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
 import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
+import { SensorsSection } from './SensorsSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
@@ -1095,6 +1096,11 @@ export function SettingsView() {
                     {isAdmin && (
                         <div className="min-w-0 lg:col-span-2">
                             <CredentialsSection />
+                        </div>
+                    )}
+                    {isAdmin && (
+                        <div className="min-w-0 lg:col-span-2">
+                            <SensorsSection />
                         </div>
                     )}
                 </div>

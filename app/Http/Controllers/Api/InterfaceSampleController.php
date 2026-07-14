@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Actions\History\GetDeviceMetricSamples;
 use App\Actions\History\GetDeviceSamples;
 use App\Actions\History\GetPingSamples;
+use App\Actions\History\GetSensorSamples;
+use App\Models\Sensor;
 use App\Actions\History\GetInterfaceSamples;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
@@ -59,6 +61,17 @@ class InterfaceSampleController extends Controller
         [$from, $to] = $this->window($request);
 
         return response()->json(['data' => $get($device->id, $from, $to)]);
+    }
+
+    /**
+     * GET /api/devices/{device}/sensors/{sensor}/samples?from&to
+     * Bucketed value series for one custom sensor on one device.
+     */
+    public function sensor(Request $request, Device $device, Sensor $sensor, GetSensorSamples $get): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+
+        return response()->json(['data' => $get($sensor->id, $device->id, $from, $to)]);
     }
 
     /** @return array{0: Carbon, 1: Carbon} [from, to] */

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Device } from '../../../types';
 import { useDeviceMetricSamples } from '../api/getDeviceMetricSamples';
 import { useDevicePingSamples } from '../api/getDevicePingSamples';
+import { useDeviceSensors } from '../../settings/api/sensors';
 
 // One resource row: label, sparkline of its recent history, and the current value.
 // Each metric auto-scales its own sparkline (no shared axis - %, C, ms all differ).
@@ -53,6 +54,7 @@ const ms = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)} ms`;
 export function DeviceResources({ device }: { device: Device }) {
     const metrics = useDeviceMetricSamples(device.id, 3600).data ?? [];
     const ping = useDevicePingSamples(device.id, 3600).data ?? [];
+    const sensors = useDeviceSensors(device.id).data ?? [];
 
     const seriesOf = <T,>(rows: T[], field: keyof T): number[] =>
         rows.map((s) => s[field] as number | null).filter((v: number | null): v is number => v !== null);
@@ -69,7 +71,7 @@ export function DeviceResources({ device }: { device: Device }) {
         { key: 'clients', label: 'Clients', color: '#c084fc', current: device.wireless_clients, series: seriesOf(metrics, 'wireless_clients'), format: (v: number) => `${Math.round(v)}` },
     ].filter((r) => r.current !== null || r.series.length > 0);
 
-    if (rows.length === 0) {
+    if (rows.length === 0 && sensors.length === 0) {
         return <div className="text-xs text-white/35">No health data yet - collected on the next sweep.</div>;
     }
 
@@ -84,6 +86,19 @@ export function DeviceResources({ device }: { device: Device }) {
                     </span>
                 </div>
             ))}
+
+            {sensors.length > 0 && (
+                <div className="mt-1 space-y-1.5 border-t border-white/[0.06] pt-2">
+                    {sensors.map((s) => (
+                        <div key={s.sensor_id} className="flex items-center justify-between gap-2 text-xs">
+                            <span className="min-w-0 flex-1 truncate text-white/50">{s.name}</span>
+                            <span className="shrink-0 tabular-nums text-white/80">
+                                {s.value === null ? '-' : `${s.value}${s.unit ? ` ${s.unit}` : ''}`}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
