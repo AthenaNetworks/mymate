@@ -51,6 +51,19 @@ class RouterOsDeviceMetricsDriverTest extends TestCase
         $this->assertSame(55.0, $m->tempC);      // hottest of the two sensors
     }
 
+    public function test_updates_os_version_when_the_poll_finds_a_newer_one(): void
+    {
+        $device = $this->device();
+        $device->update(['os_version' => '7.20.7']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['cpu-load' => '5', 'total-memory' => '100', 'free-memory' => '50', 'version' => '7.20.9 (stable)']],
+        ]);
+
+        (new RouterOsDeviceMetricsDriver($client))->sample($device);
+
+        $this->assertSame('7.20.9', $device->fresh()->os_version);
+    }
+
     public function test_reads_wireless_rf_from_the_registration_table(): void
     {
         $client = new FakeRouterOsClient(replies: [

@@ -211,13 +211,39 @@ export function MapCanvas() {
     statusRef.current = statusById;
     const deviceUtilRef = useRef(deviceUtil);
     deviceUtilRef.current = deviceUtil;
+    // Current data read inside the (membership-keyed) rebuild effect, so it doesn't need to
+    // list these as deps and re-run on every data refetch.
+    const mapDevicesRef = useRef(mapDevices);
+    mapDevicesRef.current = mapDevices;
+    const interMapLinksRef = useRef(interMapLinks);
+    interMapLinksRef.current = interMapLinks;
+    const posByIdRef = useRef(posById);
+    posByIdRef.current = posById;
 
-    // Map devices -> nodes, positioned per-map; plus a portal node per inter-map link.
+    // A stable signature of *which* nodes are on the map and *where* - NOT their live data.
+    // The full node rebuild keys off this so a metrics/status update (every ~30s) patches data
+    // in place instead of replacing every node (which would drop the React Flow selection and
+    // flicker the canvas).
+    const membershipKey = useMemo(
+        () =>
+            mapDevices
+                .map((d) => {
+                    const p = posById[d.id] ?? { x: d.map_x, y: d.map_y };
+                    return `${d.id}@${Math.round(p.x)},${Math.round(p.y)}`;
+                })
+                .join('|') +
+            '#' +
+            interMapLinks.map((il) => `${il.id}@${il.portal_x ?? ''},${il.portal_y ?? ''}`).join('|'),
+        [mapDevices, posById, interMapLinks],
+    );
+
+    // Map devices -> nodes, positioned per-map; plus a portal node per inter-map link. Rebuilds
+    // only when the membership/positions change (membershipKey), reading current data from refs.
     useEffect(() => {
-        const deviceNodes: Node[] = mapDevices.map((d) => ({
+        const deviceNodes: Node[] = mapDevicesRef.current.map((d) => ({
             id: String(d.id),
             type: 'device',
-            position: posById[d.id] ?? { x: d.map_x, y: d.map_y },
+            position: posByIdRef.current[d.id] ?? { x: d.map_x, y: d.map_y },
             data: {
                 label: d.name,
                 mgmt_ip: d.mgmt_ip,
@@ -232,8 +258,8 @@ export function MapCanvas() {
             },
         }));
         const perDevice: Record<number, number> = {};
-        const portalNodes: Node[] = interMapLinks.map((il) => {
-            const base = posById[il.local_device_id] ?? { x: 0, y: 0 };
+        const portalNodes: Node[] = interMapLinksRef.current.map((il) => {
+            const base = posByIdRef.current[il.local_device_id] ?? { x: 0, y: 0 };
             const i = (perDevice[il.local_device_id] = (perDevice[il.local_device_id] ?? 0) + 1);
             // Saved drag position if the operator moved it; else auto-place near its device.
             const position =
@@ -256,7 +282,7 @@ export function MapCanvas() {
             };
         });
         setNodes([...deviceNodes, ...portalNodes]);
-    }, [mapDevices, posById, interMapLinks, setNodes, isAdmin]);
+    }, [membershipKey, setNodes, isAdmin]);
 
     // Intra-map links -> util edges; inter-map links -> dashed portal edges. Seed util.
     useEffect(() => {
@@ -307,6 +333,23 @@ export function MapCanvas() {
     useEffect(() => {
         setNodes((nds) => nds.map((n) => (n.type === 'device' ? { ...n, data: { ...n.data, util: deviceUtil[Number(n.id)] ?? null } } : n)));
     }, [deviceUtil, setNodes]);
+
+    // Patch device data (status / metrics / name / model) in place when the devices query
+    // updates - so a status or cpu/mem/temp change never rebuilds the node graph (which would
+    // drop the selection and flicker). Membership changes are handled by the rebuild above.
+    useEffect(() => {
+        if (!devices) return;
+        const byId = new Map(devices.map((d) => [d.id, d]));
+        setNodes((nds) =>
+            nds.map((n) => {
+                if (n.type !== 'device') return n;
+                const d = byId.get(Number(n.id));
+                return d
+                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c } }
+                    : n;
+            }),
+        );
+    }, [devices, setNodes]);
 
     // Selection focus: a selected device brings its own links forward and fades the rest.
     // Only touches the emphasized/dimmed flags (util fields are preserved by the spread), and

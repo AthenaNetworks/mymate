@@ -25,6 +25,14 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
             // "no such command" and the whole read silently comes back null.
             $res = $conn->query('/system/resource/print')[0] ?? [];
 
+            // Keep the running version fresh: if this poll finds a different RouterOS version
+            // (upgraded/downgraded, here or out-of-band) update our record right away rather
+            // than waiting for the slow discovery/facts cadence.
+            $version = \App\Actions\Devices\UpgradeDevice::normalizeVersion((string) ($res['version'] ?? ''));
+            if ($version !== null && $version !== $device->os_version) {
+                $device->forceFill(['os_version' => $version])->save();
+            }
+
             $cpu = isset($res['cpu-load']) && is_numeric($res['cpu-load']) ? (float) $res['cpu-load'] : null;
 
             $mem = null;

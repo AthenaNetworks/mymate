@@ -201,6 +201,9 @@ function SelectStep({
                                 <StatusDot status={d.status} />
                                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-white/85">{d.name}</span>
                                 <span className="shrink-0 font-mono text-[11px] text-white/40">{d.mgmt_ip}</span>
+                                <span className="hidden w-16 shrink-0 text-right font-mono text-[10px] text-white/45 sm:inline-block">
+                                    {d.arch ?? '-'}
+                                </span>
                                 <span className="w-24 shrink-0 text-right text-[11px] text-white/50">
                                     {d.os_version ? `v${d.os_version}` : 'unknown'}
                                     {d.latest_version && d.os_version !== d.latest_version ? ` -> v${d.latest_version}` : ''}
@@ -299,6 +302,9 @@ function ReviewStep({
                                         <span className="shrink-0 font-mono text-[10px] text-white/35">
                                             v{row.os_version}{row.latest_version && row.latest_version !== row.os_version ? ` -> v${row.latest_version}` : ''}
                                         </span>
+                                    )}
+                                    {byId.get(row.device_id)?.arch && (
+                                        <span className="shrink-0 rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/40">{byId.get(row.device_id)?.arch}</span>
                                     )}
                                 </div>
                                 {(row.parent_name || row.neighbours.length > 0) && (
