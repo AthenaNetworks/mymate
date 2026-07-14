@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Console\Commands\LoopCommand;
 use App\Services\Backup\RustedClient;
 use App\Support\Settings;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -62,26 +63,60 @@ class SystemStatus
         }
     }
 
-    /** The polling loop stamps a heartbeat each tick; stale = the loop is stopped/stuck. */
+    /**
+     * Is the polling loop alive? The loop stamps a heartbeat each tick (the precise signal),
+     * but we fall back to real polling activity - a recent history-sample write proves the
+     * loop is dispatching and workers are running. That keeps the check honest right after a
+     * deploy, when the long-running loop process may not have restarted to pick up the
+     * heartbeat code yet, or if the cache was cleared.
+     */
     private function polling(): array
     {
         try {
-            $ts = (int) Cache::get(LoopCommand::HEARTBEAT_KEY, 0);
-            if ($ts === 0) {
-                return $this->row('polling', 'Polling loop', 'warn', 'No heartbeat yet - the loop may be starting');
-            }
-
-            $age = now()->timestamp - $ts;
-            // The loop ticks on the ping interval (a few seconds); allow generous slack.
             $limit = max(30, app(Settings::class)->getInt('ping.interval', 5) * 6);
-            if ($age <= $limit) {
+            $ts = (int) Cache::get(LoopCommand::HEARTBEAT_KEY, 0);
+
+            if ($ts > 0 && ($age = now()->timestamp - $ts) <= $limit) {
                 return $this->row('polling', 'Polling loop', 'ok', "Last tick {$age}s ago");
             }
 
-            return $this->row('polling', 'Polling loop', 'down', "No tick for {$age}s - up/down monitoring is stalled");
+            // Heartbeat missing or stale - confirm via actual polling activity.
+            $lastSample = $this->lastSampleAt();
+            if ($lastSample !== null && ($secs = (int) abs(now()->diffInSeconds($lastSample))) <= max(300, $limit * 4)) {
+                return $this->row('polling', 'Polling loop', 'ok', "Polling active (last sample {$secs}s ago)");
+            }
+
+            if ($ts === 0 && $lastSample === null) {
+                return $this->row('polling', 'Polling loop', 'warn', 'No activity yet - the loop may be starting, or nothing is being polled');
+            }
+
+            return $this->row('polling', 'Polling loop', 'down', 'No recent polling activity - the loop looks stopped');
         } catch (Throwable $e) {
             return $this->row('polling', 'Polling loop', 'warn', $this->trim($e->getMessage()));
         }
+    }
+
+    /** Freshest history-sample timestamp across the sample tables (last 15 min), or null. */
+    private function lastSampleAt(): ?Carbon
+    {
+        $cutoff = now()->subMinutes(15)->format('Y-m-d H:i:s');
+        $latest = null;
+
+        foreach (['interface_samples', 'device_metric_samples', 'ping_samples'] as $table) {
+            try {
+                $max = DB::table($table)->where('ts', '>=', $cutoff)->max('ts');
+            } catch (Throwable) {
+                continue; // table may be absent on an older schema
+            }
+            if ($max !== null) {
+                $c = Carbon::parse($max);
+                if ($latest === null || $c->greaterThan($latest)) {
+                    $latest = $c;
+                }
+            }
+        }
+
+        return $latest;
     }
 
     /** TCP-connect to the Reverb WebSocket server - live map updates ride on it. */
