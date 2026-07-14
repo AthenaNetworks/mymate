@@ -7,9 +7,10 @@ use App\Services\RouterOs\RouterOsClient;
 use App\Services\RouterOs\RouterOsTarget;
 
 /**
- * CPU / memory / temperature over the RouterOS binary API (MikroTik). Reads
- * `/system/resource` (cpu-load + free/total memory) and best-effort `/system/health`
- * (board/CPU temperature - shape differs across RouterOS 6 and 7, both handled).
+ * CPU / memory / temperature + wireless RF over the RouterOS binary API (MikroTik). Reads
+ * `/system/resource` (cpu-load + free/total memory), best-effort `/system/health`
+ * (board/CPU temperature - shape differs across RouterOS 6 and 7, both handled), and the
+ * wireless registration table (signal / SNR / CCQ / client count) when the board has radios.
  */
 class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
 {
@@ -33,14 +34,77 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
                 $mem = (($total - $free) / $total) * 100;
             }
 
+            $wl = $this->wireless($conn);
+
             return new DeviceMetrics(
                 cpuPct: DeviceMetrics::clampPct($cpu),
                 memUsedPct: DeviceMetrics::clampPct($mem),
                 tempC: $this->temperature($conn),
+                signalDbm: $wl['signal'],
+                snrDb: $wl['snr'],
+                ccqPct: DeviceMetrics::clampPct($wl['ccq']),
+                wirelessClients: $wl['clients'],
             );
         } finally {
             $conn->close();
         }
+    }
+
+    /**
+     * Wireless RF from the registration table: one row per associated station (an AP sees
+     * its clients; a CPE in station mode sees the one AP). We report the client count and the
+     * average signal / SNR / CCQ across the rows. Best-effort - a board with no wireless (or
+     * running wifiwave2/CAPsMAN, a different path) just leaves these null.
+     *
+     * @return array{signal:?float, snr:?float, ccq:?float, clients:?int}
+     */
+    private function wireless(\App\Services\RouterOs\RouterOsConnection $conn): array
+    {
+        try {
+            $rows = $conn->query('/interface/wireless/registration-table/print');
+        } catch (\Throwable) {
+            return ['signal' => null, 'snr' => null, 'ccq' => null, 'clients' => null];
+        }
+
+        if ($rows === []) {
+            return ['signal' => null, 'snr' => null, 'ccq' => null, 'clients' => null];
+        }
+
+        $signals = $snrs = $ccqs = [];
+        foreach ($rows as $row) {
+            // signal-strength is like "-65dBm@6Mbps" or "-65"; pull the leading number.
+            $s = self::firstNumber($row['signal-strength'] ?? null);
+            if ($s !== null) {
+                $signals[] = $s;
+            }
+            $n = self::firstNumber($row['signal-to-noise'] ?? null);
+            if ($n !== null) {
+                $snrs[] = $n;
+            }
+            $c = self::firstNumber($row['tx-ccq'] ?? null);
+            if ($c !== null) {
+                $ccqs[] = $c;
+            }
+        }
+
+        $avg = static fn (array $v): ?float => $v === [] ? null : round(array_sum($v) / count($v), 1);
+
+        return [
+            'signal' => $avg($signals),
+            'snr' => $avg($snrs),
+            'ccq' => $avg($ccqs),
+            'clients' => count($rows),
+        ];
+    }
+
+    /** First signed/decimal number in a value (e.g. "-65dBm@6Mbps" -> -65.0), or null. */
+    private static function firstNumber(mixed $value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return preg_match('/-?\d+(\.\d+)?/', (string) $value, $m) === 1 ? (float) $m[0] : null;
     }
 
     /** Best-effort - /system/health is unavailable on some boards; never let it fail the read. */

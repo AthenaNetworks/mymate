@@ -63,6 +63,10 @@ export function DeviceResources({ device }: { device: Device }) {
         { key: 'cpu', label: 'CPU', color: '#34d399', current: device.cpu_pct, series: seriesOf(metrics, 'cpu_pct'), format: pct },
         { key: 'mem', label: 'Memory', color: '#38bdf8', current: device.mem_used_pct, series: seriesOf(metrics, 'mem_used_pct'), format: pct },
         { key: 'temp', label: 'Temp', color: '#fbbf24', current: device.temp_c, series: seriesOf(metrics, 'temp_c'), format: (v: number) => `${Math.round(v)}°C` },
+        { key: 'signal', label: 'Signal', color: '#f472b6', current: device.signal_dbm, series: seriesOf(metrics, 'signal_dbm'), format: (v: number) => `${Math.round(v)} dBm` },
+        { key: 'snr', label: 'SNR', color: '#2dd4bf', current: device.snr_db, series: seriesOf(metrics, 'snr_db'), format: (v: number) => `${Math.round(v)} dB` },
+        { key: 'ccq', label: 'CCQ', color: '#22d3ee', current: device.ccq_pct, series: seriesOf(metrics, 'ccq_pct'), format: pct },
+        { key: 'clients', label: 'Clients', color: '#c084fc', current: device.wireless_clients, series: seriesOf(metrics, 'wireless_clients'), format: (v: number) => `${Math.round(v)}` },
     ].filter((r) => r.current !== null || r.series.length > 0);
 
     if (rows.length === 0) {

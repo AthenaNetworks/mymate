@@ -60,7 +60,18 @@ export function useMapChannel(
                 (prev) =>
                     prev?.map((d) => {
                         const f = byId.get(d.id);
-                        return f ? { ...d, cpu_pct: f.cpu_pct, mem_used_pct: f.mem_used_pct, temp_c: f.temp_c } : d;
+                        return f
+                            ? {
+                                  ...d,
+                                  cpu_pct: f.cpu_pct,
+                                  mem_used_pct: f.mem_used_pct,
+                                  temp_c: f.temp_c,
+                                  signal_dbm: f.signal_dbm,
+                                  snr_db: f.snr_db,
+                                  ccq_pct: f.ccq_pct,
+                                  wireless_clients: f.wireless_clients,
+                              }
+                            : d;
                     }) ?? prev,
             );
         });

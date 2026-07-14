@@ -124,6 +124,23 @@ return [
                 // mtxrHlProcessorTemperature, then board temperature (whichever answers).
                 'temp_oids' => ['.1.3.6.1.4.1.14988.1.1.3.11.0', '.1.3.6.1.4.1.14988.1.1.3.10.0'],
                 'temp_divisor' => 1,
+                // Wireless (MIKROTIK-MIB): count the registration table (one row per associated
+                // station) for client count; station signal strength for a CPE. SNR/CCQ over
+                // SNMP aren't standardised on RouterOS - the RouterOS API path fills those in.
+                'clients_walk' => '.1.3.6.1.4.1.14988.1.1.1.2.1.3', // mtxrWlRtabStrength (per client)
+                'signal_oids' => ['.1.3.6.1.4.1.14988.1.1.1.1.1.4'], // mtxrWlStatStrength (station mode)
+            ],
+            // Cambium ePMP / PMP (enterprise 17713). RF-over-SNMP OIDs vary by product line
+            // and firmware, so signal/snr are left for the operator to fill in per gear
+            // (MYMATE-style env or a validated profile) rather than shipping guesses; cpu/mem
+            // use the host-resources MIB, which ePMP supports.
+            'cambium' => [
+                'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
+                'mem' => 'hrstorage',
+                'temp_oids' => [],
+                'temp_divisor' => 1,
+                'signal_oids' => [], // set to your ePMP/PMP RSSI OID
+                'snr_oids' => [],    // set to your ePMP/PMP SNR OID
             ],
             'cisco' => [
                 'cpu_oids' => ['.1.3.6.1.4.1.9.9.109.1.1.1.1.7.1'], // cpmCPUTotal5minRev

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
  */
 class GetDeviceMetricSamples
 {
-    /** @return list<array{ts:string, cpu_pct:?float, mem_used_pct:?float, temp_c:?float}> */
+    /** @return list<array<string, string|float|null>> */
     public function __invoke(int $deviceId, Carbon $from, Carbon $to): array
     {
         $maxPoints = max(1, (int) config('mymate.history.max_points', 240));
@@ -25,9 +25,13 @@ class GetDeviceMetricSamples
         $rows = DB::select(
             <<<'SQL'
                 SELECT date_bin(?::interval, ts, ?::timestamp) AS bucket,
-                       avg(cpu_pct)      AS cpu_pct,
-                       avg(mem_used_pct) AS mem_used_pct,
-                       avg(temp_c)       AS temp_c
+                       avg(cpu_pct)          AS cpu_pct,
+                       avg(mem_used_pct)     AS mem_used_pct,
+                       avg(temp_c)           AS temp_c,
+                       avg(signal_dbm)       AS signal_dbm,
+                       avg(snr_db)           AS snr_db,
+                       avg(ccq_pct)          AS ccq_pct,
+                       avg(wireless_clients) AS wireless_clients
                 FROM device_metric_samples
                 WHERE device_id = ? AND ts >= ?::timestamp AND ts < ?::timestamp
                 GROUP BY bucket
@@ -41,6 +45,10 @@ class GetDeviceMetricSamples
             'cpu_pct' => self::num($r->cpu_pct, 2),
             'mem_used_pct' => self::num($r->mem_used_pct, 2),
             'temp_c' => self::num($r->temp_c, 1),
+            'signal_dbm' => self::num($r->signal_dbm, 1),
+            'snr_db' => self::num($r->snr_db, 1),
+            'ccq_pct' => self::num($r->ccq_pct, 1),
+            'wireless_clients' => self::num($r->wireless_clients, 0),
         ], $rows);
     }
 

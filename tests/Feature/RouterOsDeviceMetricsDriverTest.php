@@ -51,6 +51,37 @@ class RouterOsDeviceMetricsDriverTest extends TestCase
         $this->assertSame(55.0, $m->tempC);      // hottest of the two sensors
     }
 
+    public function test_reads_wireless_rf_from_the_registration_table(): void
+    {
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['cpu-load' => '5', 'total-memory' => '100', 'free-memory' => '50']],
+            '/interface/wireless/registration-table/print' => [
+                ['signal-strength' => '-65dBm@6Mbps', 'signal-to-noise' => '30', 'tx-ccq' => '90'],
+                ['signal-strength' => '-75', 'signal-to-noise' => '20', 'tx-ccq' => '80'],
+            ],
+        ]);
+
+        $m = (new RouterOsDeviceMetricsDriver($client))->sample($this->device());
+
+        $this->assertSame(-70.0, $m->signalDbm);     // avg(-65, -75)
+        $this->assertSame(25.0, $m->snrDb);          // avg(30, 20)
+        $this->assertSame(85.0, $m->ccqPct);         // avg(90, 80)
+        $this->assertSame(2, $m->wirelessClients);
+    }
+
+    public function test_no_wireless_leaves_rf_null(): void
+    {
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['cpu-load' => '5', 'total-memory' => '100', 'free-memory' => '50']],
+            // no registration table (a wired router)
+        ]);
+
+        $m = (new RouterOsDeviceMetricsDriver($client))->sample($this->device());
+
+        $this->assertNull($m->signalDbm);
+        $this->assertNull($m->wirelessClients);
+    }
+
     public function test_no_health_data_leaves_temperature_null(): void
     {
         $client = new FakeRouterOsClient(replies: [

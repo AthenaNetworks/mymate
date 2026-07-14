@@ -65,6 +65,10 @@ class PollDeviceMetrics
                 'cpu_pct' => $metrics->cpuPct,
                 'mem_used_pct' => $metrics->memUsedPct,
                 'temp_c' => $metrics->tempC,
+                'signal_dbm' => $metrics->signalDbm,
+                'snr_db' => $metrics->snrDb,
+                'ccq_pct' => $metrics->ccqPct,
+                'wireless_clients' => $metrics->wirelessClients,
                 'metrics_at' => now(),
             ])->save();
 
@@ -73,6 +77,10 @@ class PollDeviceMetrics
                 'cpu_pct' => $metrics->cpuPct,
                 'mem_used_pct' => $metrics->memUsedPct,
                 'temp_c' => $metrics->tempC,
+                'signal_dbm' => $metrics->signalDbm,
+                'snr_db' => $metrics->snrDb,
+                'ccq_pct' => $metrics->ccqPct,
+                'wireless_clients' => $metrics->wirelessClients,
             ];
             $sampleRows[] = [
                 'device_id' => $device->id,
@@ -80,6 +88,10 @@ class PollDeviceMetrics
                 'cpu_pct' => $metrics->cpuPct,
                 'mem_used_pct' => $metrics->memUsedPct,
                 'temp_c' => $metrics->tempC,
+                'signal_dbm' => $metrics->signalDbm,
+                'snr_db' => $metrics->snrDb,
+                'ccq_pct' => $metrics->ccqPct,
+                'wireless_clients' => $metrics->wirelessClients,
             ];
         }
 

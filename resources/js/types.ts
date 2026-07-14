@@ -61,6 +61,10 @@ export interface Device {
     mem_used_pct: number | null;
     temp_c: number | null;
     metrics_at: string | null;
+    signal_dbm: number | null;
+    snr_db: number | null;
+    ccq_pct: number | null;
+    wireless_clients: number | null;
     rtt_ms: number | null;
     loss_pct: number | null;
     ping_at: string | null;
@@ -360,6 +364,10 @@ export interface DeviceMetricsFrame {
     cpu_pct: number | null;
     mem_used_pct: number | null;
     temp_c: number | null;
+    signal_dbm: number | null;
+    snr_db: number | null;
+    ccq_pct: number | null;
+    wireless_clients: number | null;
 }
 
 export interface DeviceMetricsUpdatedPayload {
@@ -373,6 +381,10 @@ export interface DeviceMetricSample {
     cpu_pct: number | null;
     mem_used_pct: number | null;
     temp_c: number | null;
+    signal_dbm: number | null;
+    snr_db: number | null;
+    ccq_pct: number | null;
+    wireless_clients: number | null;
 }
 
 export interface DevicePingSample {

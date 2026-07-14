@@ -25,11 +25,51 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
         [$host, $community] = $this->target($device);
         $profile = $this->profiles->for($device);
 
+        $wl = $this->wireless($host, $community, $profile);
+
         return new DeviceMetrics(
             cpuPct: DeviceMetrics::clampPct($this->cpu($host, $community, $profile)),
             memUsedPct: DeviceMetrics::clampPct($this->memory($host, $community, $profile)),
             tempC: $this->temperature($host, $community, $profile),
+            signalDbm: $wl['signal'],
+            snrDb: $wl['snr'],
+            ccqPct: DeviceMetrics::clampPct($wl['ccq']),
+            wirelessClients: $wl['clients'],
         );
+    }
+
+    /**
+     * Wireless RF over SNMP, driven by optional profile OIDs (a profile without them just
+     * leaves every field null): `signal_oids`/`snr_oids`/`ccq_oids` are GET scalars (first
+     * numeric wins), `clients_walk` is walked and its non-empty rows counted. Best-effort.
+     *
+     * @param  array<string, mixed>  $profile
+     * @return array{signal:?float, snr:?float, ccq:?float, clients:?int}
+     */
+    private function wireless(string $host, string $community, array $profile): array
+    {
+        $scalar = function (array $oids) use ($host, $community): ?float {
+            foreach ($oids as $oid) {
+                $val = $this->firstNumeric($this->snmp->get($host, $community, [$oid]));
+                if ($val !== null) {
+                    return $val;
+                }
+            }
+
+            return null;
+        };
+
+        $clients = null;
+        if (! empty($profile['clients_walk'])) {
+            $clients = count($this->numericValues($this->snmp->walk($host, $community, (string) $profile['clients_walk'])));
+        }
+
+        return [
+            'signal' => $scalar((array) ($profile['signal_oids'] ?? [])),
+            'snr' => $scalar((array) ($profile['snr_oids'] ?? [])),
+            'ccq' => $scalar((array) ($profile['ccq_oids'] ?? [])),
+            'clients' => $clients,
+        ];
     }
 
     /** @param array<string, mixed> $profile */
