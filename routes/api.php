@@ -148,6 +148,11 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::post('imports', [ImportController::class, 'store'])->name('imports.store');
     Route::get('imports/{import}', [ImportController::class, 'show'])->name('imports.show');
     Route::post('imports/{import}/cancel', [ImportController::class, 'cancel'])->name('imports.cancel');
+    // LibreNMS import: preview then import (MySQL or API).
+    Route::post('imports/librenms/preview', [\App\Http\Controllers\Api\LibreNmsImportController::class, 'preview'])
+        ->middleware('throttle:20,1')->name('imports.librenms.preview');
+    Route::post('imports/librenms', [\App\Http\Controllers\Api\LibreNmsImportController::class, 'import'])
+        ->middleware('throttle:10,1')->name('imports.librenms');
 
     // Settings: editable engine tunables + credential management.
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');

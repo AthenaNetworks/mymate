@@ -51,7 +51,7 @@ RUN apt-get update \
 # from source (pecl.php.net is flaky), and cleans up build deps so the image stays lean.
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 RUN chmod +x /usr/local/bin/install-php-extensions \
-    && install-php-extensions pdo_pgsql pgsql gd zip intl bcmath sockets pcntl snmp sodium
+    && install-php-extensions pdo_pgsql pgsql pdo_mysql gd zip intl bcmath sockets pcntl snmp sodium
 
 # phpredis straight from its GitHub release - pecl.php.net is unreachable from some build
 # networks, so don't depend on it.

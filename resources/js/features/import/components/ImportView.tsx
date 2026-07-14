@@ -11,6 +11,7 @@ import {
     type UploadProgress,
 } from '../api/imports';
 import { pushToast } from '../../../lib/toast';
+import { LibreNmsImport } from './LibreNmsImport';
 
 const card = 'rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.06]';
 
@@ -372,6 +373,8 @@ export function ImportView() {
                         </ul>
                     </section>
                 )}
+
+                <LibreNmsImport />
             </div>
         </div>
     );
