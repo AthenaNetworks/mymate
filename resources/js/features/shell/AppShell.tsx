@@ -4,6 +4,7 @@ import { ArrowsIn } from '@phosphor-icons/react';
 import { setWallboard, useView, useWallboard } from '../../lib/shellStore';
 import { TopBar } from './TopBar';
 import { NavRail } from './NavRail';
+import { UpdateNotice } from './UpdateNotice';
 import { MapCanvas } from '../topology/components/MapCanvas';
 import { DeviceInspector } from '../topology/components/DeviceInspector';
 import { DashboardView } from '../dashboard/components/DashboardView';
@@ -119,6 +120,9 @@ export function AppShell() {
                 {mainView}
                 {view === 'map' && <DeviceInspector />}
             </div>
+
+            {/* One-time "update available" notice after login (per-version "don't show again"). */}
+            <UpdateNotice />
         </div>
     );
 }
