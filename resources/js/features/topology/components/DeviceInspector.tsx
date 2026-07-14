@@ -366,7 +366,7 @@ function InspectorShell({ open, children }: { open: boolean; children: ReactNode
                 onClick={() => setInspectorOpen(false)}
             />
             <aside
-                className={`fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-[#0d0d11]/95 p-5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:w-[22rem] lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
+                className={`fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-[#0d0d11]/95 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:w-[22rem] lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
                     open ? 'translate-x-0' : 'translate-x-full'
                 }`}
             >

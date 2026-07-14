@@ -44,7 +44,7 @@ export function TopBar() {
             <button
                 onClick={() => setNavOpen(true)}
                 title="Menu"
-                className="-ml-1 rounded-lg p-1.5 text-white/55 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white lg:hidden"
+                className="-ml-1 rounded-lg p-2 text-white/55 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white active:scale-95 lg:hidden"
             >
                 <List weight="bold" className="h-5 w-5" />
             </button>

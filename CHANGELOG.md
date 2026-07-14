@@ -39,6 +39,11 @@ of commit subjects.
 - The installer and first-boot now detect the machine's reachable IP via its default
   route when setting `APP_URL`, rather than the first `hostname -I` entry (which can
   be a secondary interface).
+- Mobile: the console feels more app-like on phones and tablets - the page no longer
+  rubber-bands or pull-to-refreshes when you drag the map, taps don't flash or
+  double-tap-zoom, text doesn't inflate on rotation, and the chrome now respects
+  device safe areas (notch / home indicator). Builds on the existing responsive
+  layout (drawer navigation, off-canvas device inspector).
 
 ### Fixed
 - Login on an LXC/VM would flash the first screen and bounce straight back to the

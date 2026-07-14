@@ -33,6 +33,21 @@ body {
     color: rgb(244 244 245 / 0.92);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Mobile app-like feel: no page rubber-band / pull-to-refresh hijacking a map drag,
+       no sideways scroll, no iOS text inflation on rotate, no grey tap-flash. */
+    overscroll-behavior: none;
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Interactive controls: kill the double-tap-to-zoom delay/gesture on taps (the map
+   canvas manages its own touch-action, so this is scoped to controls, not the pane). */
+button,
+a,
+label,
+[role='button'] {
+    touch-action: manipulation;
 }
 
 /* Near-invisible refined scrollbars. */

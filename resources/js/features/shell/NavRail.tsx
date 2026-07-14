@@ -95,7 +95,7 @@ export function NavRail({ outageCount = 0 }: { outageCount?: number }) {
                     onClick={() => setNavOpen(false)}
                 />
                 <nav
-                    className={`absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col gap-6 border-r border-white/10 bg-[#0d0d11]/95 p-3 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid ${
+                    className={`absolute inset-y-0 left-0 flex w-64 max-w-[80vw] flex-col gap-6 border-r border-white/10 bg-[#0d0d11]/95 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid ${
                         navOpen ? 'translate-x-0' : '-translate-x-full'
                     }`}
                 >
