@@ -21,8 +21,12 @@ class UpdateAlertPolicyRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'condition' => ['sometimes', 'required', Rule::enum(AlertCondition::class)],
             'params' => ['nullable', 'array'],
-            'params.threshold' => ['nullable', 'numeric', 'min:1', 'max:100'],
-            // Sustained-duration gate for high_util, in minutes. 0 = instant.
+            // Threshold: a % for high_util / high_metric (cpu, mem), or °C for high_metric temp
+            // (hence the higher ceiling).
+            'params.threshold' => ['nullable', 'numeric', 'min:1', 'max:200'],
+            // Which device metric high_metric watches.
+            'params.metric' => ['nullable', Rule::in(['cpu', 'mem', 'temp'])],
+            // Sustained-duration gate (high_util / high_metric / device_down), in minutes. 0 = instant.
             'params.duration_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
             // Dependency-aware suppression for device_down. Default true.
             'params.suppress_dependent' => ['nullable', 'boolean'],

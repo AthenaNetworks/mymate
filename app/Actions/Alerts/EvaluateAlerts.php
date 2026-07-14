@@ -3,6 +3,7 @@
 namespace App\Actions\Alerts;
 
 use App\Enums\AlertCondition;
+use App\Enums\BackupStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\DiscoveryStatus;
 use App\Enums\UpgradeStatus;
@@ -140,6 +141,12 @@ class EvaluateAlerts
             AlertCondition::UpgradeFailed => $this->failedUpgrades($scope),
             // Discovery candidates aren't devices yet -> device-scope doesn't apply; always fleet-wide.
             AlertCondition::NewDiscovery => $this->newCandidates(),
+            AlertCondition::BackupFailed => $this->failedBackups($scope),
+            AlertCondition::HighMetric => $this->highMetric(
+                (string) ($policy->params['metric'] ?? 'cpu'),
+                (float) ($policy->params['threshold'] ?? 90),
+                $scope,
+            ),
         };
     }
 
@@ -268,6 +275,66 @@ class EvaluateAlerts
             // Key by the failure timestamp so a *new* failure re-fires after resolve.
             $stamp = $d->upgrade_at?->timestamp ?? 0;
             $out["device:{$d->id}:upgrade:{$stamp}"] = "Upgrade failed on {$d->name}: ".($d->upgrade_message ?? 'unknown error').'.';
+        }
+
+        return $out;
+    }
+
+    /**
+     * Devices whose last config backup failed. One event per device (dedupe on device id),
+     * so a device that keeps failing its scheduled backup alerts once and resolves when a
+     * backup next succeeds - not on every scheduled run.
+     *
+     * @param  array<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function failedBackups(?array $scope): array
+    {
+        $out = [];
+        $query = Device::where('backup_status', BackupStatus::Failed);
+        if ($scope !== null) {
+            $query->whereIn('id', $scope);
+        }
+        foreach ($query->get(['id', 'name', 'backup_message']) as $d) {
+            $out["device:{$d->id}:backup"] = "Config backup failed on {$d->name}: ".($d->backup_message ?: 'unknown error').'.';
+        }
+
+        return $out;
+    }
+
+    /**
+     * Devices whose chosen resource metric (cpu/mem/temp) is at/over the threshold. A stale
+     * reading is ignored: a device that stopped reporting keeps its last value, and alerting
+     * on a frozen number would be wrong - DeviceDown covers unreachable gear. One event per
+     * device+metric so CPU and temperature policies don't collide.
+     *
+     * @param  array<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function highMetric(string $metric, float $threshold, ?array $scope): array
+    {
+        // column, human label, unit
+        [$col, $label, $unit] = match ($metric) {
+            'mem' => ['mem_used_pct', 'memory', '%'],
+            'temp' => ['temp_c', 'temperature', '°C'],
+            default => ['cpu_pct', 'CPU', '%'], // 'cpu'
+        };
+
+        // Freshness: ignore readings older than ~10x the metrics cadence (floor 10 min).
+        $interval = max(5, (int) config('mymate.device_metrics.interval', 30));
+        $freshAfter = now()->subSeconds(max(600, $interval * 10));
+
+        $query = Device::whereNotNull($col)
+            ->where($col, '>=', $threshold)
+            ->where('metrics_at', '>=', $freshAfter);
+        if ($scope !== null) {
+            $query->whereIn('id', $scope);
+        }
+
+        $out = [];
+        foreach ($query->get(['id', 'name', $col]) as $d) {
+            $val = (int) round((float) $d->{$col});
+            $out["device:{$d->id}:metric:{$metric}"] = "High {$label} {$val}{$unit} on {$d->name}.";
         }
 
         return $out;

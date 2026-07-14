@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- Alert rules for **failed config backups** and **high device metrics** (CPU,
+  memory or temperature over a threshold). Both support the same targeting
+  (all / device type / map / specific devices), sustained-duration gate and
+  recovery notifications as the existing rules; high-metric ignores stale readings
+  so a device that stopped reporting doesn't alert on a frozen value.
 - The Dude import screen now has an **extraction time limit** control, so a very
   large `dude.db` (lots of chart history) can be given more time to reverse-engineer
   instead of being cut off. Also available on the CLI as `--extract-timeout`. (#3)

@@ -18,7 +18,7 @@ export interface AlertPolicyInput {
     id?: number;
     name: string;
     condition: AlertConditionType;
-    params?: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean };
+    params?: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean; metric?: 'cpu' | 'mem' | 'temp' };
     scope?: AlertScope;
     enabled?: boolean;
     transport_ids?: number[];

@@ -13,7 +13,7 @@ import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, Devic
 
 const DEVICE_TYPES: DeviceType[] = ['router', 'switch', 'ap', 'server', 'internet', 'unknown'];
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'upgrade_failed'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'upgrade_failed', 'backup_failed', 'high_metric'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -38,7 +38,9 @@ const iconBtn = 'rounded-md p-1 text-white/40 transition-colors hover:bg-white/5
 const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'device_down', label: 'Device down / recovered' },
     { value: 'high_util', label: 'Sustained high utilisation' },
+    { value: 'high_metric', label: 'High device metric (CPU / memory / temperature)' },
     { value: 'upgrade_failed', label: 'Upgrade failed' },
+    { value: 'backup_failed', label: 'Config backup failed' },
     { value: 'new_discovery', label: 'New device discovered' },
 ];
 
@@ -129,6 +131,7 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
             threshold: initial?.params?.threshold ?? 90,
             duration_minutes: initial?.params?.duration_minutes ?? 0,
             suppress_dependent: initial?.params?.suppress_dependent ?? true,
+            metric: initial?.params?.metric ?? 'cpu',
         },
         scope: initial?.scope ?? { type: 'all' },
         enabled: initial?.enabled ?? true,
@@ -228,6 +231,57 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         Evaluated per link, against its effective speed (override or slowest end).
                     </p>
                 </>
+            )}
+            {form.condition === 'high_metric' && (
+                <>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>Metric</span>
+                        <select
+                            className="w-44 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                            value={form.params?.metric ?? 'cpu'}
+                            onChange={(e) => set('params', { ...form.params, metric: e.target.value as 'cpu' | 'mem' | 'temp' })}
+                        >
+                            <option value="cpu">CPU load</option>
+                            <option value="mem">Memory used</option>
+                            <option value="temp">Temperature</option>
+                        </select>
+                    </label>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>Threshold ({form.params?.metric === 'temp' ? '°C' : '%'})</span>
+                        <input
+                            type="number"
+                            min={1}
+                            max={form.params?.metric === 'temp' ? 200 : 100}
+                            value={form.params?.threshold ?? 90}
+                            onChange={(e) => set('params', { ...form.params, threshold: Number(e.target.value) })}
+                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                        />
+                    </label>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>
+                            Sustained for (min)
+                            <span className="ml-1 text-[11px] text-white/35">0 = instant</span>
+                        </span>
+                        <input
+                            type="number"
+                            min={0}
+                            max={1440}
+                            value={form.params?.duration_minutes ?? 0}
+                            onChange={(e) => set('params', { ...form.params, duration_minutes: Number(e.target.value) })}
+                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                        />
+                    </label>
+                    <p className="px-1 text-[11px] text-white/35">
+                        Uses each device's latest CPU / memory / temperature reading. Stale readings (a device that
+                        stopped reporting) are ignored - a down device alerts via "Device down" instead.
+                    </p>
+                </>
+            )}
+            {form.condition === 'backup_failed' && (
+                <p className="px-1 text-[11px] text-white/35">
+                    Fires when a device's most recent config backup failed, and resolves when its next backup
+                    succeeds. One alert per device - a device that keeps failing won't re-notify each run.
+                </p>
             )}
             <div>
                 <p className="mb-1 px-1 text-[11px] font-medium text-white/45">Deliver via</p>

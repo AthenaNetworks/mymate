@@ -12,6 +12,8 @@ enum AlertCondition: string
     case HighUtil = 'high_util';           // a link is at/over a utilisation threshold
     case UpgradeFailed = 'upgrade_failed'; // a firmware upgrade failed
     case NewDiscovery = 'new_discovery';   // a new device awaits review
+    case BackupFailed = 'backup_failed';   // a device's last config backup failed
+    case HighMetric = 'high_metric';       // a device metric (cpu/mem/temp) is at/over a threshold
 
     public function label(): string
     {
@@ -20,6 +22,8 @@ enum AlertCondition: string
             self::HighUtil => 'Sustained high utilisation',
             self::UpgradeFailed => 'Upgrade failed',
             self::NewDiscovery => 'New device discovered',
+            self::BackupFailed => 'Config backup failed',
+            self::HighMetric => 'High device metric (CPU / memory / temperature)',
         };
     }
 }

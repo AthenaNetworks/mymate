@@ -61,6 +61,39 @@ class AlertApiTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('scope.device_type');
     }
 
+    public function test_high_metric_policy_persists_its_metric_and_threshold(): void
+    {
+        $this->actingAsUser();
+
+        $res = $this->postJson('/api/alert-policies', [
+            'name' => 'Hot routers', 'condition' => 'high_metric',
+            'params' => ['metric' => 'temp', 'threshold' => 75],
+        ])->assertCreated()
+            ->assertJsonPath('data.condition', 'high_metric')
+            ->assertJsonPath('data.params.metric', 'temp');
+
+        $this->assertSame(75, (int) $res->json('data.params.threshold'));
+    }
+
+    public function test_backup_failed_policy_is_accepted(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Backup failures', 'condition' => 'backup_failed',
+        ])->assertCreated()->assertJsonPath('data.condition', 'backup_failed');
+    }
+
+    public function test_high_metric_policy_rejects_an_unknown_metric(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Bad metric', 'condition' => 'high_metric',
+            'params' => ['metric' => 'voltage'],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.metric');
+    }
+
     public function test_transport_create_never_leaks_or_stores_plaintext_config(): void
     {
         $this->actingAsUser();

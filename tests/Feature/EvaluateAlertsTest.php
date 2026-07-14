@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Alerts\EvaluateAlerts;
 use App\Enums\AlertCondition;
+use App\Enums\BackupStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\DiscoveryStatus;
@@ -63,6 +64,63 @@ class EvaluateAlertsTest extends TestCase
         $event = AlertEvent::firstOrFail();
         $this->assertSame('resolved', $event->status);
         $this->assertNotNull($event->resolved_at);
+    }
+
+    public function test_backup_failed_fires_dedupes_and_resolves_when_a_backup_succeeds(): void
+    {
+        Http::fake();
+        $policy = $this->policyWithSlack(AlertCondition::BackupFailed);
+        $device = Device::factory()->create([
+            'name' => 'CORE1', 'backup_status' => BackupStatus::Failed, 'backup_message' => 'ssh timeout',
+        ]);
+
+        app(EvaluateAlerts::class)();
+        $this->assertDatabaseHas('alert_events', [
+            'alert_policy_id' => $policy->id, 'dedupe_key' => "device:{$device->id}:backup",
+            'status' => 'firing', 'delivered' => true,
+        ]);
+        Http::assertSentCount(1);
+
+        // Still failing on the next run: one event, no re-notify.
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::count());
+        Http::assertSentCount(1);
+
+        // A later backup succeeds -> the alert resolves.
+        $device->update(['backup_status' => BackupStatus::Ok]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
+    }
+
+    public function test_high_metric_fires_when_cpu_is_over_threshold_and_resolves_when_it_drops(): void
+    {
+        Http::fake();
+        $policy = $this->policyWithSlack(AlertCondition::HighMetric, ['metric' => 'cpu', 'threshold' => 90]);
+        $device = Device::factory()->create(['name' => 'RTR1', 'cpu_pct' => 95, 'metrics_at' => now()]);
+
+        app(EvaluateAlerts::class)();
+        $this->assertDatabaseHas('alert_events', [
+            'alert_policy_id' => $policy->id, 'dedupe_key' => "device:{$device->id}:metric:cpu", 'status' => 'firing',
+        ]);
+        Http::assertSentCount(1);
+
+        $device->update(['cpu_pct' => 40]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
+    }
+
+    public function test_high_metric_ignores_a_stale_reading(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::HighMetric, ['metric' => 'temp', 'threshold' => 70]);
+        // Hot, but the reading is a day old - the device stopped reporting, so it must not
+        // alert on a frozen value (DeviceDown covers unreachable gear).
+        Device::factory()->create(['temp_c' => 85, 'metrics_at' => now()->subDay()]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(0, AlertEvent::count());
+        Http::assertNothingSent();
     }
 
     public function test_dependent_device_down_is_suppressed_behind_a_down_ancestor(): void

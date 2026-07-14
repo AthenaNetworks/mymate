@@ -245,7 +245,15 @@ export interface MapDetail {
 }
 
 // Alerting.
-export type AlertConditionType = 'device_down' | 'high_util' | 'upgrade_failed' | 'new_discovery';
+export type AlertConditionType =
+    | 'device_down'
+    | 'high_util'
+    | 'upgrade_failed'
+    | 'new_discovery'
+    | 'backup_failed'
+    | 'high_metric';
+
+export type DeviceMetricKey = 'cpu' | 'mem' | 'temp';
 
 /** Alert policy targeting - which devices a policy covers. */
 export interface AlertScope {
@@ -260,7 +268,7 @@ export interface AlertPolicy {
     name: string;
     condition: AlertConditionType;
     condition_label: string;
-    params: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean };
+    params: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean; metric?: DeviceMetricKey };
     scope: AlertScope;
     enabled: boolean;
     transport_ids: number[];
