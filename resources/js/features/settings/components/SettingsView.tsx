@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, FloppyDisk, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Trash, UsersThree } from '@phosphor-icons/react';
 import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
+import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
@@ -939,8 +940,59 @@ function AgentsSection() {
 }
 
 /** Version + whether a newer release is available. */
+const STATUS_DOT: Record<StatusLevel, string> = {
+    ok: 'bg-emerald-400',
+    warn: 'bg-amber-400',
+    down: 'bg-rose-400',
+};
+
+function SystemStatusSection() {
+    const { data, isLoading, refetch, isFetching } = useSystemStatus();
+
+    return (
+        <div className="min-w-0 space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                    <ShieldCheck weight="light" className="h-4 w-4 text-white/50" />
+                    <h2 className="text-sm font-bold text-white">System status</h2>
+                </div>
+                <button
+                    onClick={() => refetch()}
+                    disabled={isFetching}
+                    className="rounded-md p-1 text-white/40 transition hover:bg-white/5 hover:text-white/70 disabled:opacity-40"
+                    title="Refresh"
+                >
+                    <ArrowsClockwise weight="bold" className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                </button>
+            </div>
+            {isLoading || !data ? (
+                <p className="text-xs text-white/40">Checking...</p>
+            ) : (
+                <ul className="space-y-1.5">
+                    {data.map((c) => (
+                        <li key={c.key} className="flex items-start justify-between gap-3 text-xs">
+                            <span className="flex shrink-0 items-center gap-2 text-white/70">
+                                <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[c.status]}`} />
+                                {c.label}
+                            </span>
+                            <span className="text-right text-white/40 [overflow-wrap:anywhere]">{c.detail}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+
+const UPGRADE_STEPS: { label: string; cmd: string }[] = [
+    { label: 'Debian / Ubuntu package', cmd: 'sudo apt install ./mymate_<version>_amd64.deb' },
+    { label: 'Docker Compose', cmd: 'docker compose pull && docker compose up -d' },
+    { label: 'Proxmox LXC', cmd: 'Update the package inside the container (see the .deb step), or import the new template.' },
+];
+
 function AboutSection() {
     const { data: u, isLoading } = useUpdateCheck();
+    const [showUpgrade, setShowUpgrade] = useState(false);
 
     return (
         <div className="min-w-0 space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
@@ -957,17 +1009,44 @@ function AboutSection() {
                         <span className="font-mono text-white/85">{u.current === 'dev' ? 'dev build' : `v${u.current}`}</span>
                     </div>
                     {u.update_available ? (
-                        <a
-                            href={u.url ?? '#'}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 px-3 py-2 text-amber-300 ring-1 ring-amber-400/25 transition hover:bg-amber-500/20"
-                        >
-                            <span className="flex items-center gap-1.5">
-                                <CloudArrowDown weight="bold" className="h-3.5 w-3.5" /> Update available - {u.latest}
-                            </span>
-                            <ArrowRight weight="bold" className="h-3.5 w-3.5" />
-                        </a>
+                        <div className="space-y-2 rounded-lg bg-amber-500/10 p-3 ring-1 ring-amber-400/25">
+                            <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                                <CloudArrowDown weight="bold" className="h-3.5 w-3.5" />
+                                Update available - {u.latest}
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <a
+                                    href={u.url ?? '#'}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 text-amber-200/90 underline-offset-2 hover:underline"
+                                >
+                                    Release notes <ArrowRight weight="bold" className="h-3 w-3" />
+                                </a>
+                                <button
+                                    onClick={() => setShowUpgrade((s) => !s)}
+                                    className="text-amber-200/70 underline-offset-2 hover:underline"
+                                >
+                                    {showUpgrade ? 'Hide upgrade steps' : 'How to upgrade'}
+                                </button>
+                            </div>
+                            {showUpgrade && (
+                                <div className="space-y-2 border-t border-amber-400/15 pt-2">
+                                    {UPGRADE_STEPS.map((s) => (
+                                        <div key={s.label}>
+                                            <div className="text-[11px] font-medium text-amber-200/70">{s.label}</div>
+                                            <code className="mt-0.5 block rounded bg-black/30 px-2 py-1 font-mono text-[11px] text-amber-100/90 [overflow-wrap:anywhere]">
+                                                {s.cmd}
+                                            </code>
+                                        </div>
+                                    ))}
+                                    <p className="text-[11px] text-amber-200/50">
+                                        Grab the new package from the release page, then run the step for how you
+                                        installed. Your data and config are kept across upgrades.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
                     ) : u.latest ? (
                         <p className="flex items-center gap-1.5 text-emerald-300/80">
                             <Check weight="bold" className="h-3.5 w-3.5" /> You're on the latest release.
@@ -1010,6 +1089,7 @@ export function SettingsView() {
                     {isAdmin && <BackupEngineSection />}
                     <AccountSection />
                     <AboutSection />
+                    {isAdmin && <SystemStatusSection />}
                     <UsersSection />
                     <AgentsSection />
                     {isAdmin && (

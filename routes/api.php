@@ -46,6 +46,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
     Route::get('update-check', \App\Http\Controllers\Api\UpdateCheckController::class)
         ->middleware('throttle:20,1')->name('update-check');
+    // System status board (db/redis/workers/polling/websockets/backups) for Settings.
+    Route::get('system-status', \App\Http\Controllers\Api\SystemStatusController::class)
+        ->middleware('throttle:60,1')->name('system-status');
     // Self-service password change.
     Route::put('account/password', [AuthController::class, 'updatePassword'])
         ->middleware('throttle:6,1')->name('account.password.update');

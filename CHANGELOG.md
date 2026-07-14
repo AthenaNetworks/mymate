@@ -17,12 +17,28 @@ of commit subjects.
 - The Dude import screen now has an **extraction time limit** control, so a very
   large `dude.db` (lots of chart history) can be given more time to reverse-engineer
   instead of being cut off. Also available on the CLI as `--extract-timeout`. (#3)
+- **System status** panel in Settings: at-a-glance health for the database, Redis,
+  background workers, the polling loop, the WebSocket server and the backup engine -
+  so "why isn't X working?" is self-diagnosable.
+- **Guided upgrade**: when a newer release is out, Settings now shows the release
+  notes and the exact upgrade command for each install type (package, Docker, LXC),
+  not just a "an update is available" note.
+- The import screen shows the maximum upload size and checks the file before it
+  uploads - an oversized `dude.db` is caught instantly (with the CLI import
+  suggested) instead of failing after a long transfer, and very large files get a
+  nudge toward the more reliable CLI import.
 
 ### Changed
 - The default upload size limit for a `dude.db` is now 4 GB (was 512 MB), across the
   app, nginx and PHP, so even the largest databases upload without tuning. Imports
   also get a generous whole-job time budget so a big history import isn't killed
   part-way through. (#3)
+- Error notifications now wrap to show the full message and stay until dismissed,
+  instead of being truncated to one line and disappearing after a few seconds (you
+  couldn't read long errors like the import size message). (#3)
+- The installer and first-boot now detect the machine's reachable IP via its default
+  route when setting `APP_URL`, rather than the first `hostname -I` entry (which can
+  be a secondary interface).
 
 ### Fixed
 - Login on an LXC/VM would flash the first screen and bounce straight back to the

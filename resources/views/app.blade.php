@@ -8,6 +8,9 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="mask-icon" href="/favicon.svg" color="#10b981">
     <meta name="theme-color" content="#060608">
+    {{-- Max dude.db upload size (KB), so the import form can pre-check a file before
+         uploading instead of failing server-side after a long transfer. --}}
+    <meta name="mymate:max-upload-kb" content="{{ (int) config('mymate.import.max_upload_kb') }}">
 
     {{-- Link-preview (Open Graph + Twitter) card --}}
     <meta name="description" content="My Mate - live network monitoring, the modern way. A web-based replacement for MikroTik's The Dude: live topology map, up/down pings, SNMP/RouterOS throughput.">

@@ -19,7 +19,18 @@ const EXTRACT_MAX = 240; // minutes (4h) - matches the server-side validation ca
 const clampMinutes = (m: number) => Math.min(EXTRACT_MAX, Math.max(EXTRACT_MIN, Number.isFinite(m) ? m : 30));
 
 const MB = 1_048_576;
+const GB = 1_073_741_824;
 const fmtMB = (bytes: number) => `${(bytes / MB).toFixed(1)} MB`;
+const fmtSize = (bytes: number) => (bytes >= GB ? `${(bytes / GB).toFixed(1)} GB` : fmtMB(bytes));
+
+// Server-configured upload ceiling (mymate.import.max_upload_kb), injected as a meta
+// tag by the blade shell. 0 = unknown -> skip the client-side check.
+const MAX_UPLOAD_BYTES = (() => {
+    const kb = Number(document.querySelector('meta[name="mymate:max-upload-kb"]')?.getAttribute('content'));
+    return Number.isFinite(kb) && kb > 0 ? kb * 1024 : 0;
+})();
+// Above this, browser upload works but the CLI import is more reliable - nudge toward it.
+const CLI_HINT_BYTES = 512 * MB;
 const fmtSpeed = (bytesPerSec: number) => (bytesPerSec > 0 ? `${(bytesPerSec / MB).toFixed(1)} MB/s` : '...');
 
 function fmtEta(seconds: number | null): string {
@@ -145,8 +156,11 @@ export function ImportView() {
     const upload = useUploadImport();
     const { data: runs } = useImports();
 
+    const tooBig = !!file && MAX_UPLOAD_BYTES > 0 && file.size > MAX_UPLOAD_BYTES;
+    const largeFile = !!file && !tooBig && file.size > CLI_HINT_BYTES;
+
     function start() {
-        if (!file) return;
+        if (!file || tooBig) return;
         setUploadProg({ percent: 0, bytesPerSec: 0, loaded: 0, total: file.size });
         upload.mutate(
             {
@@ -198,7 +212,10 @@ export function ImportView() {
                         <span className="text-sm text-white/70">
                             {file ? file.name : 'Choose a dude.db file or drop it here'}
                         </span>
-                        {file && <span className="text-xs text-white/40">{(file.size / 1_048_576).toFixed(1)} MB</span>}
+                        {file && <span className="text-xs text-white/40">{fmtSize(file.size)}</span>}
+                        {MAX_UPLOAD_BYTES > 0 && (
+                            <span className="text-[11px] text-white/30">Maximum upload {fmtSize(MAX_UPLOAD_BYTES)}</span>
+                        )}
                         <input
                             ref={fileInput}
                             type="file"
@@ -207,6 +224,29 @@ export function ImportView() {
                             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                         />
                     </label>
+
+                    {tooBig && (
+                        <p className="mt-3 flex items-start gap-2 rounded-lg bg-rose-500/10 p-3 text-xs text-rose-200 ring-1 ring-rose-400/20">
+                            <Warning weight="fill" className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>
+                                This file is {fmtSize(file!.size)}, larger than the {fmtSize(MAX_UPLOAD_BYTES)} upload
+                                limit. Import it from the server instead with{' '}
+                                <span className="font-mono text-rose-100">php artisan mymate:dude-import &lt;file&gt;</span>,
+                                or raise the limit (see the docs).
+                            </span>
+                        </p>
+                    )}
+
+                    {largeFile && (
+                        <p className="mt-3 flex items-start gap-2 rounded-lg bg-sky-500/10 p-3 text-xs text-sky-200 ring-1 ring-sky-400/20">
+                            <Warning weight="fill" className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span>
+                                That's a big database. A browser upload will work, but for very large files the CLI
+                                import (<span className="font-mono text-sky-100">php artisan mymate:dude-import</span>) on
+                                the server is faster and more reliable.
+                            </span>
+                        </p>
+                    )}
 
                     {/* Mode */}
                     <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -282,10 +322,10 @@ export function ImportView() {
 
                     <button
                         onClick={start}
-                        disabled={!file || upload.isPending}
+                        disabled={!file || tooBig || upload.isPending}
                         className="mt-5 w-full rounded-xl bg-emerald-500/90 px-4 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                        {upload.isPending ? 'Uploading...' : 'Start import'}
+                        {upload.isPending ? 'Uploading...' : tooBig ? 'File too large to upload' : 'Start import'}
                     </button>
 
                     {/* Live upload transfer (the POST body) - before the server-side import job. */}

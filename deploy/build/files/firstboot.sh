@@ -29,8 +29,13 @@ if su postgres -c "psql -c \"ALTER ROLE mymate LOGIN PASSWORD '$NEWPW'\"" >/dev/
     set_env DB_PASSWORD "$NEWPW"
 fi
 
-# 2. Point SPA cookie auth at this machine's identity.
-HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+# 2. Point SPA cookie auth at this machine's identity. Prefer the source IP of the
+# default route (the address clients actually reach this box on) over the first entry
+# from `hostname -I`, which can be a secondary/wrong interface. Login no longer depends
+# on getting this exactly right - the app also trusts the same-origin request host at
+# runtime - but a good APP_URL keeps absolute links and WebSocket URLs correct.
+HOST_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1)"
+[ -n "$HOST_IP" ] || HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 HOST_FQDN="$(hostname -f 2>/dev/null || hostname)"
 STATEFUL="localhost,127.0.0.1,::1"
 [ -n "$HOST_FQDN" ] && STATEFUL="$HOST_FQDN,$STATEFUL"

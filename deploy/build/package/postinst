@@ -83,8 +83,12 @@ ICMPERR
         set_env REVERB_APP_ID "$REVERB_APP_ID"
 
         # Best-effort host detection so the SPA's cookie auth works out of the box.
+        # Prefer the default-route source IP (what clients reach us on) over the first
+        # `hostname -I` entry. The app also trusts the same-origin request host at
+        # runtime, so this only needs to be good enough for APP_URL.
         HOST_FQDN="$(hostname -f 2>/dev/null || hostname)"
-        HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        HOST_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n1)"
+        [ -n "$HOST_IP" ] || HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
         STATEFUL="localhost,127.0.0.1,::1"
         [ -n "$HOST_FQDN" ] && STATEFUL="$HOST_FQDN,$STATEFUL"
         [ -n "$HOST_IP" ]   && STATEFUL="$HOST_IP,$STATEFUL"

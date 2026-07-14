@@ -101,6 +101,7 @@ class LoopCommand extends Command
             $historyInterval = max(60, $settings->getInt('history.maintain_interval', 3600));
 
             PingSweepJob::dispatch();
+            $this->heartbeat(); // liveness signal for the Settings system-status panel
 
             $now = microtime(true);
             if ($now - $lastPoll >= $pollInterval) {
@@ -140,6 +141,19 @@ class LoopCommand extends Command
     }
 
     /** Dispatch the sharded throughput batch jobs. Returns shard count. */
+    /** Cache key holding the unix time of the last loop tick (see SystemStatus). */
+    public const HEARTBEAT_KEY = 'mymate.loop.last_tick';
+
+    /** Stamp a liveness heartbeat each tick; a Redis blip must never kill the loop. */
+    private function heartbeat(): void
+    {
+        try {
+            \Illuminate\Support\Facades\Cache::put(self::HEARTBEAT_KEY, now()->timestamp, now()->addHour());
+        } catch (\Throwable) {
+            // best-effort only
+        }
+    }
+
     private function dispatchPoll(): int
     {
         return app(PollDispatcher::class)->dispatch();

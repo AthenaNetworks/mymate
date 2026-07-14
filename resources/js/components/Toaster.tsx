@@ -12,7 +12,7 @@ export function Toaster() {
     const toasts = useToasts();
 
     return (
-        <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-80 flex-col gap-2">
+        <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-96 max-w-[calc(100vw-2.5rem)] flex-col gap-2">
             {toasts.map((t) => {
                 const tone = tones[t.tone];
                 const Icon = tone.icon;
@@ -25,8 +25,10 @@ export function Toaster() {
                             <Icon weight="bold" className="h-4 w-4" />
                         </span>
                         <div className="min-w-0 flex-1 pt-0.5">
-                            <p className="truncate text-sm font-medium text-white/90">{t.title}</p>
-                            {t.detail && <p className="truncate text-xs text-white/40">{t.detail}</p>}
+                            <p className="text-sm font-medium text-white/90 [overflow-wrap:anywhere]">{t.title}</p>
+                            {t.detail && (
+                                <p className="mt-0.5 text-xs leading-relaxed text-white/45 [overflow-wrap:anywhere]">{t.detail}</p>
+                            )}
                         </div>
                         <button
                             onClick={() => dismissToast(t.id)}

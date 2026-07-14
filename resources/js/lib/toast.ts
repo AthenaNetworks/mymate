@@ -13,11 +13,14 @@ function emit(): void {
     listeners.forEach((l) => l());
 }
 
-export function pushToast(toast: Omit<Toast, 'id'>, ttlMs = 4500): number {
+export function pushToast(toast: Omit<Toast, 'id'>, ttlMs?: number): number {
     const id = nextId++;
     toasts = [...toasts, { ...toast, id }];
     emit();
-    setTimeout(() => dismissToast(id), ttlMs);
+    // Errors ('down') stay until dismissed - they're often long and worth reading
+    // (e.g. an upload/validation message); everything else auto-clears. ttlMs=0 is sticky.
+    const ttl = ttlMs ?? (toast.tone === 'down' ? 0 : 4500);
+    if (ttl > 0) setTimeout(() => dismissToast(id), ttl);
     return id;
 }
 
