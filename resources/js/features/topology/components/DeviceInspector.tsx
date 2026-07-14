@@ -26,6 +26,7 @@ import { ChartModal } from './ChartModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
 import { ConfirmDialog } from '../../../components/Dialog';
+import { MapDevicePalette } from './MapDevicePalette';
 import { pushToast } from '../../../lib/toast';
 import { useDeviceSamples } from '../api/getDeviceSamples';
 import { useIsAdmin } from '../../auth/api/auth';
@@ -458,6 +459,10 @@ function ClassificationPicker({ device }: { device: Device }) {
  * Services are derived from existing signals; outage history is a placeholder until
  * that subsystem lands.
  */
+// True once devices have first loaded in this session; gates the auto-home-to-root so an
+// explicit deselect (empty-canvas click) sticks and shows the map tools instead.
+let autoHomedOnce = false;
+
 export function DeviceInspector() {
     const isAdmin = useIsAdmin();
     const id = useSelectedDeviceId();
@@ -479,18 +484,22 @@ export function DeviceInspector() {
     const removeFromMap = useRemoveDeviceFromMap();
     const device = devices?.find((d) => d.id === id);
 
-    // The panel is always visible - default the selection to the upstream/root
-    // device on first load (prefer an `internet` node, else a parentless one).
+    // Default the selection to the upstream/root device on the *first* load (prefer an
+    // `internet` node, else a parentless one) - but let an explicit deselect (clicking the
+    // empty canvas) leave the panel showing the map tools instead of snapping back to root.
+    // A module flag (autoHomedOnce) survives remounts within the session; only a deleted
+    // selection re-homes after that.
     useEffect(() => {
-        // Fire when nothing is selected, or when a persisted id no longer matches a
-        // device (it was deleted) - fall back to the root so the inspector isn\'t stuck.
-        if (devices && devices.length > 0 && (id === null || !devices.some((d) => d.id === id))) {
+        if (!devices || devices.length === 0) return;
+        const deleted = id !== null && !devices.some((d) => d.id === id);
+        if (deleted || (id === null && !autoHomedOnce)) {
             const root =
                 devices.find((d) => d.device_type === 'internet') ??
                 devices.find((d) => d.parent_device_id === null) ??
                 devices[0];
             selectDevice(root.id);
         }
+        autoHomedOnce = true; // after devices first load, a plain deselect no longer re-homes
     }, [id, devices]);
 
     const ifaces = interfaces ?? [];
@@ -504,11 +513,13 @@ export function DeviceInspector() {
     if (!device) {
         return (
             <InspectorShell open={inspectorOpen}>
-                <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
-                    {devices && devices.length === 0
-                        ? 'No devices yet - add one to see its details here.'
-                        : 'Select a device on the map.'}
-                </div>
+                {devices && devices.length === 0 ? (
+                    <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
+                        No devices yet - add one to see its details here.
+                    </div>
+                ) : (
+                    <MapDevicePalette />
+                )}
             </InspectorShell>
         );
     }

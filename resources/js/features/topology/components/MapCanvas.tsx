@@ -23,7 +23,7 @@ import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition } from '../../maps/api/maps';
+import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
@@ -139,7 +139,8 @@ export function MapCanvas() {
     const savePosition = useSaveMapPosition();
     const saveLinkPosition = useSaveMapLinkPosition();
     const deleteLink = useDeleteLink();
-    const { fitView } = useReactFlow();
+    const addToMap = useAddDeviceToMap();
+    const { fitView, screenToFlowPosition } = useReactFlow();
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -444,6 +445,26 @@ export function MapCanvas() {
                         selectDevice(Number(node.id));
                         setInspectorOpen(true); // surface the inspector sheet on phones/tablets
                     }
+                }}
+                // Click the empty canvas to deselect - the inspector then shows the map tools.
+                onPaneClick={() => selectDevice(null)}
+                // Drag a device from the palette (inspector) onto the map to place it there.
+                onDragOver={(e) => {
+                    if (e.dataTransfer.types.includes('application/mymate-device')) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                    }
+                }}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    if (!isAdmin || activeMapId === null) return;
+                    const deviceId = Number(e.dataTransfer.getData('application/mymate-device'));
+                    if (!deviceId) return;
+                    const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+                    addToMap.mutate(
+                        { mapId: activeMapId, deviceId },
+                        { onSuccess: () => { savePosition.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }); selectDevice(deviceId); } },
+                    );
                 }}
                 fitView
                 fitViewOptions={{ padding: 0.3 }}
