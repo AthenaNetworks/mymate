@@ -10,9 +10,10 @@ use App\Enums\UpgradeStatus;
 use App\Models\AlertEvent;
 use App\Models\AlertPolicy;
 use App\Models\Device;
-use App\Models\DeviceMapPosition;
 use App\Models\DiscoveryCandidate;
 use App\Models\Link;
+use App\Support\DeviceScope;
+use App\Support\MaintenanceGuard;
 
 /**
  * Evaluate every enabled alert policy. For each policy we compute
@@ -27,12 +28,13 @@ class EvaluateAlerts
 
     public function __invoke(): void
     {
+        $guard = new MaintenanceGuard;
         foreach (AlertPolicy::where('enabled', true)->with('transports')->get() as $policy) {
-            $this->reconcile($policy);
+            $this->reconcile($policy, $guard);
         }
     }
 
-    private function reconcile(AlertPolicy $policy): void
+    private function reconcile(AlertPolicy $policy, MaintenanceGuard $guard): void
     {
         $active = $this->activeConditions($policy);
         // Sustained-duration gate: a
@@ -49,6 +51,12 @@ class EvaluateAlerts
             ->whereIn('status', ['pending', 'firing', 'resolving'])->get()->keyBy('dedupe_key');
 
         foreach ($active as $key => $message) {
+            // Maintenance window: freeze this device's alerts - don't fire or promote while
+            // it's suppressed (its existing events, if any, stay as they are).
+            if ($this->coveredByMaintenance($key, $guard)) {
+                continue;
+            }
+
             $event = $open->get($key);
 
             if ($event === null) {
@@ -96,6 +104,11 @@ class EvaluateAlerts
         // no down message, no recovery message for a blip that was too short to count.
         foreach ($open as $key => $event) {
             if (array_key_exists($key, $active)) {
+                continue;
+            }
+            // Under maintenance: leave the event frozen rather than resolving it (a recovery
+            // that lands during planned work isn't a real recovery yet, and mustn't notify).
+            if ($this->coveredByMaintenance($key, $guard)) {
                 continue;
             }
             if ($event->status === 'pending') {
@@ -158,14 +171,21 @@ class EvaluateAlerts
      */
     private function scopeDeviceIds(AlertPolicy $policy): ?array
     {
-        $scope = $policy->scope ?? [];
+        return DeviceScope::resolve($policy->scope);
+    }
 
-        return match ($scope['type'] ?? 'all') {
-            'device_type' => Device::where('device_type', $scope['device_type'] ?? '')->pluck('id')->all(),
-            'map' => DeviceMapPosition::where('map_id', (int) ($scope['map_id'] ?? 0))->pluck('device_id')->unique()->values()->all(),
-            'devices' => array_values(array_map('intval', $scope['device_ids'] ?? [])),
-            default => null, // 'all'
-        };
+    /**
+     * Is this dedupe key's device under a maintenance window? Device-based conditions key as
+     * `device:{id}...`; link/discovery keys don't reference a single device, so they're never
+     * suppressed by maintenance.
+     */
+    private function coveredByMaintenance(string $key, MaintenanceGuard $guard): bool
+    {
+        if (! $guard->any()) {
+            return false;
+        }
+
+        return preg_match('/^device:(\d+)/', $key, $m) === 1 && $guard->covers((int) $m[1]);
     }
 
     /**

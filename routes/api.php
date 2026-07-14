@@ -168,6 +168,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Alerting: policies, transports (test-send is rate-limited), event log.
     Route::apiResource('alert-policies', AlertPolicyController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('alert-transports', AlertTransportController::class)->only(['index', 'store', 'update', 'destroy']);
+    // Maintenance windows: scheduled alert suppression for planned work.
+    Route::apiResource('maintenance-windows', \App\Http\Controllers\Api\MaintenanceWindowController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
     Route::post('alert-transports/{transport}/test', [AlertTransportController::class, 'test'])
         ->middleware('throttle:6,1')->name('alert-transports.test');
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');

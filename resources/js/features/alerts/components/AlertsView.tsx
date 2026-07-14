@@ -1,7 +1,13 @@
 import { useState } from 'react';
-import { Bell, Plus, PencilSimple, Trash, PaperPlaneTilt } from '@phosphor-icons/react';
+import { Bell, Plus, PencilSimple, Trash, PaperPlaneTilt, Wrench } from '@phosphor-icons/react';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useAlertPolicies, useSaveAlertPolicy, useDeleteAlertPolicy, type AlertPolicyInput } from '../api/alertPolicies';
+import {
+    useMaintenanceWindows,
+    useSaveMaintenanceWindow,
+    useDeleteMaintenanceWindow,
+    type MaintenanceWindowInput,
+} from '../api/maintenanceWindows';
 import { useAlertTransports, useSaveAlertTransport, useDeleteAlertTransport, useTestTransport, type AlertTransportInput } from '../api/alertTransports';
 import { useAlertEvents } from '../api/alertEvents';
 import { useIsAdmin } from '../../auth/api/auth';
@@ -9,7 +15,7 @@ import { useDevices } from '../../devices/api/getDevices';
 import { useMaps } from '../../maps/api/maps';
 import { relativeTime } from '../../../lib/relativeTime';
 import { pushToast } from '../../../lib/toast';
-import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, DeviceType } from '../../../types';
+import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, DeviceType, MaintenanceWindow } from '../../../types';
 
 const DEVICE_TYPES: DeviceType[] = ['router', 'switch', 'ap', 'server', 'internet', 'unknown'];
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
@@ -382,6 +388,132 @@ function TransportForm({ initial, onDone }: { initial?: AlertTransport; onDone: 
     );
 }
 
+// ISO <-> the `datetime-local` input value (which is naive local time).
+function toLocalInput(iso: string | null): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+const fromLocalInput = (v: string): string => new Date(v).toISOString();
+
+function MaintenanceForm({ initial, onDone }: { initial?: MaintenanceWindow; onDone: () => void }) {
+    const save = useSaveMaintenanceWindow();
+    const [form, setForm] = useState<MaintenanceWindowInput>({
+        id: initial?.id,
+        name: initial?.name ?? '',
+        starts_at: toLocalInput(initial?.starts_at ?? null) || toLocalInput(new Date().toISOString()),
+        ends_at: toLocalInput(initial?.ends_at ?? null) || toLocalInput(new Date(Date.now() + 2 * 3600_000).toISOString()),
+        scope: initial?.scope ?? { type: 'all' },
+        enabled: initial?.enabled ?? true,
+    });
+    const set = <K extends keyof MaintenanceWindowInput>(k: K, v: MaintenanceWindowInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+    function submit() {
+        save.mutate(
+            { ...form, starts_at: fromLocalInput(form.starts_at), ends_at: fromLocalInput(form.ends_at) },
+            {
+                onSuccess: () => {
+                    pushToast({ title: initial ? 'Window updated' : 'Window added', tone: 'info' });
+                    onDone();
+                },
+                onError: () => pushToast({ title: 'Couldn\'t save the window', detail: 'Check the dates (end must be after start).', tone: 'down' }),
+            },
+        );
+    }
+
+    return (
+        <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
+            <input className={field} placeholder="What's happening (e.g. Core router upgrade)" value={form.name} onChange={(e) => set('name', e.target.value)} />
+            <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                <span>Start</span>
+                <input type="datetime-local" className="w-56 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60" value={form.starts_at} onChange={(e) => set('starts_at', e.target.value)} />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                <span>End</span>
+                <input type="datetime-local" className="w-56 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60" value={form.ends_at} onChange={(e) => set('ends_at', e.target.value)} />
+            </label>
+            <ScopeEditor scope={form.scope ?? { type: 'all' }} onChange={(s) => set('scope', s)} />
+            <label className="flex items-center gap-2 px-1 text-sm text-white/70">
+                <input type="checkbox" checked={form.enabled ?? true} onChange={(e) => set('enabled', e.target.checked)} /> Enabled
+            </label>
+            <p className="px-1 text-[11px] text-white/35">
+                While active, alerts are held for the devices in scope - a device that goes down (or breaches a
+                threshold) during the window won't notify, and won't send a false recovery when the window ends.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-white/55 hover:text-white/90">Cancel</button>
+                <button
+                    onClick={submit}
+                    disabled={save.isPending || form.name === ''}
+                    className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
+                >
+                    {save.isPending ? 'Saving...' : 'Save'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function MaintenanceSection({ isAdmin }: { isAdmin: boolean }) {
+    const { data: windows } = useMaintenanceWindows();
+    const del = useDeleteMaintenanceWindow();
+    const [adding, setAdding] = useState(false);
+    const [editing, setEditing] = useState<number | null>(null);
+
+    const fmtRange = (w: MaintenanceWindow) => {
+        const s = w.starts_at ? new Date(w.starts_at) : null;
+        const e = w.ends_at ? new Date(w.ends_at) : null;
+        const opt: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        return `${s ? s.toLocaleString(undefined, opt) : '?'} - ${e ? e.toLocaleString(undefined, opt) : '?'}`;
+    };
+
+    return (
+        <section className={card}>
+            <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-1.5 text-sm font-bold text-white">
+                    <Wrench weight="light" className="h-4 w-4 text-white/50" /> Maintenance windows
+                </h2>
+                {isAdmin && !adding && (
+                    <button onClick={() => { setAdding(true); setEditing(null); }} className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 hover:text-white">
+                        <Plus weight="bold" className="h-3.5 w-3.5" /> Add
+                    </button>
+                )}
+            </div>
+
+            {adding && <div className="mb-3"><MaintenanceForm onDone={() => setAdding(false)} /></div>}
+
+            {!windows || windows.length === 0 ? (
+                <p className="text-xs text-white/40">No maintenance windows. Add one to silence alerts during planned work.</p>
+            ) : (
+                <div className="space-y-1.5">
+                    {windows.map((w) =>
+                        editing === w.id ? (
+                            <MaintenanceForm key={w.id} initial={w} onDone={() => setEditing(null)} />
+                        ) : (
+                            <div key={w.id} className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs ring-1 ring-white/[0.06]">
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="truncate font-medium text-white/85">{w.name}</span>
+                                        {w.active && <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-400/20">active</span>}
+                                        {!w.enabled && <span className="shrink-0 text-[10px] text-white/30">disabled</span>}
+                                    </div>
+                                    <div className="mt-0.5 truncate text-white/40">{fmtRange(w)} · {scopeSummary(w.scope)}</div>
+                                </div>
+                                {isAdmin && (
+                                    <div className="flex shrink-0 items-center gap-1">
+                                        <button onClick={() => { setEditing(w.id); setAdding(false); }} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white/80"><PencilSimple weight="bold" className="h-3.5 w-3.5" /></button>
+                                        <button onClick={() => del.mutate(w.id)} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-rose-400"><Trash weight="bold" className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                )}
+                            </div>
+                        ),
+                    )}
+                </div>
+            )}
+        </section>
+    );
+}
+
 export function AlertsView() {
     const isAdmin = useIsAdmin();
     const { data: policies } = useAlertPolicies();
@@ -468,6 +600,9 @@ export function AlertsView() {
                         {policies && policies.length === 0 && !addingPolicy && <p className="text-xs text-white/40">No policies yet.</p>}
                     </div>
                 </section>
+
+                {/* Maintenance windows */}
+                <MaintenanceSection isAdmin={isAdmin} />
 
                 {/* Transports */}
                 <section className={card}>

@@ -266,6 +266,17 @@ export interface AlertScope {
     device_ids?: number[];
 }
 
+/** A scheduled maintenance window - suppresses alerts for its scope while active. */
+export interface MaintenanceWindow {
+    id: number;
+    name: string;
+    starts_at: string | null;
+    ends_at: string | null;
+    scope: AlertScope;
+    enabled: boolean;
+    active: boolean;
+}
+
 export interface AlertPolicy {
     id: number;
     name: string;

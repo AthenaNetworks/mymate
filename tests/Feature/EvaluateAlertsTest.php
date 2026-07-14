@@ -14,6 +14,7 @@ use App\Models\AlertPolicy;
 use App\Models\AlertTransport;
 use App\Models\Device;
 use App\Models\DeviceMapPosition;
+use App\Models\MaintenanceWindow;
 use App\Models\DiscoveryCandidate;
 use App\Models\Link;
 use App\Models\Map;
@@ -135,6 +136,62 @@ class EvaluateAlertsTest extends TestCase
 
         $this->assertSame(0, AlertEvent::count());
         Http::assertNothingSent();
+    }
+
+    public function test_maintenance_window_suppresses_alerts_for_covered_devices(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        Device::factory()->create(['name' => 'CPE1', 'status' => DeviceStatus::Down]);
+        MaintenanceWindow::factory()->create(); // active, fleet-wide
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(0, AlertEvent::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_an_inactive_maintenance_window_does_not_suppress(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        Device::factory()->create(['status' => DeviceStatus::Down]);
+        MaintenanceWindow::factory()->upcoming()->create(); // starts in the future
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(1, AlertEvent::count());
+    }
+
+    public function test_a_maintenance_window_scoped_to_other_devices_still_alerts(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        $down = Device::factory()->create(['status' => DeviceStatus::Down]);
+        $other = Device::factory()->create();
+        MaintenanceWindow::factory()->create(['scope' => ['type' => 'devices', 'device_ids' => [$other->id]]]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertDatabaseHas('alert_events', ['dedupe_key' => "device:{$down->id}", 'status' => 'firing']);
+    }
+
+    public function test_maintenance_freezes_an_already_firing_event_instead_of_resolving_it(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        $device = Device::factory()->create(['status' => DeviceStatus::Down]);
+
+        app(EvaluateAlerts::class)(); // fires normally
+        $this->assertSame('firing', AlertEvent::firstOrFail()->status);
+
+        // Maintenance starts and the device recovers during it - the event must NOT resolve
+        // (no spurious recovery notification), it stays frozen.
+        MaintenanceWindow::factory()->create();
+        $device->update(['status' => DeviceStatus::Up]);
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame('firing', AlertEvent::firstOrFail()->status);
     }
 
     public function test_dependent_device_down_is_suppressed_behind_a_down_ancestor(): void
