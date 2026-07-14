@@ -222,6 +222,8 @@ export function MapCanvas() {
                 mgmt_ip: d.mgmt_ip,
                 status: d.status,
                 device_type: d.device_type,
+                vendor: d.vendor,
+                model: d.model,
                 util: deviceUtilRef.current[d.id] ?? null,
                 cpu: d.cpu_pct,
                 mem: d.mem_used_pct,

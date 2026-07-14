@@ -117,6 +117,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Recent history: bucketed latency/loss/jitter series for one device (ping chart).
     Route::get('devices/{device}/ping-samples', [InterfaceSampleController::class, 'ping'])
         ->name('devices.ping-samples');
+    // Device model icon (MikroTik product photo, fetched + cached on first sighting).
+    Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\DeviceIconController::class, 'show'])
+        ->name('devices.icon');
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
     Route::get('devices/{device}/sensors', [\App\Http\Controllers\Api\SensorController::class, 'forDevice'])
         ->name('devices.sensors');

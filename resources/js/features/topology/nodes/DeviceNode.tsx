@@ -1,6 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { DeviceStatus, DeviceType, TileMetric } from '../../../types';
 import { StatusDot } from '../../../components/StatusDot';
+import { DeviceGlyph } from './DeviceGlyph';
 import { linkColor } from '../lib/linkColor';
 import { useDeviceTileMetric, setDeviceTileMetric } from '../../../lib/shellStore';
 
@@ -9,6 +10,8 @@ export type DeviceNodeData = {
     mgmt_ip: string;
     status: DeviceStatus;
     device_type: DeviceType;
+    vendor: string | null;
+    model: string | null;
     util: number | null; // device's busiest interface utilisation (live)
     cpu: number | null; // resource metrics (live) - null when the device doesn't report them
     mem: number | null;
@@ -106,9 +109,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
 
                 <div className="flex items-center gap-2.5">
                     <span
-                        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg font-mono text-[10px] font-semibold tracking-tight ring-1 ${meta.tint}`}
+                        className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg ring-1 ${meta.tint}`}
+                        title={[d.vendor, d.model].filter(Boolean).join(' ') || meta.abbr}
                     >
-                        {meta.abbr}
+                        <DeviceGlyph deviceId={Number(id)} vendor={d.vendor} model={d.model} type={d.device_type} className="h-5 w-5" />
                     </span>
                     <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-white/90">{d.label}</div>

@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Map restyle + device icons.** The topology map got a visual pass: a selected
+  device now clearly stands out (emerald ring, halo, lift) and its links come forward
+  while the rest fade back; a "blueprint" grid replaces the stock dot field; and a
+  bespoke zoom/fit control cluster replaces the default one. Device tiles now show the
+  real MikroTik product photo for the model - fetched from MikroTik and cached locally
+  the first time that model is seen - falling back to a clean drawn family icon
+  (router / switch / AP / dish / server) for everything else.
 - **Latency, jitter and packet-loss monitoring.** The ping sweep now records
   round-trip time and loss per device (live values + history), charted in the
   device inspector's Health section - shown for ping-only devices too. High-metric
