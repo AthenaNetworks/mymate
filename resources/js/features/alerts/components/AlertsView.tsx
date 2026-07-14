@@ -9,7 +9,7 @@ import {
     type MaintenanceWindowInput,
 } from '../api/maintenanceWindows';
 import { useAlertTransports, useSaveAlertTransport, useDeleteAlertTransport, useTestTransport, type AlertTransportInput } from '../api/alertTransports';
-import { useAlertEvents } from '../api/alertEvents';
+import { useAlertEvents, useAckAlertEvent } from '../api/alertEvents';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
 import { useMaps } from '../../maps/api/maps';
@@ -362,12 +362,26 @@ function TransportForm({ initial, onDone }: { initial?: AlertTransport; onDone: 
                 <option value="slack">Slack</option>
                 <option value="teams">Microsoft Teams</option>
                 <option value="messenger">Messenger</option>
+                <option value="discord">Discord</option>
+                <option value="telegram">Telegram</option>
+                <option value="pagerduty">PagerDuty</option>
+                <option value="webhook">Generic webhook</option>
                 <option value="email">Email</option>
             </select>
-            {form.type === 'email' ? (
+            {form.type === 'email' && (
                 <input className={field} placeholder={`Email address${keepHint}`} value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
-            ) : (
+            )}
+            {(form.type === 'slack' || form.type === 'teams' || form.type === 'messenger' || form.type === 'discord' || form.type === 'webhook') && (
                 <input className={field} placeholder={`Incoming webhook URL${keepHint}`} value={form.webhook_url ?? ''} onChange={(e) => set('webhook_url', e.target.value)} />
+            )}
+            {form.type === 'telegram' && (
+                <>
+                    <input className={field} placeholder={`Bot token${keepHint}`} value={form.telegram_token ?? ''} onChange={(e) => set('telegram_token', e.target.value)} />
+                    <input className={field} placeholder={`Chat ID${keepHint}`} value={form.telegram_chat_id ?? ''} onChange={(e) => set('telegram_chat_id', e.target.value)} />
+                </>
+            )}
+            {form.type === 'pagerduty' && (
+                <input className={field} placeholder={`Integration routing key${keepHint}`} value={form.pagerduty_key ?? ''} onChange={(e) => set('pagerduty_key', e.target.value)} />
             )}
             <label className="flex items-center gap-2 px-1 text-sm text-white/70">
                 <input type="checkbox" checked={form.enabled ?? true} onChange={(e) => set('enabled', e.target.checked)} /> Enabled
@@ -522,6 +536,7 @@ export function AlertsView() {
     const delPolicy = useDeleteAlertPolicy();
     const delTransport = useDeleteAlertTransport();
     const testTransport = useTestTransport();
+    const ack = useAckAlertEvent();
 
     const [addingPolicy, setAddingPolicy] = useState(false);
     const [editingPolicy, setEditingPolicy] = useState<number | null>(null);
@@ -554,6 +569,22 @@ export function AlertsView() {
                                 <div key={e.id} className="flex items-center gap-2 text-xs">
                                     <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${e.status === 'firing' ? 'bg-rose-400' : 'bg-emerald-400'}`} />
                                     <span className="min-w-0 flex-1 truncate text-white/75">{e.message}</span>
+                                    {e.acknowledged_at ? (
+                                        <button
+                                            onClick={() => ack.mutate(e.id)}
+                                            title={`Acknowledged${e.acknowledged_by_name ? ` by ${e.acknowledged_by_name}` : ''} - click to clear`}
+                                            className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-300 ring-1 ring-emerald-400/25"
+                                        >
+                                            ✓ ack{e.acknowledged_by_name ? ` · ${e.acknowledged_by_name.split(' ')[0]}` : ''}
+                                        </button>
+                                    ) : e.status === 'firing' ? (
+                                        <button
+                                            onClick={() => ack.mutate(e.id)}
+                                            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium text-white/45 ring-1 ring-white/10 transition hover:text-white/80"
+                                        >
+                                            Ack
+                                        </button>
+                                    ) : null}
                                     <span className="shrink-0 text-white/35">{relativeTime(e.fired_at)}</span>
                                 </div>
                             ))}

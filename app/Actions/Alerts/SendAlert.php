@@ -113,17 +113,22 @@ class SendAlert
             TransportType::Email => Mail::mailer($this->mail->apply())->raw($message, function ($m) use ($config): void {
                 $m->to($config['email'])->subject('My Mate alert');
             }),
-            // Slack, Teams, and Messenger all take an
-            // incoming webhook that accepts a {"text": ...} POST - one path for every URL transport.
+            // Slack, Teams, Messenger and a generic Webhook all take an incoming webhook that
+            // accepts a {"text": ...} POST - one path for every such URL transport.
             //  SSRF hardening: re-check the target immediately before sending (closes
             // the DNS-rebinding gap since save-time validation) and never follow a redirect
             // (a validated public URL could otherwise 302 to an internal target).
-            TransportType::Slack, TransportType::Teams, TransportType::Messenger => $this->deliverWebhook($config, $message),
+            TransportType::Slack, TransportType::Teams, TransportType::Messenger,
+            TransportType::Webhook => $this->deliverWebhook($config, $message),
+            // Discord incoming webhooks want the message under "content", not "text".
+            TransportType::Discord => $this->deliverWebhook($config, $message, key: 'content'),
+            TransportType::Telegram => $this->deliverTelegram($config, $message),
+            TransportType::Pagerduty => $this->deliverPagerduty($config, $message),
         };
     }
 
     /** @param array<string, mixed> $config */
-    private function deliverWebhook(array $config, string $message): void
+    private function deliverWebhook(array $config, string $message, string $key = 'text'): void
     {
         $url = (string) ($config['webhook_url'] ?? '');
 
@@ -131,6 +136,49 @@ class SendAlert
             throw new RuntimeException('Webhook target is not a safe outbound destination.');
         }
 
-        Http::asJson()->withoutRedirecting()->post($url, ['text' => $message])->throw();
+        Http::asJson()->withoutRedirecting()->post($url, [$key => $message])->throw();
+    }
+
+    /**
+     * Telegram Bot API. Host is fixed (api.telegram.org), so it's not routed through
+     * OutboundHostGuard (that guards operator-supplied URLs, not a known trusted host).
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function deliverTelegram(array $config, string $message): void
+    {
+        $token = (string) ($config['telegram_token'] ?? '');
+        $chatId = (string) ($config['telegram_chat_id'] ?? '');
+        if ($token === '' || $chatId === '') {
+            throw new RuntimeException('Telegram transport is missing its bot token or chat id.');
+        }
+
+        Http::asJson()->post("https://api.telegram.org/bot{$token}/sendMessage", [
+            'chat_id' => $chatId,
+            'text' => $message,
+        ])->throw();
+    }
+
+    /**
+     * PagerDuty Events API v2 (fixed host). A trigger event with the message as the summary.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function deliverPagerduty(array $config, string $message): void
+    {
+        $routingKey = (string) ($config['pagerduty_key'] ?? '');
+        if ($routingKey === '') {
+            throw new RuntimeException('PagerDuty transport is missing its routing key.');
+        }
+
+        Http::asJson()->post('https://events.pagerduty.com/v2/enqueue', [
+            'routing_key' => $routingKey,
+            'event_action' => 'trigger',
+            'payload' => [
+                'summary' => mb_substr($message, 0, 1024),
+                'source' => 'My Mate',
+                'severity' => 'error',
+            ],
+        ])->throw();
     }
 }

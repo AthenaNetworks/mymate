@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { AlertTransport } from '../../../types';
+import type { AlertTransport, TransportType } from '../../../types';
 
 const transportsKey = ['alert-transports'] as const;
 
@@ -17,9 +17,12 @@ export function useAlertTransports() {
 export interface AlertTransportInput {
     id?: number;
     name: string;
-    type: 'email' | 'slack' | 'teams' | 'messenger';
+    type: TransportType;
     email?: string;
     webhook_url?: string;
+    telegram_token?: string;
+    telegram_chat_id?: string;
+    pagerduty_key?: string;
     enabled?: boolean;
 }
 

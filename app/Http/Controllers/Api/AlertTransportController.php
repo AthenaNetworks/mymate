@@ -49,11 +49,15 @@ class AlertTransportController extends Controller
         if (array_key_exists('enabled', $data)) {
             $attrs['enabled'] = $data['enabled'];
         }
-        // Rebuild config only if an address/URL was supplied (blank = keep existing).
+        // Rebuild config only if a secret/address was supplied (blank = keep existing).
         if (! empty($data['email'])) {
             $attrs['config'] = ['email' => $data['email']];
         } elseif (! empty($data['webhook_url'])) {
             $attrs['config'] = ['webhook_url' => $data['webhook_url']];
+        } elseif (! empty($data['telegram_token']) || ! empty($data['telegram_chat_id'])) {
+            $attrs['config'] = ['telegram_token' => $data['telegram_token'] ?? null, 'telegram_chat_id' => $data['telegram_chat_id'] ?? null];
+        } elseif (! empty($data['pagerduty_key'])) {
+            $attrs['config'] = ['pagerduty_key' => $data['pagerduty_key']];
         }
         $alertTransport->update($attrs);
 
@@ -82,8 +86,12 @@ class AlertTransportController extends Controller
     /** @param array<string, mixed> $data @return array<string, mixed> */
     private function configFrom(array $data): array
     {
-        return ($data['type'] ?? null) === 'email'
-            ? ['email' => $data['email'] ?? null]
-            : ['webhook_url' => $data['webhook_url'] ?? null];
+        return match ($data['type'] ?? null) {
+            'email' => ['email' => $data['email'] ?? null],
+            'telegram' => ['telegram_token' => $data['telegram_token'] ?? null, 'telegram_chat_id' => $data['telegram_chat_id'] ?? null],
+            'pagerduty' => ['pagerduty_key' => $data['pagerduty_key'] ?? null],
+            // slack / teams / messenger / webhook / discord
+            default => ['webhook_url' => $data['webhook_url'] ?? null],
+        };
     }
 }

@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class AlertEvent extends Model
 {
-    protected $fillable = ['alert_policy_id', 'dedupe_key', 'status', 'message', 'delivered', 'breach_started_at', 'fired_at', 'recovery_started_at', 'resolved_at'];
+    protected $fillable = ['alert_policy_id', 'dedupe_key', 'status', 'message', 'delivered', 'breach_started_at', 'fired_at', 'recovery_started_at', 'resolved_at', 'acknowledged_at', 'acknowledged_by'];
 
     protected $casts = [
         'delivered' => 'boolean',
@@ -20,10 +20,17 @@ class AlertEvent extends Model
         'fired_at' => 'datetime',
         'recovery_started_at' => 'datetime',
         'resolved_at' => 'datetime',
+        'acknowledged_at' => 'datetime',
     ];
 
     public function policy(): BelongsTo
     {
         return $this->belongsTo(AlertPolicy::class, 'alert_policy_id');
+    }
+
+    /** Who acknowledged it (soft ref - no FK, users may be pruned). */
+    public function acknowledgedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'acknowledged_by');
     }
 }

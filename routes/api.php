@@ -174,6 +174,7 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::post('alert-transports/{transport}/test', [AlertTransportController::class, 'test'])
         ->middleware('throttle:6,1')->name('alert-transports.test');
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');
+    Route::post('alert-events/{alertEvent}/ack', [AlertEventController::class, 'ack'])->name('alert-events.ack');
 
     // Auto-discovery: authorized scan ranges + the candidate review queue.
     Route::apiResource('subnets', SubnetController::class)->only(['index', 'store', 'update', 'destroy']);

@@ -28,6 +28,9 @@ class UpdateAlertTransportRequest extends FormRequest
             'email' => ['nullable', 'email'],
             // SafeOutboundUrl - see StoreAlertTransportRequest.
             'webhook_url' => ['nullable', 'url', new SafeOutboundUrl],
+            'telegram_token' => ['nullable', 'string', 'max:255'],
+            'telegram_chat_id' => ['nullable', 'string', 'max:64'],
+            'pagerduty_key' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

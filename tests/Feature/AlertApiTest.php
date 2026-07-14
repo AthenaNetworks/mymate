@@ -94,6 +94,47 @@ class AlertApiTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('params.metric');
     }
 
+    public function test_acknowledging_an_alert_event_toggles_and_records_the_operator(): void
+    {
+        $user = $this->actingAsUser();
+        $policy = AlertPolicy::factory()->create();
+        $event = AlertEvent::create([
+            'alert_policy_id' => $policy->id, 'dedupe_key' => 'device:1', 'status' => 'firing',
+            'message' => 'CPE1 is down.', 'fired_at' => now(),
+        ]);
+
+        $this->postJson("/api/alert-events/{$event->id}/ack")
+            ->assertOk()
+            ->assertJsonPath('data.acknowledged_by_name', $user->name);
+        $this->assertNotNull($event->refresh()->acknowledged_at);
+
+        // Toggling again clears it.
+        $this->postJson("/api/alert-events/{$event->id}/ack")->assertOk();
+        $this->assertNull($event->refresh()->acknowledged_at);
+    }
+
+    public function test_telegram_transport_stores_token_and_chat_id(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-transports', [
+            'name' => 'TG', 'type' => 'telegram', 'telegram_token' => 'BOTTOKEN', 'telegram_chat_id' => '42',
+        ])->assertCreated()->assertJsonPath('data.type', 'telegram');
+
+        // Secrets are never returned; verify they were stored (encrypted) via the model.
+        $config = AlertTransport::firstOrFail()->config;
+        $this->assertSame('BOTTOKEN', $config['telegram_token']);
+        $this->assertSame('42', $config['telegram_chat_id']);
+    }
+
+    public function test_pagerduty_transport_requires_a_routing_key(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-transports', ['name' => 'PD', 'type' => 'pagerduty'])
+            ->assertStatus(422)->assertJsonValidationErrors('pagerduty_key');
+    }
+
     public function test_transport_create_never_leaks_or_stores_plaintext_config(): void
     {
         $this->actingAsUser();

@@ -288,10 +288,12 @@ export interface AlertPolicy {
     transport_ids: number[];
 }
 
+export type TransportType = 'email' | 'slack' | 'teams' | 'messenger' | 'webhook' | 'discord' | 'telegram' | 'pagerduty';
+
 export interface AlertTransport {
     id: number;
     name: string;
-    type: 'email' | 'slack' | 'teams' | 'messenger';
+    type: TransportType;
     enabled: boolean;
 }
 
@@ -305,6 +307,8 @@ export interface AlertEvent {
     delivered: boolean;
     fired_at: string;
     resolved_at: string | null;
+    acknowledged_at: string | null;
+    acknowledged_by_name: string | null;
 }
 
 // Outage timeline - mirrors OutageResource.

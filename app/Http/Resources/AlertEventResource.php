@@ -19,6 +19,8 @@ class AlertEventResource extends JsonResource
             'delivered' => $this->delivered,
             'fired_at' => $this->fired_at,
             'resolved_at' => $this->resolved_at,
+            'acknowledged_at' => $this->acknowledged_at,
+            'acknowledged_by_name' => $this->whenLoaded('acknowledgedBy', fn () => $this->acknowledgedBy?->name),
         ];
     }
 }
