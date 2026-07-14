@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Actions\History\GetDeviceMetricSamples;
 use App\Actions\History\GetDeviceSamples;
+use App\Actions\History\GetPingSamples;
 use App\Actions\History\GetInterfaceSamples;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
@@ -43,6 +44,17 @@ class InterfaceSampleController extends Controller
      * Bucketed cpu/mem/temp history for the device - backs the inspector's resource chart.
      */
     public function metrics(Request $request, Device $device, GetDeviceMetricSamples $get): JsonResponse
+    {
+        [$from, $to] = $this->window($request);
+
+        return response()->json(['data' => $get($device->id, $from, $to)]);
+    }
+
+    /**
+     * GET /api/devices/{device}/ping-samples?from&to
+     * Bucketed latency / packet-loss / jitter series for the device's ping chart.
+     */
+    public function ping(Request $request, Device $device, GetPingSamples $get): JsonResponse
     {
         [$from, $to] = $this->window($request);
 

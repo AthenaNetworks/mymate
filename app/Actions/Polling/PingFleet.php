@@ -7,15 +7,23 @@ use App\Enums\DeviceStatus;
 use App\Events\DeviceStatusChanged;
 use App\Models\Device;
 use App\Services\Ping\Pinger;
+use App\Services\Ping\PingSample;
 use App\Support\EngineLog;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
- * One up/down sweep: ping every device's mgmt_ip in a single batch, then flip
- * status only for devices whose reachability changed (stamping last_change and
- * broadcasting). Returns the number of devices that changed.
+ * One up/down sweep: ping every device's mgmt_ip in a single batch, then flip status only
+ * for devices whose reachability changed (stamping last_change and broadcasting). The same
+ * sweep also carries latency/loss, which is persisted on a slower cadence (see recordLatency)
+ * so the fast status path stays cheap. Returns the number of devices that changed.
  */
 class PingFleet
 {
+    /** Cache key: unix time of the last latency-history write (throttles the trend write). */
+    private const LATENCY_KEY = 'mymate.ping.last_latency_write';
+
     public function __construct(private Pinger $pinger, private RecordOutage $outages) {}
 
     public function __invoke(): int
@@ -28,11 +36,12 @@ class PingFleet
             return 0;
         }
 
-        $reachable = array_flip($this->pinger->reachable($devices->pluck('mgmt_ip')->all()));
+        /** @var array<string, PingSample> $samples */
+        $samples = $this->pinger->measure($devices->pluck('mgmt_ip')->all());
 
         $changed = 0;
         foreach ($devices as $device) {
-            $new = isset($reachable[$device->mgmt_ip]) ? DeviceStatus::Up : DeviceStatus::Down;
+            $new = ($samples[$device->mgmt_ip] ?? null)?->reachable ? DeviceStatus::Up : DeviceStatus::Down;
 
             if ($device->status !== $new) {
                 $device->status = $new;
@@ -47,12 +56,53 @@ class PingFleet
             }
         }
 
+        $this->recordLatency($devices, $samples);
+
         EngineLog::debug('ping: sweep complete', [
             'total' => $devices->count(),
-            'reachable' => count($reachable),
+            'reachable' => count(array_filter($samples, static fn (PingSample $s): bool => $s->reachable)),
             'changed' => $changed,
         ]);
 
         return $changed;
+    }
+
+    /**
+     * Persist a latency/loss trend sample and refresh the live rtt/loss columns. Throttled to
+     * `ping.history_interval` so it runs about once a minute rather than every few-second sweep
+     * (the up/down flip above still happens every sweep).
+     *
+     * @param  Collection<int, Device>  $devices
+     * @param  array<string, PingSample>  $samples
+     */
+    private function recordLatency(Collection $devices, array $samples): void
+    {
+        $interval = max(5, (int) config('mymate.ping.history_interval', 60));
+        $last = (int) Cache::get(self::LATENCY_KEY, 0);
+        if (now()->timestamp - $last < $interval) {
+            return;
+        }
+        Cache::put(self::LATENCY_KEY, now()->timestamp, now()->addHour());
+
+        $ts = now();
+        $rows = [];
+        foreach ($devices as $device) {
+            $s = $samples[$device->mgmt_ip] ?? null;
+            if ($s === null) {
+                continue;
+            }
+            $device->forceFill(['rtt_ms' => $s->rttMs, 'loss_pct' => $s->lossPct, 'ping_at' => $ts])->save();
+            $rows[] = [
+                'device_id' => $device->id,
+                'ts' => $ts,
+                'rtt_ms' => $s->rttMs,
+                'loss_pct' => $s->lossPct,
+                'jitter_ms' => $s->jitterMs,
+            ];
+        }
+
+        if ($rows !== []) {
+            DB::table('ping_samples')->insert($rows);
+        }
     }
 }

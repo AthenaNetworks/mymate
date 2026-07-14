@@ -21,11 +21,11 @@ class StoreAlertPolicyRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'condition' => ['required', Rule::enum(AlertCondition::class)],
             'params' => ['nullable', 'array'],
-            // Threshold: a % for high_util / high_metric (cpu, mem), or °C for high_metric temp
-            // (hence the higher ceiling).
-            'params.threshold' => ['nullable', 'numeric', 'min:1', 'max:200'],
+            // Threshold: % (util / cpu / mem / loss), °C (temp) or ms (latency). One wide
+            // ceiling covers them all - an out-of-range value for a given metric just never fires.
+            'params.threshold' => ['nullable', 'numeric', 'min:1', 'max:10000'],
             // Which device metric high_metric watches.
-            'params.metric' => ['nullable', Rule::in(['cpu', 'mem', 'temp'])],
+            'params.metric' => ['nullable', Rule::in(['cpu', 'mem', 'temp', 'latency', 'loss'])],
             // Sustained-duration gate (high_util / high_metric / device_down), in minutes. 0 = instant.
             'params.duration_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
             // Dependency-aware suppression for device_down. Default true.

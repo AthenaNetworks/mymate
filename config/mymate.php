@@ -11,6 +11,16 @@ return [
         'interval' => (int) env('MYMATE_PING_INTERVAL', 5),
         'timeout_ms' => (int) env('MYMATE_PING_TIMEOUT_MS', 500),
         'retries' => (int) env('MYMATE_PING_RETRIES', 1),
+        // Probes per host per sweep. >1 gives a real per-sweep loss % and jitter (min/max
+        // RTT spread) for the latency graphs; 1 is lightest (loss is then 0/100 per sweep,
+        // still averaged into a real % on read). fping sends them in parallel.
+        'count' => (int) env('MYMATE_PING_COUNT', 3),
+        // Gap between the per-host probes (ms) when count > 1 - keeps a multi-probe sweep snappy.
+        'period_ms' => (int) env('MYMATE_PING_PERIOD_MS', 300),
+        // How often (s) to persist a latency/loss history sample + refresh the live rtt/loss
+        // columns. The up/down status flip still happens every sweep; only the trend write is
+        // throttled to keep the fast sweep cheap.
+        'history_interval' => (int) env('MYMATE_PING_HISTORY_INTERVAL', 60),
     ],
 
     // Interface throughput loop. intervals in seconds.

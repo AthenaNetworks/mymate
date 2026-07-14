@@ -313,20 +313,26 @@ class EvaluateAlerts
      */
     private function highMetric(string $metric, float $threshold, ?array $scope): array
     {
-        // column, human label, unit
-        [$col, $label, $unit] = match ($metric) {
-            'mem' => ['mem_used_pct', 'memory', '%'],
-            'temp' => ['temp_c', 'temperature', '°C'],
-            default => ['cpu_pct', 'CPU', '%'], // 'cpu'
+        // column, human label, unit, freshness column (cpu/mem/temp ride the metrics poll;
+        // latency/loss ride the ping sweep, so each is judged fresh against its own stamp).
+        [$col, $label, $unit, $stamp] = match ($metric) {
+            'mem' => ['mem_used_pct', 'memory', '%', 'metrics_at'],
+            'temp' => ['temp_c', 'temperature', '°C', 'metrics_at'],
+            'latency' => ['rtt_ms', 'latency', 'ms', 'ping_at'],
+            'loss' => ['loss_pct', 'packet loss', '%', 'ping_at'],
+            default => ['cpu_pct', 'CPU', '%', 'metrics_at'], // 'cpu'
         };
 
-        // Freshness: ignore readings older than ~10x the metrics cadence (floor 10 min).
-        $interval = max(5, (int) config('mymate.device_metrics.interval', 30));
-        $freshAfter = now()->subSeconds(max(600, $interval * 10));
+        // Freshness: ignore readings older than ~10x their cadence (floor 10 min) so a device
+        // that stopped reporting doesn't alert on a frozen value.
+        $cadence = $stamp === 'ping_at'
+            ? max(5, (int) config('mymate.ping.history_interval', 60))
+            : max(5, (int) config('mymate.device_metrics.interval', 30));
+        $freshAfter = now()->subSeconds(max(600, $cadence * 10));
 
         $query = Device::whereNotNull($col)
             ->where($col, '>=', $threshold)
-            ->where('metrics_at', '>=', $freshAfter);
+            ->where($stamp, '>=', $freshAfter);
         if ($scope !== null) {
             $query->whereIn('id', $scope);
         }

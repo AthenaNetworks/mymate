@@ -1,15 +1,16 @@
 import { useMemo } from 'react';
-import type { Device, DeviceMetricSample } from '../../../types';
+import type { Device } from '../../../types';
 import { useDeviceMetricSamples } from '../api/getDeviceMetricSamples';
+import { useDevicePingSamples } from '../api/getDevicePingSamples';
 
 // One resource row: label, sparkline of its recent history, and the current value.
-// Each metric auto-scales its own sparkline (cpu/mem are %, temp is C - no shared axis).
+// Each metric auto-scales its own sparkline (no shared axis - %, C, ms all differ).
 type Row = {
-    key: 'cpu' | 'mem' | 'temp';
+    key: string;
     label: string;
     color: string;
     current: number | null;
-    field: keyof DeviceMetricSample;
+    series: number[];
     format: (v: number) => string;
 };
 
@@ -41,35 +42,44 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
     );
 }
 
+const pct = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)}%`;
+const ms = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)} ms`;
+
 /**
- * Device resource metrics (cpu/mem/temp): current value + a recent-history sparkline per
- * metric. Renders nothing for a device that reports no metrics at all (ping-only, or gear
- * that doesn't answer the OIDs) so the inspector stays uncluttered.
+ * Device health: latency + packet loss (every monitored device), plus CPU / memory /
+ * temperature when the device reports them. Each row shows the current value and a recent
+ * sparkline; rows with no data at all are dropped so a ping-only device shows just latency.
  */
 export function DeviceResources({ device }: { device: Device }) {
-    const samples = useDeviceMetricSamples(device.id, 3600);
-    const data = samples.data ?? [];
+    const metrics = useDeviceMetricSamples(device.id, 3600).data ?? [];
+    const ping = useDevicePingSamples(device.id, 3600).data ?? [];
+
+    const seriesOf = <T,>(rows: T[], field: keyof T): number[] =>
+        rows.map((s) => s[field] as number | null).filter((v: number | null): v is number => v !== null);
 
     const rows: Row[] = [
-        { key: 'cpu', label: 'CPU', color: '#34d399', current: device.cpu_pct, field: 'cpu_pct', format: (v) => `${v.toFixed(v < 10 ? 1 : 0)}%` },
-        { key: 'mem', label: 'Memory', color: '#38bdf8', current: device.mem_used_pct, field: 'mem_used_pct', format: (v) => `${v.toFixed(v < 10 ? 1 : 0)}%` },
-        { key: 'temp', label: 'Temp', color: '#fbbf24', current: device.temp_c, field: 'temp_c', format: (v) => `${Math.round(v)}°C` },
-    ];
+        { key: 'latency', label: 'Latency', color: '#a78bfa', current: device.rtt_ms, series: seriesOf(ping, 'rtt_ms'), format: ms },
+        { key: 'loss', label: 'Loss', color: '#f87171', current: device.loss_pct, series: seriesOf(ping, 'loss_pct'), format: pct },
+        { key: 'cpu', label: 'CPU', color: '#34d399', current: device.cpu_pct, series: seriesOf(metrics, 'cpu_pct'), format: pct },
+        { key: 'mem', label: 'Memory', color: '#38bdf8', current: device.mem_used_pct, series: seriesOf(metrics, 'mem_used_pct'), format: pct },
+        { key: 'temp', label: 'Temp', color: '#fbbf24', current: device.temp_c, series: seriesOf(metrics, 'temp_c'), format: (v: number) => `${Math.round(v)}°C` },
+    ].filter((r) => r.current !== null || r.series.length > 0);
+
+    if (rows.length === 0) {
+        return <div className="text-xs text-white/35">No health data yet - collected on the next sweep.</div>;
+    }
 
     return (
         <div className="space-y-2">
-            {rows.map((r) => {
-                const series = data.map((s) => s[r.field] as number | null).filter((v): v is number => v !== null);
-                return (
-                    <div key={r.key} className="flex items-center gap-2.5">
-                        <span className="w-14 shrink-0 text-[11px] font-medium text-white/50">{r.label}</span>
-                        <Sparkline values={series} color={r.color} />
-                        <span className="w-12 shrink-0 text-right text-xs tabular-nums text-white/80">
-                            {r.current === null ? '-' : r.format(r.current)}
-                        </span>
-                    </div>
-                );
-            })}
+            {rows.map((r) => (
+                <div key={r.key} className="flex items-center gap-2.5">
+                    <span className="w-14 shrink-0 text-[11px] font-medium text-white/50">{r.label}</span>
+                    <Sparkline values={r.series} color={r.color} />
+                    <span className="w-14 shrink-0 text-right text-xs tabular-nums text-white/80">
+                        {r.current === null ? '-' : r.format(r.current)}
+                    </span>
+                </div>
+            ))}
         </div>
     );
 }

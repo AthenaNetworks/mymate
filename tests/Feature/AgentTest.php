@@ -68,7 +68,8 @@ class AgentTest extends TestCase
         // Capture which IPs the pinger is asked to probe.
         $seen = [];
         $this->mock(\App\Services\Ping\Pinger::class, function ($m) use (&$seen) {
-            $m->shouldReceive('reachable')->andReturnUsing(function (array $ips) use (&$seen) {
+            // PingFleet measures the fleet in one call; capture which IPs it was asked to ping.
+            $m->shouldReceive('measure')->andReturnUsing(function (array $ips) use (&$seen) {
                 $seen = $ips;
 
                 return [];

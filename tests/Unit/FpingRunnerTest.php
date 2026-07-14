@@ -29,6 +29,31 @@ class FpingRunnerTest extends TestCase
         $this->assertSame([], FpingRunner::parseReachable("\n   \n", ['10.0.0.1', '10.0.0.2']));
     }
 
+    public function test_parses_latency_loss_and_jitter_from_samples(): void
+    {
+        $ips = ['10.0.0.1', '10.0.0.2'];
+
+        // .1 answered 2 of 3 (rtt 2.0 and 4.0 -> avg 3.0, jitter 2.0, loss 33%); .2 answered none.
+        $stdout = <<<'JSON'
+        {"resp": {"host": "10.0.0.1", "seq": 0, "rtt": 2.0}}
+        {"resp": {"host": "10.0.0.1", "seq": 2, "rtt": 4.0}}
+        {"timeout": {"host": "10.0.0.1", "seq": 1}}
+        {"summary": {"host": "10.0.0.1", "xmt": 3, "rcv": 2, "loss": 33}}
+        {"summary": {"host": "10.0.0.2", "xmt": 3, "rcv": 0, "loss": 100}}
+        JSON;
+
+        $samples = FpingRunner::parseSamples($stdout, $ips);
+
+        $this->assertTrue($samples['10.0.0.1']->reachable);
+        $this->assertSame(3.0, $samples['10.0.0.1']->rttMs);
+        $this->assertSame(2.0, $samples['10.0.0.1']->jitterMs);
+        $this->assertSame(33.0, $samples['10.0.0.1']->lossPct);
+
+        $this->assertFalse($samples['10.0.0.2']->reachable);
+        $this->assertNull($samples['10.0.0.2']->rttMs);
+        $this->assertSame(100.0, $samples['10.0.0.2']->lossPct);
+    }
+
     public function test_hosts_with_no_replies_are_not_reachable(): void
     {
         $stdout = <<<'JSON'

@@ -61,6 +61,9 @@ export interface Device {
     mem_used_pct: number | null;
     temp_c: number | null;
     metrics_at: string | null;
+    rtt_ms: number | null;
+    loss_pct: number | null;
+    ping_at: string | null;
     // Config-backup mirror - last Rusted run, cached on the device.
     backup_enabled: boolean;
     backup_driver: string | null;
@@ -253,7 +256,7 @@ export type AlertConditionType =
     | 'backup_failed'
     | 'high_metric';
 
-export type DeviceMetricKey = 'cpu' | 'mem' | 'temp';
+export type DeviceMetricKey = 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
 
 /** Alert policy targeting - which devices a policy covers. */
 export interface AlertScope {
@@ -355,6 +358,13 @@ export interface DeviceMetricSample {
     cpu_pct: number | null;
     mem_used_pct: number | null;
     temp_c: number | null;
+}
+
+export interface DevicePingSample {
+    ts: string;
+    rtt_ms: number | null;
+    loss_pct: number | null;
+    jitter_ms: number | null;
 }
 
 // Auto-discovery - mirrors SubnetResource / DiscoveryCandidateResource.

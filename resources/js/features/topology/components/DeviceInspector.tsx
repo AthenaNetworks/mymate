@@ -663,11 +663,9 @@ export function DeviceInspector() {
             </Section>
             )}
 
-            {!pingOnly && (
-                <Section title="Resources">
-                    <DeviceResources device={device} />
-                </Section>
-            )}
+            <Section title="Health">
+                <DeviceResources device={device} />
+            </Section>
 
             {pingOnly ? (
                 <Section title="Interfaces">

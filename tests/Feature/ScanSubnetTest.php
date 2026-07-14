@@ -38,6 +38,11 @@ class ScanSubnetTest extends TestCase
             {
                 return array_values(array_intersect($ips, $this->reachable));
             }
+
+            public function measure(array $ips): array
+            {
+                return []; // ScanSubnet only uses reachable()
+            }
         });
 
         $this->app->bind(SnmpClient::class, fn () => $snmp ?? new FakeSnmpClient);

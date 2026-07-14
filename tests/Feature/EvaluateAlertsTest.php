@@ -109,6 +109,20 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
     }
 
+    public function test_high_metric_fires_on_high_latency(): void
+    {
+        Http::fake();
+        $policy = $this->policyWithSlack(AlertCondition::HighMetric, ['metric' => 'latency', 'threshold' => 100]);
+        $device = Device::factory()->create(['name' => 'BACKHAUL', 'rtt_ms' => 150, 'ping_at' => now()]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertDatabaseHas('alert_events', [
+            'alert_policy_id' => $policy->id, 'dedupe_key' => "device:{$device->id}:metric:latency", 'status' => 'firing',
+        ]);
+        Http::assertSentCount(1);
+    }
+
     public function test_high_metric_ignores_a_stale_reading(): void
     {
         Http::fake();

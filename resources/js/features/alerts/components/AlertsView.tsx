@@ -239,19 +239,25 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         <select
                             className="w-44 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
                             value={form.params?.metric ?? 'cpu'}
-                            onChange={(e) => set('params', { ...form.params, metric: e.target.value as 'cpu' | 'mem' | 'temp' })}
+                            onChange={(e) =>
+                                set('params', { ...form.params, metric: e.target.value as 'cpu' | 'mem' | 'temp' | 'latency' | 'loss' })
+                            }
                         >
                             <option value="cpu">CPU load</option>
                             <option value="mem">Memory used</option>
                             <option value="temp">Temperature</option>
+                            <option value="latency">Latency (ping)</option>
+                            <option value="loss">Packet loss</option>
                         </select>
                     </label>
                     <label className="flex items-center justify-between gap-3 text-sm text-white/70">
-                        <span>Threshold ({form.params?.metric === 'temp' ? '°C' : '%'})</span>
+                        <span>
+                            Threshold ({form.params?.metric === 'temp' ? '°C' : form.params?.metric === 'latency' ? 'ms' : '%'})
+                        </span>
                         <input
                             type="number"
                             min={1}
-                            max={form.params?.metric === 'temp' ? 200 : 100}
+                            max={form.params?.metric === 'latency' ? 10000 : form.params?.metric === 'temp' ? 200 : 100}
                             value={form.params?.threshold ?? 90}
                             onChange={(e) => set('params', { ...form.params, threshold: Number(e.target.value) })}
                             className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
@@ -272,8 +278,9 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         />
                     </label>
                     <p className="px-1 text-[11px] text-white/35">
-                        Uses each device's latest CPU / memory / temperature reading. Stale readings (a device that
-                        stopped reporting) are ignored - a down device alerts via "Device down" instead.
+                        Uses each device's latest reading (CPU / memory / temperature from the metrics poll, latency
+                        and loss from the ping sweep). Stale readings are ignored - a down device alerts via "Device
+                        down" instead.
                     </p>
                 </>
             )}

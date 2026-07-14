@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Schema;
 class ManageHistoryPartitions
 {
     /** Parent tables that are daily-partitioned; each partition is "{table}_YYYYMMDD". */
-    private const TABLES = ['interface_samples', 'device_metric_samples'];
+    private const TABLES = ['interface_samples', 'device_metric_samples', 'ping_samples'];
 
     /** @return array{created:int, dropped:int} */
     public function __invoke(): array

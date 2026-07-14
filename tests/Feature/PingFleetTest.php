@@ -27,6 +27,22 @@ class PingFleetTest extends TestCase
             {
                 return array_values(array_intersect($ips, $this->reachable));
             }
+
+            public function measure(array $ips): array
+            {
+                $out = [];
+                foreach ($ips as $ip) {
+                    $up = in_array($ip, $this->reachable, true);
+                    $out[$ip] = new \App\Services\Ping\PingSample(
+                        reachable: $up,
+                        rttMs: $up ? 12.5 : null,
+                        lossPct: $up ? 0.0 : 100.0,
+                        jitterMs: $up ? 1.5 : null,
+                    );
+                }
+
+                return $out;
+            }
         });
     }
 
@@ -44,6 +60,20 @@ class PingFleetTest extends TestCase
         $this->assertSame(DeviceStatus::Down, $down->refresh()->status);
         $this->assertNotNull($up->last_change);
         Event::assertDispatchedTimes(DeviceStatusChanged::class, 2);
+    }
+
+    public function test_records_latency_history_and_live_columns(): void
+    {
+        $device = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Up]);
+        $this->fakePinger(['10.0.0.1']); // reachable -> rtt 12.5, loss 0 (from the fake)
+
+        app(PingFleet::class)();
+
+        $device->refresh();
+        $this->assertSame(12.5, $device->rtt_ms);
+        $this->assertSame(0.0, $device->loss_pct);
+        $this->assertNotNull($device->ping_at);
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $device->id, 'rtt_ms' => 12.5, 'loss_pct' => 0]);
     }
 
     public function test_unchanged_status_emits_no_event(): void

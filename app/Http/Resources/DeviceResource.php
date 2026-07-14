@@ -47,6 +47,9 @@ class DeviceResource extends JsonResource
             'mem_used_pct' => $this->mem_used_pct,
             'temp_c' => $this->temp_c,
             'metrics_at' => $this->metrics_at,
+            'rtt_ms' => $this->rtt_ms,
+            'loss_pct' => $this->loss_pct,
+            'ping_at' => $this->ping_at,
             // Config-backup mirror - last run cached from Rusted.
             'backup_enabled' => (bool) $this->backup_enabled,
             'backup_driver' => $this->backup_driver,
