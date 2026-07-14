@@ -36,7 +36,7 @@ class CredentialController extends Controller
         $data = $request->validated();
 
         // Write-only secrets: a blank field means "keep the existing value".
-        foreach (['snmp_community', 'username', 'password'] as $secret) {
+        foreach (['snmp_community', 'username', 'password', 'private_key'] as $secret) {
             if (($data[$secret] ?? '') === '') {
                 unset($data[$secret]);
             }

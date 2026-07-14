@@ -21,6 +21,7 @@ export interface CredentialInput {
     snmp_community?: string;
     username?: string;
     password?: string;
+    private_key?: string;
     api_port?: number | null;
 }
 

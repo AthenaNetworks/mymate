@@ -190,6 +190,7 @@ export interface Credential {
     type: 'snmp' | 'routeros' | 'ssh';
     api_port: number;
     has_secret: boolean;
+    has_private_key: boolean;
     device_count: number;
 }
 

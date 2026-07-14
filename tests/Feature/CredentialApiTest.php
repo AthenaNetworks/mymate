@@ -65,9 +65,44 @@ class CredentialApiTest extends TestCase
             ->assertJsonPath('data.type', 'ssh')
             ->assertJsonPath('data.has_secret', true);
 
-        // SSH needs a username + password, like RouterOS.
+        // SSH needs a username + a password OR a key.
         $this->postJson('/api/credentials', ['name' => 'Y', 'type' => 'ssh'])
             ->assertStatus(422)->assertJsonValidationErrors(['username', 'password']);
+    }
+
+    public function test_creates_an_ssh_credential_with_a_private_key_and_no_password(): void
+    {
+        $this->actingAsUser();
+        $key = "-----BEGIN OPENSSH PRIVATE KEY-----\nAAAAsecretkeymaterial\n-----END OPENSSH PRIVATE KEY-----";
+
+        $res = $this->postJson('/api/credentials', [
+            'name' => 'Key SSH', 'type' => 'ssh', 'username' => 'backup', 'private_key' => $key,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.has_secret', true)
+            ->assertJsonPath('data.has_private_key', true);
+
+        // The key is never returned in the API payload.
+        $res->assertDontSee('secretkeymaterial');
+
+        $credential = \App\Models\Credential::firstOrFail();
+        $this->assertSame($key, $credential->private_key); // round-trips through the encrypted cast
+        // ...and is stored encrypted, not as plaintext.
+        $raw = \Illuminate\Support\Facades\DB::table('credentials')->where('id', $credential->id)->value('private_key');
+        $this->assertNotSame($key, $raw);
+    }
+
+    public function test_update_keeps_the_existing_private_key_when_blank(): void
+    {
+        $this->actingAsUser();
+        $credential = \App\Models\Credential::factory()->create([
+            'type' => 'ssh', 'username' => 'backup', 'password' => null, 'private_key' => 'KEEP-ME',
+        ]);
+
+        $this->putJson("/api/credentials/{$credential->id}", ['name' => 'Renamed', 'private_key' => ''])
+            ->assertOk();
+
+        $this->assertSame('KEEP-ME', $credential->fresh()->private_key);
     }
 
     public function test_deletes_a_credential(): void

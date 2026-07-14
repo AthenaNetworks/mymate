@@ -331,17 +331,38 @@ function CredentialForm({ initial, onDone }: { initial?: Credential; onDone: () 
                     <input
                         className={field}
                         type="password"
-                        placeholder={`Password ${keepHint}`.trim()}
+                        placeholder={
+                            form.type === 'ssh'
+                                ? `Password ${initial ? 'leave blank to keep' : '(or use a key below)'}`.trim()
+                                : `Password ${keepHint}`.trim()
+                        }
                         value={form.password ?? ''}
                         onChange={(e) => set('password', e.target.value)}
                     />
-                    <input
-                        className={`${field} tabular-nums`}
-                        type="number"
-                        placeholder="API port (8728)"
-                        value={form.api_port ?? ''}
-                        onChange={(e) => set('api_port', e.target.value === '' ? null : Number(e.target.value))}
-                    />
+                    {form.type === 'ssh' && (
+                        <>
+                            <textarea
+                                className={`${field} min-h-24 resize-y font-mono text-xs`}
+                                placeholder={`SSH private key (PEM / OpenSSH) ${initial && initial.has_private_key ? 'leave blank to keep' : 'optional'}`.trim()}
+                                value={form.private_key ?? ''}
+                                onChange={(e) => set('private_key', e.target.value)}
+                                spellCheck={false}
+                            />
+                            <p className="px-1 text-[11px] text-white/35">
+                                Provide a password, a private key, or both. The key is stored encrypted and used for
+                                key-based SSH to the device.
+                            </p>
+                        </>
+                    )}
+                    {form.type === 'routeros' && (
+                        <input
+                            className={`${field} tabular-nums`}
+                            type="number"
+                            placeholder="API port (8728)"
+                            value={form.api_port ?? ''}
+                            onChange={(e) => set('api_port', e.target.value === '' ? null : Number(e.target.value))}
+                        />
+                    )}
                 </>
             )}
             <div className="flex items-center justify-end gap-2 pt-1">

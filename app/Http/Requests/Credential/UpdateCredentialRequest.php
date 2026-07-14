@@ -25,6 +25,7 @@ class UpdateCredentialRequest extends FormRequest
             'snmp_community' => ['nullable', 'string'],
             'username' => ['nullable', 'string'],
             'password' => ['nullable', 'string'],
+            'private_key' => ['nullable', 'string'],
             'api_port' => ['nullable', 'integer', 'min:1', 'max:65535'],
         ];
     }

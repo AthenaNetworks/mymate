@@ -21,6 +21,7 @@ class CredentialResource extends JsonResource
             'has_secret' => $this->type === 'snmp'
                 ? filled($this->snmp_community)
                 : (filled($this->password) || filled($this->private_key)),
+            'has_private_key' => filled($this->private_key),
             'device_count' => $this->devices_count ?? 0,
         ];
     }
