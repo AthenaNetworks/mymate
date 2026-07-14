@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play } from '@phosphor-icons/react';
+import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass } from '@phosphor-icons/react';
 import { useDevices } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
 import { useUpdateDevice } from '../api/updateDevice';
@@ -16,6 +16,9 @@ import { pushToast } from '../../../lib/toast';
 import type { Device } from '../../../types';
 
 type PendingUpgrade = { ids: number[]; willUpgrade: UpgradePlanRow[]; skipped: UpgradePlanRow[] };
+
+const DEVICE_TYPES: Device['device_type'][] = ['router', 'switch', 'ap', 'server', 'internet', 'unknown'];
+const selectCls = 'rounded-lg bg-white/[0.04] px-2 py-1.5 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40';
 
 /** Full-page device management - add form on the left, the device list on the right. */
 export function DevicesView() {
@@ -37,10 +40,51 @@ export function DevicesView() {
     const [ordered, setOrdered] = useState(false);
     const [pendingUpgrade, setPendingUpgrade] = useState<PendingUpgrade | null>(null);
     const [deleting, setDeleting] = useState<Device | null>(null);
+    const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+    // Search + filters.
+    const [query, setQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
+    const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
+    const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
+    const q = query.trim().toLowerCase();
+    const filtered = (devices ?? []).filter(
+        (d) =>
+            (statusFilter === 'all' || d.status === statusFilter) &&
+            (typeFilter === 'all' || d.device_type === typeFilter) &&
+            (monitoredFilter === 'all' || (monitoredFilter === 'live') === d.monitored) &&
+            (!q ||
+                d.name.toLowerCase().includes(q) ||
+                d.mgmt_ip.includes(q) ||
+                (d.model ?? '').toLowerCase().includes(q) ||
+                (d.vendor ?? '').toLowerCase().includes(q)),
+    );
+    const filtersActive = q !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all';
+    const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
 
     function open(id: number) {
         selectDevice(id);
         setView('map');
+    }
+
+    function toggleAll() {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (filtered.every((d) => next.has(d.id))) {
+                filtered.forEach((d) => next.delete(d.id));
+            } else {
+                filtered.forEach((d) => next.add(d.id));
+            }
+            return next;
+        });
+    }
+
+    async function deleteSelected() {
+        const ids = [...selected];
+        await Promise.all(ids.map((id) => del.mutateAsync(id).catch(() => null)));
+        setSelected(new Set());
+        setConfirmBulkDelete(false);
+        pushToast({ title: `Deleted ${ids.length} device${ids.length > 1 ? 's' : ''}`, tone: 'info' });
     }
 
     function toggle(id: number) {
@@ -116,29 +160,84 @@ export function DevicesView() {
                     )}
 
                     <div className="min-w-0 rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
-                        <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-1">
-                            <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">All devices</p>
-                            {isAdmin && selected.size > 0 && (
-                                <div className="flex flex-wrap items-center gap-2.5">
-                                    <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-white/55">
-                                        <input
-                                            type="checkbox"
-                                            checked={ordered}
-                                            onChange={(e) => setOrdered(e.target.checked)}
-                                            className="h-3 w-3 cursor-pointer accent-amber-400"
-                                        />
-                                        Downstream-first
-                                    </label>
-                                    <button
-                                        onClick={upgradeSelected}
-                                        disabled={upgrade.isPending || preflight.isPending}
-                                        className="group flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-400/25 transition-all duration-300 ease-fluid hover:bg-amber-500/25 active:scale-[0.98] disabled:opacity-50"
-                                    >
-                                        <DownloadSimple weight="bold" className="h-3.5 w-3.5" />
-                                        {preflight.isPending ? 'Checking...' : upgrade.isPending ? 'Queuing...' : `Upgrade ${selected.size} selected`}
-                                    </button>
+                        <div className="mb-3 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
+                                    All devices <span className="text-white/25">({filtered.length})</span>
+                                </p>
+                                {isAdmin && selected.size > 0 && (
+                                    <div className="flex flex-wrap items-center gap-2.5">
+                                        <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-white/55">
+                                            <input
+                                                type="checkbox"
+                                                checked={ordered}
+                                                onChange={(e) => setOrdered(e.target.checked)}
+                                                className="h-3 w-3 cursor-pointer accent-amber-400"
+                                            />
+                                            Downstream-first
+                                        </label>
+                                        <button
+                                            onClick={upgradeSelected}
+                                            disabled={upgrade.isPending || preflight.isPending}
+                                            className="group flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-400/25 transition-all duration-300 ease-fluid hover:bg-amber-500/25 active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            <DownloadSimple weight="bold" className="h-3.5 w-3.5" />
+                                            {preflight.isPending ? 'Checking...' : upgrade.isPending ? 'Queuing...' : `Upgrade ${selected.size}`}
+                                        </button>
+                                        <button
+                                            onClick={() => setConfirmBulkDelete(true)}
+                                            disabled={del.isPending}
+                                            className="flex items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1 text-xs font-medium text-rose-200 ring-1 ring-rose-400/25 transition-all duration-300 ease-fluid hover:bg-rose-500/25 active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            <TrashSimple weight="bold" className="h-3.5 w-3.5" />
+                                            Delete {selected.size}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Search + filters. */}
+                            <div className="flex flex-wrap items-center gap-2 px-1">
+                                <div className="relative min-w-[10rem] flex-1">
+                                    <MagnifyingGlass weight="bold" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                                    <input
+                                        value={query}
+                                        onChange={(e) => setQuery(e.target.value)}
+                                        placeholder="Search name, IP, model..."
+                                        className="w-full rounded-lg bg-white/[0.04] py-1.5 pl-8 pr-3 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40 placeholder:text-white/30"
+                                    />
                                 </div>
-                            )}
+                                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)} className={selectCls}>
+                                    <option value="all">Any status</option>
+                                    <option value="up">Up</option>
+                                    <option value="down">Down</option>
+                                    <option value="unknown">Unknown</option>
+                                </select>
+                                <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as typeof typeFilter)} className={selectCls}>
+                                    <option value="all">Any type</option>
+                                    {DEVICE_TYPES.map((t) => (
+                                        <option key={t} value={t}>
+                                            {t}
+                                        </option>
+                                    ))}
+                                </select>
+                                <select value={monitoredFilter} onChange={(e) => setMonitoredFilter(e.target.value as typeof monitoredFilter)} className={selectCls}>
+                                    <option value="all">Any state</option>
+                                    <option value="live">Live</option>
+                                    <option value="paused">Paused</option>
+                                </select>
+                                {filtersActive && (
+                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
+                                        Clear
+                                    </button>
+                                )}
+                                {isAdmin && filtered.length > 0 && (
+                                    <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-white/45">
+                                        <input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 cursor-pointer accent-amber-400" />
+                                        Select all
+                                    </label>
+                                )}
+                            </div>
                         </div>
 
                         {isLoading && (
@@ -158,8 +257,14 @@ export function DevicesView() {
                             </p>
                         )}
 
+                        {!isLoading && (devices?.length ?? 0) > 0 && filtered.length === 0 && (
+                            <p className="rounded-xl bg-white/[0.02] px-3 py-3 text-xs text-white/40 ring-1 ring-white/[0.06]">
+                                No devices match your search or filters.
+                            </p>
+                        )}
+
                         <ul className="min-w-0 space-y-0.5">
-                            {devices?.map((d) => {
+                            {filtered.map((d) => {
                                 const upgradable = d.poll_method === 'routeros'; // only RouterOS can be upgraded
                                 return (
                                     <li
@@ -173,9 +278,8 @@ export function DevicesView() {
                                                 type="checkbox"
                                                 checked={selected.has(d.id)}
                                                 onChange={() => toggle(d.id)}
-                                                disabled={!upgradable}
-                                                title={upgradable ? 'Select for bulk upgrade' : 'SNMP device - not upgradable (RouterOS only)'}
-                                                className={`mr-2.5 h-3.5 w-3.5 shrink-0 accent-amber-400 ${upgradable ? 'cursor-pointer' : 'cursor-not-allowed opacity-25'}`}
+                                                title="Select (bulk upgrade / delete)"
+                                                className="mr-2.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-amber-400"
                                             />
                                         )}
                                         <button onClick={() => open(d.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -321,6 +425,24 @@ export function DevicesView() {
                 ))}
 
             {editing && <DeviceEditModal device={editing} onClose={() => setEditing(null)} />}
+
+            {confirmBulkDelete && (
+                <ConfirmDialog
+                    title="Delete devices"
+                    icon={<TrashSimple weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Delete <span className="font-semibold text-white/85">{selected.size} device{selected.size > 1 ? 's' : ''}</span>? They stop
+                            being monitored and are removed from every map. This can't be undone.
+                        </>
+                    }
+                    confirmLabel={`Delete ${selected.size}`}
+                    tone="danger"
+                    busy={del.isPending}
+                    onConfirm={deleteSelected}
+                    onClose={() => setConfirmBulkDelete(false)}
+                />
+            )}
 
             {deleting && (
                 <ConfirmDialog
