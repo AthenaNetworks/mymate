@@ -52,6 +52,39 @@ class SnmpDeviceMetricsDriverTest extends TestCase
         $this->assertSame(45.0, $m->tempC);
     }
 
+    public function test_reads_ubiquiti_airmax_rf_from_the_station_table(): void
+    {
+        $snmp = new FakeSnmpClient;
+        // ubntStaSignal (AP per-client dBm) -> averaged; ubntStaCcq (%) -> averaged.
+        $snmp->walks['.1.3.6.1.4.1.41112.1.4.7.1.3'] = ['a' => '-60', 'b' => '-70'];
+        $snmp->walks['.1.3.6.1.4.1.41112.1.4.7.1.6'] = ['a' => '90', 'b' => '80'];
+        // ubntWlStatStaCount -> reported client count value.
+        $snmp->walks['.1.3.6.1.4.1.41112.1.4.5.1.15'] = [1 => '2'];
+
+        $m = $this->driver($snmp)->sample($this->device('Ubiquiti'));
+
+        $this->assertSame(-65.0, $m->signalDbm); // avg(-60, -70)
+        $this->assertSame(85.0, $m->ccqPct);     // avg(90, 80)
+        $this->assertSame(2, $m->wirelessClients);
+        $this->assertNull($m->snrDb);            // airMAX MIB has no SNR
+    }
+
+    public function test_reads_cambium_epmp_ap_rf_from_the_per_sm_tables(): void
+    {
+        $snmp = new FakeSnmpClient;
+        // connectedSTAULRSSI / connectedSTAULSNR per SM -> averaged across the connected SMs.
+        $snmp->walks['.1.3.6.1.4.1.17713.21.1.2.30.1.4'] = [1 => '-55', 2 => '-65'];
+        $snmp->walks['.1.3.6.1.4.1.17713.21.1.2.30.1.6'] = [1 => '28', 2 => '32'];
+        // cambiumAPNumberOfConnectedSTA -> the reported count value.
+        $snmp->walks['.1.3.6.1.4.1.17713.21.1.2.10'] = [0 => '5'];
+
+        $m = $this->driver($snmp)->sample($this->device('Cambium'));
+
+        $this->assertSame(-60.0, $m->signalDbm); // avg(-55, -65)
+        $this->assertSame(30.0, $m->snrDb);      // avg(28, 32)
+        $this->assertSame(5, $m->wirelessClients);
+    }
+
     public function test_unreadable_metrics_come_back_null_not_zero(): void
     {
         // Nothing scripted - walks return [], GET returns []. Every metric is null.

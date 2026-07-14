@@ -130,17 +130,38 @@ return [
                 'clients_walk' => '.1.3.6.1.4.1.14988.1.1.1.2.1.3', // mtxrWlRtabStrength (per client)
                 'signal_oids' => ['.1.3.6.1.4.1.14988.1.1.1.1.1.4'], // mtxrWlStatStrength (station mode)
             ],
-            // Cambium ePMP / PMP (enterprise 17713). RF-over-SNMP OIDs vary by product line
-            // and firmware, so signal/snr are left for the operator to fill in per gear
-            // (MYMATE-style env or a validated profile) rather than shipping guesses; cpu/mem
-            // use the host-resources MIB, which ePMP supports.
+            // Ubiquiti airMAX (UBNT-AirMAX-MIB, enterprise 41112.1.4). RF is read from both the
+            // per-station table (an AP -> averaged across its clients) and the radio's own
+            // wlstat row (a CPE/station -> the link to its AP); whichever has data wins. airMAX
+            // exposes CCQ but not SNR. cpu/mem via the host MIB (airOS is Linux-based).
+            'ubiquiti' => [
+                'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
+                'mem' => 'hrstorage',
+                'temp_oids' => [],
+                'temp_divisor' => 1,
+                'signal_walk' => [
+                    '.1.3.6.1.4.1.41112.1.4.7.1.3', // ubntStaSignal (AP: per-client dBm)
+                    '.1.3.6.1.4.1.41112.1.4.5.1.5', // ubntWlStatSignal (CPE: link dBm)
+                ],
+                'ccq_walk' => [
+                    '.1.3.6.1.4.1.41112.1.4.7.1.6', // ubntStaCcq (AP: per-client %)
+                    '.1.3.6.1.4.1.41112.1.4.5.1.7', // ubntWlStatCcq (CPE: %)
+                ],
+                'clients_value_walk' => ['.1.3.6.1.4.1.41112.1.4.5.1.15'], // ubntWlStatStaCount
+            ],
+            // Cambium ePMP (CAMBIUM-PMP80211-MIB, enterprise 17713.21). Station (SM) RF is a
+            // scalar; the AP exposes per-SM RSSI/SNR tables and a connected-station count.
+            // Both are wired so the one profile covers an SM and an AP. cpu/mem via the host MIB.
             'cambium' => [
                 'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
                 'mem' => 'hrstorage',
                 'temp_oids' => [],
                 'temp_divisor' => 1,
-                'signal_oids' => [], // set to your ePMP/PMP RSSI OID
-                'snr_oids' => [],    // set to your ePMP/PMP SNR OID
+                'signal_oids' => ['.1.3.6.1.4.1.17713.21.1.2.3.0'],   // SM RSSI (dBm)
+                'signal_walk' => ['.1.3.6.1.4.1.17713.21.1.2.30.1.4'], // AP: connectedSTAULRSSI per SM
+                'snr_oids' => ['.1.3.6.1.4.1.17713.21.1.2.18.0'],     // SM SNR (dB)
+                'snr_walk' => ['.1.3.6.1.4.1.17713.21.1.2.30.1.6'],    // AP: connectedSTAULSNR per SM
+                'clients_value_walk' => ['.1.3.6.1.4.1.17713.21.1.2.10'], // cambiumAPNumberOfConnectedSTA
             ],
             'cisco' => [
                 'cpu_oids' => ['.1.3.6.1.4.1.9.9.109.1.1.1.1.7.1'], // cpmCPUTotal5minRev

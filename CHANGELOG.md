@@ -26,8 +26,11 @@ of commit subjects.
   as handled (recording who/when); and deliver via a generic Webhook, Discord,
   Telegram or PagerDuty in addition to email/Slack/Teams/Messenger.
 - **Wireless / RF metrics.** Signal strength, SNR, connection quality and client
-  count for wireless gear, over the RouterOS API (MikroTik) or SNMP profiles, in the
-  Health section and pushed live to the map.
+  count for wireless gear, in the Health section and pushed live to the map. Read
+  over the RouterOS API (MikroTik) and over SNMP for **Ubiquiti airMAX** (signal /
+  CCQ / client count) and **Cambium ePMP** (RSSI / SNR / connected-SM count) - each
+  profile handles both AP mode (averaged across associated stations) and station/CPE
+  mode. Vendor SNMP RF profiles are extensible via config.
 - **Custom SNMP sensors.** Define your own OIDs to poll and graph (interface errors,
   PoE draw, UPS charge, a probe - anything the gear exposes), scoped to devices,
   with the value shown in the inspector. Managed in Settings.

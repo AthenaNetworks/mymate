@@ -40,36 +40,85 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
 
     /**
      * Wireless RF over SNMP, driven by optional profile OIDs (a profile without them just
-     * leaves every field null): `signal_oids`/`snr_oids`/`ccq_oids` are GET scalars (first
-     * numeric wins), `clients_walk` is walked and its non-empty rows counted. Best-effort.
+     * leaves every field null). Each metric can be read as a scalar GET or a table walk, and
+     * both are supported so the one profile covers a device in AP mode (RF is a per-station
+     * table -> averaged) and station/CPE mode (RF is a scalar):
+     *   signal|snr|ccq _oids   GET scalars, all numeric averaged
+     *   signal|snr|ccq _walk   walk column(s), all numeric averaged
+     *   clients_walk           walk column(s), COUNT the rows (one per associated station)
+     *   clients_value_walk     walk/GET, take the reported count VALUE (summed across rows)
      *
      * @param  array<string, mixed>  $profile
      * @return array{signal:?float, snr:?float, ccq:?float, clients:?int}
      */
     private function wireless(string $host, string $community, array $profile): array
     {
-        $scalar = function (array $oids) use ($host, $community): ?float {
-            foreach ($oids as $oid) {
-                $val = $this->firstNumeric($this->snmp->get($host, $community, [$oid]));
-                if ($val !== null) {
-                    return $val;
+        return [
+            'signal' => $this->rfMeasure($host, $community, $profile['signal_oids'] ?? [], $profile['signal_walk'] ?? []),
+            'snr' => $this->rfMeasure($host, $community, $profile['snr_oids'] ?? [], $profile['snr_walk'] ?? []),
+            'ccq' => $this->rfMeasure($host, $community, $profile['ccq_oids'] ?? [], $profile['ccq_walk'] ?? []),
+            'clients' => $this->rfClients($host, $community, $profile),
+        ];
+    }
+
+    /**
+     * Average of every numeric value from the scalar GETs plus the table walks (an empty set
+     * -> null). Averaging lets an AP report the mean across its associated stations.
+     *
+     * @param  string|list<string>  $oids   scalar OIDs to GET
+     * @param  string|list<string>  $walks  table column OIDs to walk
+     */
+    private function rfMeasure(string $host, string $community, string|array $oids, string|array $walks): ?float
+    {
+        $vals = [];
+        foreach ((array) $oids as $oid) {
+            $v = $this->firstNumeric($this->snmp->get($host, $community, [$oid]));
+            if ($v !== null) {
+                $vals[] = $v;
+            }
+        }
+        foreach ((array) $walks as $oid) {
+            foreach ($this->numericValues($this->snmp->walk($host, $community, $oid)) as $v) {
+                $vals[] = $v;
+            }
+        }
+
+        return $vals === [] ? null : round(array_sum($vals) / count($vals), 1);
+    }
+
+    /** @param array<string, mixed> $profile */
+    private function rfClients(string $host, string $community, array $profile): ?int
+    {
+        // A registration/station table: one row per associated station -> count the rows.
+        if (! empty($profile['clients_walk'])) {
+            $count = 0;
+            $any = false;
+            foreach ((array) $profile['clients_walk'] as $oid) {
+                $rows = $this->numericValues($this->snmp->walk($host, $community, $oid));
+                if ($rows !== []) {
+                    $any = true;
+                    $count += count($rows);
                 }
             }
 
-            return null;
-        };
-
-        $clients = null;
-        if (! empty($profile['clients_walk'])) {
-            $clients = count($this->numericValues($this->snmp->walk($host, $community, (string) $profile['clients_walk'])));
+            return $any ? $count : null;
         }
 
-        return [
-            'signal' => $scalar((array) ($profile['signal_oids'] ?? [])),
-            'snr' => $scalar((array) ($profile['snr_oids'] ?? [])),
-            'ccq' => $scalar((array) ($profile['ccq_oids'] ?? [])),
-            'clients' => $clients,
-        ];
+        // A reported count value (e.g. cambiumAPNumberOfConnectedSTA / ubntWlStatStaCount).
+        if (! empty($profile['clients_value_walk'])) {
+            $sum = 0.0;
+            $any = false;
+            foreach ((array) $profile['clients_value_walk'] as $oid) {
+                foreach ($this->numericValues($this->snmp->walk($host, $community, $oid)) as $v) {
+                    $sum += $v;
+                    $any = true;
+                }
+            }
+
+            return $any ? (int) round($sum) : null;
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $profile */

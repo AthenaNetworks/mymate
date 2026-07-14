@@ -158,7 +158,8 @@ class CaptureDeviceFacts
         $map = [
             'mikrotik' => 'MikroTik', 'routeros' => 'MikroTik',
             'cisco' => 'Cisco', 'juniper' => 'Juniper', 'arista' => 'Arista',
-            'ubiquiti' => 'Ubiquiti', 'edgeos' => 'Ubiquiti', 'unifi' => 'Ubiquiti',
+            'ubiquiti' => 'Ubiquiti', 'edgeos' => 'Ubiquiti', 'unifi' => 'Ubiquiti', 'airos' => 'Ubiquiti', 'airmax' => 'Ubiquiti',
+            'cambium' => 'Cambium', 'epmp' => 'Cambium', 'canopy' => 'Cambium', 'cnpilot' => 'Cambium', 'pmp 450' => 'Cambium',
             'huawei' => 'Huawei', 'fortinet' => 'Fortinet', 'aruba' => 'Aruba',
             'windows' => 'Microsoft', 'linux' => 'Linux',
         ];
