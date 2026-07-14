@@ -17,6 +17,8 @@ export type UtilEdgeData = {
     mbps: number | null; // derived load on the busier end (util% x speed)
     down: boolean; // either endpoint device is down
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
+    emphasized?: boolean; // touches the selected device - bring it forward
+    dimmed?: boolean; // a device is selected but this link isn't its - push it back
 };
 
 function label(d: UtilEdgeData): string {
@@ -73,9 +75,12 @@ export function UtilEdge({
             : getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sPos, targetPosition: tPos });
 
     const color = linkColor(d.util, d.down);
-    const width = (d.down ? 3 : linkWidth(d.util)) + (selected ? 1.5 : 0);
+    const width = (d.down ? 3 : linkWidth(d.util)) + (selected || d.emphasized ? 1.5 : 0);
     // Flow speed: the shimmer travels faster as utilisation climbs (idle ~ 1.4s, saturated ~ 0.4s).
     const flowDur = Math.max(0.4, 1.4 - (d.util ?? 0) / 100);
+    // Selection focus: a selected device's links come forward, the rest fade back.
+    const baseOpacity = d.down ? 0.5 : 0.9;
+    const opacity = d.dimmed ? baseOpacity * 0.22 : baseOpacity;
 
     return (
         <>
@@ -88,7 +93,7 @@ export function UtilEdge({
                     stroke: color,
                     strokeWidth: width,
                     strokeLinecap: 'round',
-                    opacity: d.down ? 0.5 : 0.9,
+                    opacity,
                     cursor: 'pointer', // click an edge to open its utilisation history
                     strokeDasharray: d.down ? '2 8' : undefined,
                     // colour glides rather than snaps as utilisation changes
@@ -98,7 +103,7 @@ export function UtilEdge({
             {/* Flow accent (up only): a slim white shimmer gliding over the solid wire - shows
                 the link is live + the throughput direction, without the chunky-dash "motorway".
                 Period 12 divides the keyframe\'s -24 offset -> seamless loop. */}
-            {!d.down && (
+            {!d.down && !d.dimmed && (
                 <path
                     className="mm-edge-flow"
                     d={path}
@@ -119,6 +124,8 @@ export function UtilEdge({
                     style={{
                         transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                         borderColor: color,
+                        opacity: d.dimmed ? 0.3 : 1,
+                        transition: 'opacity 400ms var(--ease-fluid)',
                     }}
                     className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-[#0d0d11]/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
                 >

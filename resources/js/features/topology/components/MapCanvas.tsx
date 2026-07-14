@@ -4,7 +4,6 @@ import {
     Background,
     BackgroundVariant,
     ConnectionMode,
-    Controls,
     MiniMap,
     useNodesState,
     useEdgesState,
@@ -22,6 +21,7 @@ import { LinkBinderDialog, type PendingLink } from './LinkBinderDialog';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapSearch } from './MapSearch';
+import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useMap, useSaveMapPosition, useSaveMapLinkPosition } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
@@ -30,7 +30,7 @@ import { useDevices } from '../../devices/api/getDevices';
 import { useLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
 import { computeLayout, declump, type LayoutKind } from '../lib/layout';
-import { selectDevice, setEdgeStyle, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useLayoutKind } from '../../../lib/shellStore';
+import { selectDevice, setEdgeStyle, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import type { DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '../../../types';
 
@@ -134,6 +134,7 @@ export function MapCanvas() {
     const activeMapId = useActiveMapId();
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
     const layoutKind = useLayoutKind(); // last-applied auto-layout algorithm
+    const selectedDeviceId = useSelectedDeviceId(); // focus its links, fade the rest
     const { data: mapDetail } = useMap(activeMapId); // membership + per-map positions + inter-map links
     const savePosition = useSaveMapPosition();
     const saveLinkPosition = useSaveMapLinkPosition();
@@ -304,6 +305,23 @@ export function MapCanvas() {
         setNodes((nds) => nds.map((n) => (n.type === 'device' ? { ...n, data: { ...n.data, util: deviceUtil[Number(n.id)] ?? null } } : n)));
     }, [deviceUtil, setNodes]);
 
+    // Selection focus: a selected device brings its own links forward and fades the rest.
+    // Only touches the emphasized/dimmed flags (util fields are preserved by the spread), and
+    // no-ops when nothing changed so it never fights the live-util updater above.
+    useEffect(() => {
+        setEdges((eds) =>
+            eds.map((e) => {
+                if (e.type !== 'util') return e;
+                const connected = selectedDeviceId !== null && (Number(e.source) === selectedDeviceId || Number(e.target) === selectedDeviceId);
+                const emphasized = connected;
+                const dimmed = selectedDeviceId !== null && !connected;
+                const cur = e.data as UtilEdgeData;
+                if ((cur.emphasized ?? false) === emphasized && (cur.dimmed ?? false) === dimmed) return e;
+                return { ...e, data: { ...cur, emphasized, dimmed } };
+            }),
+        );
+    }, [selectedDeviceId, setEdges]);
+
     // Re-frame the viewport when the active map changes (once its devices have loaded).
     // Without this, switching maps keeps the previous map\'s pan/zoom and the new graph can
     // land off-screen / zoomed in. Keyed on `mapDevices` (which updates in the same render
@@ -431,8 +449,12 @@ export function MapCanvas() {
                 snapGrid={[16, 16]}
                 colorMode="dark"
             >
-                <Background variant={BackgroundVariant.Dots} gap={28} size={1} color="rgba(255,255,255,0.07)" />
-                <Controls className="!rounded-xl !border-none !bg-white/[0.04] !shadow-lg !ring-1 !ring-white/10 !backdrop-blur-xl" />
+                {/* Layered "blueprint" grid - a coarse major grid over a fine minor grid, both
+                    very faint. Reads as an instrument/graph-paper backdrop rather than the stock
+                    React Flow dot field, and gives the canvas depth against the mesh glow. */}
+                <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color="rgba(255,255,255,0.028)" />
+                <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color="rgba(255,255,255,0.05)" />
+                <MapControls />
                 <MiniMap
                     pannable
                     zoomable

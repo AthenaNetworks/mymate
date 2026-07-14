@@ -84,16 +84,23 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     return (
         // Double-bezel: outer shell (machined tray) + inner core (glass plate). No backdrop-blur
         // here - nodes live in the transforming canvas where blur would tank performance.
-        // Down devices pulse a rose glow (same `cardpulse` as the Dashboard) so an outage is
-        // unmissable across a NOC room - paired with the rose ring + the status dot (never
-        // colour-alone); honours prefers-reduced-motion.
+        // Selection dominates the visual hierarchy - a bright emerald ring-2 + an emerald halo
+        // + a small lift + raised stacking, so the picked device is unmissable across a NOC
+        // screen. Down devices otherwise pulse a rose glow (same `cardpulse` as the Dashboard);
+        // never colour-alone (the status dot pairs it). Honours prefers-reduced-motion.
         <div
-            className={`rounded-[1.25rem] bg-white/[0.04] p-1 ring-1 transition-all duration-300 ease-fluid ${
-                down
-                    ? 'animate-cardpulse ring-rose-500/70'
-                    : `shadow-[0_10px_34px_-10px_rgba(0,0,0,0.7)] ${selected ? 'ring-emerald-400/50' : 'ring-white/5'}`
+            className={`relative rounded-[1.25rem] bg-white/[0.04] p-1 ring-1 transition-all duration-300 ease-fluid ${
+                selected
+                    ? 'z-10 scale-[1.02] ring-2 ring-emerald-400/90 shadow-[0_0_0_5px_rgba(16,185,129,0.14),0_18px_55px_-12px_rgba(16,185,129,0.55)]'
+                    : down
+                        ? 'animate-cardpulse ring-rose-500/70 shadow-[0_10px_34px_-10px_rgba(0,0,0,0.7)]'
+                        : 'ring-white/5 shadow-[0_10px_34px_-10px_rgba(0,0,0,0.7)]'
             }`}
         >
+            {/* Selected: a soft emerald corner tab so selection reads even at a glance / zoomed out. */}
+            {selected && (
+                <span className="pointer-events-none absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(16,185,129,0.8)]" />
+            )}
             <div className="min-w-[12.5rem] rounded-[calc(1.25rem-0.25rem)] bg-[#0d0d11] px-3 py-2.5 ring-1 ring-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
                 <SideHandles />
 
