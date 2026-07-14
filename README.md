@@ -78,6 +78,48 @@ a Cloudflare Tunnel, uncomment the HTTP port in `docker-compose.yml` and expose 
 (the app reads `X-Forwarded-Proto`). Set your own `APP_KEY` and `REVERB_APP_SECRET`, and point
 `APP_URL` at the address you actually browse to, before you rely on it.
 
+## Upgrading
+
+Your data, `.env` and configuration are preserved across upgrades. Every method runs the
+database migrations and restarts the background services for you - there are no manual steps.
+
+### Debian / Ubuntu package
+
+Install the newer `.deb` over the existing install. It briefly holds the console in
+maintenance mode while it clears stale caches, migrates and restarts every service:
+
+```sh
+sudo apt install ./mymate_<new-version>_amd64.deb
+```
+
+### Proxmox LXC
+
+An LXC runs the Debian package inside the container, so you upgrade it exactly like the
+package - copy the new `.deb` into the container and install it. Don't import a fresh
+template; that would be a new, empty instance.
+
+```sh
+# from the Proxmox host (replace <vmid>)
+pct push <vmid> mymate_<new-version>_amd64.deb /tmp/mymate.deb
+pct exec <vmid> -- apt install -y /tmp/mymate.deb
+```
+
+Or `pct enter <vmid>` and run the package step inside the container.
+
+### Docker Compose
+
+Pull the new image and recreate the container. The entrypoint waits for the database, runs
+migrations, clears stale caches, then starts the services:
+
+```sh
+docker compose pull
+docker compose up -d
+```
+
+Pin the image tag you want in `docker-compose.yml` (or track `:latest`) before pulling. Keep
+`/etc/rusted` and `/var/lib/rusted` as named volumes so your backup history survives the
+recreate.
+
 ## First login
 
 There is no public sign up. The first account you create is always an admin:

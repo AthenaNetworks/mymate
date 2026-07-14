@@ -34,6 +34,9 @@ of commit subjects.
 - **Custom SNMP sensors.** Define your own OIDs to poll and graph (interface errors,
   PoE draw, UPS charge, a probe - anything the gear exposes), scoped to devices,
   with the value shown in the inspector. Managed in Settings.
+- **SSH private keys on credentials.** An SSH credential can now authenticate with a
+  pasted private key instead of (or alongside) a password. Stored encrypted, never
+  returned.
 - Alert rules for **failed config backups** and **high device metrics** (CPU,
   memory or temperature over a threshold). Both support the same targeting
   (all / device type / map / specific devices), sustained-duration gate and
@@ -54,6 +57,12 @@ of commit subjects.
   nudge toward the more reliable CLI import.
 
 ### Changed
+- **Graceful upgrades.** The Debian package and Docker image now clear stale compiled
+  caches (config/views/events) and always run migrations before restarting the
+  workers, so new code never meets an old schema. The package also holds the console
+  in maintenance mode during the migration and comes back up automatically. Added an
+  Upgrading section to the README covering all three installs (LXC = install the new
+  `.deb` into the container).
 - The default upload size limit for a `dude.db` is now 4 GB (was 512 MB), across the
   app, nginx and PHP, so even the largest databases upload without tuning. Imports
   also get a generous whole-job time budget so a big history import isn't killed
@@ -71,6 +80,9 @@ of commit subjects.
   layout (drawer navigation, off-canvas device inspector).
 
 ### Fixed
+- The Settings "System status" panel no longer reports the polling loop as stopped
+  right after an upgrade: it falls back to recent polling activity when the loop's
+  heartbeat is stale (the long-running loop process may not have restarted yet).
 - Login on an LXC/VM would flash the first screen and bounce straight back to the
   login page when the instance was reached by an address that wasn't baked into
   `SANCTUM_STATEFUL_DOMAINS` at first boot (a changed/DHCP IP, a hostname or DNS

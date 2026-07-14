@@ -49,8 +49,14 @@ until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USERNAME" >/dev/null 2>&1; 
     sleep 2
 done
 
+# Migrations run here, before supervisord starts php-fpm/horizon/loop below (via `exec "$@"`),
+# so on `docker compose pull && up -d` the new code always meets the new schema.
 php artisan migrate --force || echo "mymate: migrate failed - will retry next boot"
+# Drop stale compiled config/views/events - the storage volume persists these across image
+# versions, so an upgrade could otherwise render a Blade view compiled against the old build.
 php artisan config:clear >/dev/null 2>&1 || true
+php artisan view:clear >/dev/null 2>&1 || true
+php artisan event:clear >/dev/null 2>&1 || true
 chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
 # Backup engine (Rusted): generate a config with its own token on first start, init the

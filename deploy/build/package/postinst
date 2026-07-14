@@ -114,12 +114,33 @@ ICMPERR
     chmod -R u+rwX "$APP/storage" "$APP/bootstrap/cache"
 
 
-    # --- 5. app key + migrate -------------------------------------------
+    # --- 5. app key, caches + migrate -----------------------------------
     if [ "$FIRST_INSTALL" = "1" ] || ! grep -qE '^APP_KEY=base64:' "$ENVF"; then
         as_app "php artisan key:generate --force --no-interaction" || true
     fi
+
+    # On an upgrade, hold the console (503) while we migrate so nobody hits a half-migrated
+    # schema. Everything between here and `artisan up` (step 7d) is guarded (|| true / || echo),
+    # so under `set -e` the app is always brought back up even if a step fails.
+    if [ "$FIRST_INSTALL" = "0" ]; then
+        echo "my-mate: upgrade - entering maintenance mode"
+        as_app "php artisan down --retry=15" >/dev/null 2>&1 || true
+    fi
+
+    # Drop stale compiled config/views/events left by the previous build.
+    as_app "php artisan config:clear" >/dev/null 2>&1 || true
+    as_app "php artisan view:clear" >/dev/null 2>&1 || true
+    as_app "php artisan event:clear" >/dev/null 2>&1 || true
+
     echo "my-mate: running database migrations"
-    as_app "php artisan migrate --force --no-interaction"
+    if [ "$FIRST_INSTALL" = "1" ]; then
+        as_app "php artisan migrate --force --no-interaction"
+    else
+        # Non-fatal on upgrade: a failed migration must not leave the console stuck in
+        # maintenance or abort the package. Warn loudly instead.
+        as_app "php artisan migrate --force --no-interaction" \
+            || echo "my-mate: WARNING migrations failed - run: sudo -u $RUN_USER php $APP/artisan migrate --force" >&2
+    fi
 
     # A .deb install provisions on the real host here, so mark it done - the first-boot
     # service (for prebuilt LXC/VM images) is then a no-op. (The LXC build removes this.)
@@ -137,11 +158,19 @@ ICMPERR
     systemctl restart php8.4-fpm >/dev/null 2>&1 || service php8.4-fpm restart || true
 
     # --- 7. background services -----------------------------------------
+    # Restart after the migration so workers/loop pick up the new code against the new schema.
+    # horizon's unit stops via `horizon:terminate`, so in-flight jobs finish before restart.
     systemctl daemon-reload || true
     for svc in mymate-horizon mymate-reverb mymate-loop mymate-scheduler mymate-agent-hub; do
         systemctl enable "$svc" >/dev/null 2>&1 || true
         systemctl restart "$svc" >/dev/null 2>&1 || true
     done
+
+    # --- 7d. leave maintenance mode (upgrade) ---------------------------
+    if [ "$FIRST_INSTALL" = "0" ]; then
+        as_app "php artisan up" >/dev/null 2>&1 || true
+        echo "my-mate: upgrade complete - console back online"
+    fi
 
     # --- 7c. backup engine (Rusted) -------------------------------------
     # If the bundled rusted binary is present, provision it (loopback API + generated
