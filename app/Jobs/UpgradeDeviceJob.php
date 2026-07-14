@@ -22,7 +22,7 @@ class UpgradeDeviceJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(public int $deviceId)
+    public function __construct(public int $deviceId, public ?string $version = null, public string $source = 'mikrotik')
     {
         $this->onQueue('upgrade');
     }
@@ -31,7 +31,7 @@ class UpgradeDeviceJob implements ShouldQueue
     {
         $device = Device::find($this->deviceId);
         if ($device !== null) {
-            $upgrade($device);
+            $upgrade($device, $this->version, $this->source);
         }
     }
 

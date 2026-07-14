@@ -68,6 +68,53 @@ class UpgradeDeviceTest extends TestCase
         $this->assertSame([$device->id], $waiter->awaited); // waited for it to come back
     }
 
+    public function test_targeted_upgrade_fetches_the_npk_to_the_device_and_reboots(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.20.7']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.20.7 (stable)', 'architecture-name' => 'arm']],
+            // The fetched package is present on the device (so we reboot).
+            '/file/print' => [['name' => 'routeros-7.20.9-arm.npk', 'size' => '11557064']],
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.20.9', 'mikrotik');
+
+        $cmds = $client->opened[0]->commands();
+        $this->assertContains('/tool/fetch', $cmds);
+        $this->assertContains('/system/reboot', $cmds);
+        $this->assertSame(UpgradeStatus::Done, $device->refresh()->upgrade_status);
+    }
+
+    public function test_targeted_upgrade_does_not_reboot_if_the_package_never_landed(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.20.7']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.20.7', 'architecture-name' => 'arm']],
+            '/file/print' => [], // fetch failed - nothing on the device
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.20.9', 'mikrotik');
+
+        $this->assertNotContains('/system/reboot', $client->opened[0]->commands());
+        $this->assertSame(UpgradeStatus::Failed, $device->refresh()->upgrade_status);
+    }
+
+    public function test_targeted_upgrade_is_a_noop_when_already_on_that_version(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.20.9', 'architecture-name' => 'arm']],
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.20.9', 'mikrotik');
+
+        $this->assertNotContains('/system/reboot', $client->opened[0]->commands());
+        $this->assertSame(UpgradeStatus::UpToDate, $device->refresh()->upgrade_status);
+    }
+
     public function test_marks_up_to_date_when_already_on_the_latest(): void
     {
         $device = $this->routerOsDevice();

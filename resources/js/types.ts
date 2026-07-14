@@ -46,6 +46,7 @@ export interface Device {
     serial: string | null;
     cpu: string | null;
     ram_bytes: number | null;
+    arch: string | null;
     uptime_seconds: number | null;
     uptime_at: string | null;
     // Firmware upgrade tracking.

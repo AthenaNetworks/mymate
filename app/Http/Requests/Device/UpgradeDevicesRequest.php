@@ -28,6 +28,10 @@ class UpgradeDevicesRequest extends FormRequest
             'explicit_order' => ['sometimes', 'boolean'],
             // Also accepted by the preflight endpoint to preview in the given order.
             'preserve_order' => ['sometimes', 'boolean'],
+            // Target a specific RouterOS version (null = latest in the device's channel), and
+            // where the router pulls the package from: 'mikrotik' (default) or 'mirror' (us).
+            'version' => ['sometimes', 'nullable', 'string', 'regex:/^\d+\.\d+(\.\d+)?$/'],
+            'source' => ['sometimes', 'string', 'in:mikrotik,mirror'],
         ];
     }
 }

@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **RouterOS upgrades: choose a version + package mirror.** Pick a specific RouterOS
+  version (from the release channels or typed in) instead of only "latest", and
+  choose where each router pulls the package from - straight from MikroTik, or from a
+  local mirror. My Mate downloads the per-arch `.npk` once, caches it (served to
+  routers over an unguessable token URL), and keeps it for 90 days (configurable,
+  with manual delete). The chosen version is fetched onto the device and verified
+  before it reboots. Managed on the Upgrades page.
 - **Map restyle + device icons.** The topology map got a visual pass: a selected
   device now clearly stands out (emerald ring, halo, lift) and its links come forward
   while the rest fade back; a "blueprint" grid replaces the stock dot field; and a

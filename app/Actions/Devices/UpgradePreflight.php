@@ -29,7 +29,7 @@ class UpgradePreflight
      * @param  list<int>  $deviceIds
      * @return array{order: list<int>, upgrade: list<int>, plan: list<array{device_id:int, name:string, action:string, reason:?string, status:string, depth:int, os_version:?string, latest_version:?string, parent_name:?string, neighbours:list<string>}>}
      */
-    public function __invoke(array $deviceIds, bool $preserveOrder = false): array
+    public function __invoke(array $deviceIds, bool $preserveOrder = false, ?string $version = null): array
     {
         /** @var Collection<int, Device> $byId */
         $byId = Device::all()->keyBy('id');
@@ -48,7 +48,7 @@ class UpgradePreflight
         foreach ($order as $id) {
             /** @var Device $device */
             $device = $byId->get($id);
-            $reason = $this->skipReason($device, $byId);
+            $reason = $this->skipReason($device, $byId, $version);
             $parent = $device->parent_device_id !== null ? $byId->get($device->parent_device_id) : null;
             $plan[] = [
                 'device_id' => $id,
@@ -95,7 +95,7 @@ class UpgradePreflight
     }
 
     /** @param  Collection<int, Device>  $byId */
-    private function skipReason(Device $device, Collection $byId): ?string
+    private function skipReason(Device $device, Collection $byId, ?string $version = null): ?string
     {
         if ($device->poll_method !== PollMethod::RouterOs) {
             return 'not a RouterOS device';
@@ -107,7 +107,13 @@ class UpgradePreflight
         if ($parent !== null && $parent->status === DeviceStatus::Down) {
             return "parent {$parent->name} is down";
         }
-        if ($device->latest_version !== null && ! UpgradeDevice::isNewer($device->latest_version, $device->os_version)) {
+        // Targeting a specific version: only "up to date" if it's already installed (an explicit
+        // choice may even be a downgrade). Otherwise: skip when the channel latest isn't newer.
+        if ($version !== null) {
+            if ($device->os_version !== null && UpgradeDevice::normalizeVersion($version) === UpgradeDevice::normalizeVersion($device->os_version)) {
+                return 'already up to date';
+            }
+        } elseif ($device->latest_version !== null && ! UpgradeDevice::isNewer($device->latest_version, $device->os_version)) {
             return 'already up to date';
         }
 

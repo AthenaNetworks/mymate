@@ -21,3 +21,6 @@ Schedule::job(new ManageHistoryPartitionsJob)->daily()->name('history-partitions
 // (App\Support\BackupSchedule, editable on the Backups page) is due - so changing the
 // schedule takes effect without restarting the scheduler.
 Schedule::command('mymate:backup:run --scheduled')->hourly()->name('device-backups')->withoutOverlapping();
+
+// Sweep cached RouterOS upgrade packages past the retention window (default 90 days).
+Schedule::command('mymate:routeros:prune-packages')->daily()->name('routeros-package-prune')->withoutOverlapping();

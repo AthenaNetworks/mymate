@@ -97,9 +97,12 @@ class CaptureDeviceFacts
             $ram = (int) ($res['total-memory'] ?? 0);
             $serial = trim((string) ($board['serial-number'] ?? ''));
 
+            $arch = trim((string) ($res['architecture-name'] ?? ''));
+
             return [
                 'vendor' => 'MikroTik',
                 'model' => $model !== null ? trim((string) $model) : null,
+                'arch' => $arch !== '' ? $arch : null,
                 'serial' => $serial !== '' ? $serial : null,
                 'cpu' => self::formatCpu(
                     trim((string) ($res['cpu'] ?? '')),

@@ -23,14 +23,18 @@ class BulkUpgradeJob implements ShouldQueue
     public int $tries = 1;
 
     /** @param list<int> $deviceIds */
-    public function __construct(public array $deviceIds, public bool $preserveOrder = false)
-    {
+    public function __construct(
+        public array $deviceIds,
+        public bool $preserveOrder = false,
+        public ?string $version = null,
+        public string $source = 'mikrotik',
+    ) {
         $this->onQueue('upgrade');
     }
 
     public function handle(RunBulkUpgrade $run): void
     {
-        $run($this->deviceIds, $this->preserveOrder);
+        $run($this->deviceIds, $this->preserveOrder, $this->version, $this->source);
     }
 
     /** @return array<int, object> */

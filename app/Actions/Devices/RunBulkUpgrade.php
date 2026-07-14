@@ -29,9 +29,9 @@ class RunBulkUpgrade
      * @param bool $preserveOrder keep the given order (operator re-ordered by hand) instead
      *                            of re-sorting furthest-downstream-first
      */
-    public function __invoke(array $deviceIds, bool $preserveOrder = false): void
+    public function __invoke(array $deviceIds, bool $preserveOrder = false, ?string $version = null, string $source = 'mikrotik'): void
     {
-        $plan = ($this->preflight)($deviceIds, $preserveOrder);
+        $plan = ($this->preflight)($deviceIds, $preserveOrder, $version);
 
         // Mark skipped devices so their queued spinner clears with the reason.
         foreach ($plan['plan'] as $row) {
@@ -60,7 +60,7 @@ class RunBulkUpgrade
             }
 
             try {
-                ($this->upgrade)($device);
+                ($this->upgrade)($device, $version, $source);
             } catch (Throwable $e) {
                 EngineLog::error('bulk-upgrade: device failed, continuing', [
                     'device_id' => $device->id,

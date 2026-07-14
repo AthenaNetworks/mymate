@@ -8,6 +8,12 @@ use Illuminate\Support\Facades\Route;
 Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1')->name('login');
 Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 
+// RouterOS package download for routers (/tool/fetch). Unauthenticated by necessity - a
+// router carries no session - but gated by the package's unguessable token. Must be declared
+// before the SPA catch-all below.
+Route::get('/rospkg/{token}', \App\Http\Controllers\RouterosPackageDownloadController::class)
+    ->where('token', '[A-Za-z0-9]+')->name('routeros.package.download');
+
 // The SPA shell must NOT be cached: it references hashed build assets + injects the
 // per-instance boot flags (e.g. demo mode). A cached shell serves stale JS after a
 // deploy - so send no-store (browsers + Cloudflare always re-fetch the current shell).

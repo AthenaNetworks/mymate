@@ -224,6 +224,14 @@ return [
         'reboot_wait_s' => (int) env('MYMATE_UPGRADE_REBOOT_WAIT', 300),
         // How often to re-check the device's status while waiting (s).
         'poll_interval_s' => (int) env('MYMATE_UPGRADE_POLL_INTERVAL', 10),
+
+        // RouterOS package mirror/cache: choose a version + let the router pull the .npk from
+        // us or straight from MikroTik.
+        'download_base' => rtrim((string) env('MYMATE_ROUTEROS_DOWNLOAD_BASE', 'https://download.mikrotik.com/routeros'), '/'),
+        // Channel NEWEST files, resolved to the latest version per channel for the picker.
+        'channels' => ['stable', 'long-term', 'testing'],
+        // Cached packages are kept this long, then swept (routes/console.php); manual delete too.
+        'package_retention_days' => (int) env('MYMATE_ROUTEROS_PACKAGE_RETENTION_DAYS', 90),
     ],
 
     // Recent history: per-tick samples -> partitioned interface_samples,

@@ -21,7 +21,7 @@ class Device extends Model
     protected $fillable = [
         'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'map_x', 'map_y',
-        'device_type', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'uptime_seconds', 'uptime_at',
+        'device_type', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
         'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at',

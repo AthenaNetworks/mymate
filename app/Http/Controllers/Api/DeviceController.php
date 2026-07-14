@@ -69,7 +69,7 @@ class DeviceController extends Controller
         $data = $request->validated();
         $ids = array_map('intval', $data['device_ids']);
 
-        return response()->json($preflight($ids, (bool) ($data['preserve_order'] ?? false)));
+        return response()->json($preflight($ids, (bool) ($data['preserve_order'] ?? false), $data['version'] ?? null));
     }
 
     /**
@@ -89,11 +89,14 @@ class DeviceController extends Controller
             'upgrade_at' => now(),
         ]);
 
+        $version = $data['version'] ?? null;
+        $source = $data['source'] ?? 'mikrotik';
+
         if ($data['ordered'] ?? false) {
-            BulkUpgradeJob::dispatch($ids, (bool) ($data['explicit_order'] ?? false));
+            BulkUpgradeJob::dispatch($ids, (bool) ($data['explicit_order'] ?? false), $version, $source);
         } else {
             foreach ($ids as $id) {
-                UpgradeDeviceJob::dispatch($id);
+                UpgradeDeviceJob::dispatch($id, $version, $source);
             }
         }
 

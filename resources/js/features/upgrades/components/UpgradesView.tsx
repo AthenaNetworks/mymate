@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowCircleUp, ArrowUp, ArrowDown, ArrowRight, CaretLeft, Check, LinkSimple } from '@phosphor-icons/react';
+import { ArrowCircleUp, ArrowUp, ArrowDown, ArrowRight, CaretLeft, Check, LinkSimple, Trash, Archive, DownloadSimple } from '@phosphor-icons/react';
 import { useDevices } from '../../devices/api/getDevices';
-import { useUpgradePreflight, useUpgradeDevices, type UpgradePlanRow } from '../../devices/api/upgradeDevices';
+import { useUpgradePreflight, useUpgradeDevices, type UpgradePlanRow, type UpgradeSource } from '../../devices/api/upgradeDevices';
+import { useRouterosCatalog, useFetchPackage, useDeletePackage } from '../api/routerosCatalog';
 import { useIsAdmin } from '../../auth/api/auth';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
 import { StatusDot } from '../../../components/StatusDot';
@@ -25,6 +26,8 @@ export function UpgradesView() {
     const [order, setOrder] = useState<UpgradePlanRow[] | null>(null); // null = still selecting
     const [confirming, setConfirming] = useState(false);
     const [started, setStarted] = useState(false);
+    const [version, setVersion] = useState(''); // '' = latest in the device's channel
+    const [source, setSource] = useState<UpgradeSource>('mikrotik');
 
     const candidates = (devices ?? []).filter((d) => d.poll_method === 'routeros');
     const byId = new Map((devices ?? []).map((d) => [d.id, d]));
@@ -49,7 +52,7 @@ export function UpgradesView() {
         const ids = [...selected];
         if (ids.length === 0) return;
         try {
-            const p = await preflight.mutateAsync({ deviceIds: ids });
+            const p = await preflight.mutateAsync({ deviceIds: ids, version: version || null });
             // Order the rows by the preflight's furthest-first order.
             const rows = p.order.map((id) => p.plan.find((r) => r.device_id === id)).filter((r): r is UpgradePlanRow => !!r);
             setOrder(rows);
@@ -74,7 +77,7 @@ export function UpgradesView() {
         if (!order) return;
         const ids = order.map((r) => r.device_id);
         upgrade.mutate(
-            { deviceIds: ids, ordered: true, explicitOrder: true },
+            { deviceIds: ids, ordered: true, explicitOrder: true, version: version || null, source },
             {
                 onSuccess: () => {
                     setStarted(true);
@@ -101,15 +104,19 @@ export function UpgradesView() {
             </header>
 
             {order === null ? (
-                <SelectStep
-                    candidates={candidates}
-                    selected={selected}
-                    onToggle={toggle}
-                    onSelectAll={() => setSelected(new Set(candidates.map((d) => d.id)))}
-                    onClear={() => setSelected(new Set())}
-                    onPlan={plan}
-                    planning={preflight.isPending}
-                />
+                <>
+                    <UpgradeOptions version={version} setVersion={setVersion} source={source} setSource={setSource} />
+                    <SelectStep
+                        candidates={candidates}
+                        selected={selected}
+                        onToggle={toggle}
+                        onSelectAll={() => setSelected(new Set(candidates.map((d) => d.id)))}
+                        onClear={() => setSelected(new Set())}
+                        onPlan={plan}
+                        planning={preflight.isPending}
+                    />
+                    <PackageCache />
+                </>
             ) : (
                 <ReviewStep
                     order={order}
@@ -340,6 +347,121 @@ function ReviewStep({
                 </p>
             )}
         </>
+    );
+}
+
+const optField =
+    'rounded-lg bg-white/[0.04] px-3 py-1.5 text-sm text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40';
+
+function UpgradeOptions({
+    version,
+    setVersion,
+    source,
+    setSource,
+}: {
+    version: string;
+    setVersion: (v: string) => void;
+    source: UpgradeSource;
+    setSource: (s: UpgradeSource) => void;
+}) {
+    const { data: catalog } = useRouterosCatalog();
+
+    return (
+        <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
+            <p className="mb-3 text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">Target version &amp; source</p>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                    Version
+                    <input
+                        list="ros-versions"
+                        value={version}
+                        onChange={(e) => setVersion(e.target.value.trim())}
+                        placeholder="Latest (leave blank)"
+                        className={`${optField} w-48`}
+                    />
+                    <datalist id="ros-versions">
+                        {(catalog?.channels ?? []).map((c) => (
+                            <option key={`${c.major}-${c.channel}`} value={c.version}>{`v${c.major} ${c.channel}`}</option>
+                        ))}
+                    </datalist>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-white/60">
+                    Source
+                    <select value={source} onChange={(e) => setSource(e.target.value as UpgradeSource)} className={optField} disabled={!version}>
+                        <option value="mikrotik">MikroTik (router downloads direct)</option>
+                        <option value="mirror">My Mate mirror (cached here)</option>
+                    </select>
+                </label>
+            </div>
+            <p className="mt-2 text-[11px] text-white/40">
+                {version
+                    ? source === 'mirror'
+                        ? "Each device's arch package is cached here first, then the router pulls it from My Mate."
+                        : 'Each router fetches the chosen version straight from MikroTik and reboots.'
+                    : "Latest uses RouterOS's own channel update. Pick a version to install a specific release."}
+            </p>
+        </div>
+    );
+}
+
+function PackageCache() {
+    const { data: catalog } = useRouterosCatalog();
+    const fetchPkg = useFetchPackage();
+    const del = useDeletePackage();
+    const [v, setV] = useState('');
+    const [arch, setArch] = useState('');
+    const packages = catalog?.packages ?? [];
+
+    const statusTone: Record<string, string> = { ready: 'text-emerald-300', failed: 'text-rose-300', pending: 'text-amber-300' };
+
+    return (
+        <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
+            <div className="mb-3 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
+                    <Archive weight="light" className="h-3.5 w-3.5" /> Package cache
+                </p>
+                <span className="text-[11px] text-white/30">kept {catalog?.retention_days ?? 90} days</span>
+            </div>
+
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+                <input value={v} onChange={(e) => setV(e.target.value.trim())} placeholder="version e.g. 7.15.3" className={`${optField} w-40`} />
+                <select value={arch} onChange={(e) => setArch(e.target.value)} className={optField}>
+                    <option value="">arch...</option>
+                    {(catalog?.arches ?? []).map((a) => (
+                        <option key={a} value={a}>
+                            {a}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    onClick={() => { fetchPkg.mutate({ version: v, arch }); }}
+                    disabled={!/^\d+\.\d+(\.\d+)?$/.test(v) || !arch || fetchPkg.isPending}
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-200 ring-1 ring-emerald-400/25 hover:bg-emerald-500/25 disabled:opacity-40"
+                >
+                    <DownloadSimple weight="bold" className="h-3.5 w-3.5" /> Cache
+                </button>
+            </div>
+
+            {packages.length === 0 ? (
+                <p className="text-xs text-white/40">No packages cached. A "mirror" upgrade caches them automatically, or add one above.</p>
+            ) : (
+                <ul className="space-y-1">
+                    {packages.map((p) => (
+                        <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs ring-1 ring-white/[0.06]">
+                            <span className="min-w-0 flex-1 truncate">
+                                <span className="font-mono text-white/80">{p.version} · {p.arch}</span>
+                                <span className={`ml-2 ${statusTone[p.status] ?? 'text-white/40'}`}>{p.status}</span>
+                                {p.size_bytes ? <span className="ml-2 text-white/35">{(p.size_bytes / 1048576).toFixed(1)} MB</span> : null}
+                                {p.error ? <span className="ml-2 truncate text-rose-300/70">{p.error}</span> : null}
+                            </span>
+                            <button onClick={() => del.mutate(p.id)} title="Delete cached package" className="shrink-0 rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-rose-400">
+                                <Trash weight="bold" className="h-3.5 w-3.5" />
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
     );
 }
 

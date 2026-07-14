@@ -8,6 +8,7 @@ use App\Enums\UpgradeStatus;
 use App\Models\Device;
 use App\Services\RouterOs\RouterOsClient;
 use App\Services\RouterOs\RouterOsClientException;
+use App\Services\RouterOs\RouterOsConnection;
 use App\Services\RouterOs\RouterOsTarget;
 use App\Services\Upgrade\DeviceRebootWaiter;
 use App\Support\EngineLog;
@@ -35,12 +36,25 @@ use Throwable;
  */
 class UpgradeDevice
 {
+    private \App\Services\Upgrade\RouterosReleases $releases;
+
+    private \App\Actions\Upgrade\FetchRouterosPackage $packages;
+
     public function __construct(
         private RouterOsClient $client,
         private DeviceRebootWaiter $waiter,
-    ) {}
+        ?\App\Services\Upgrade\RouterosReleases $releases = null,
+        ?\App\Actions\Upgrade\FetchRouterosPackage $packages = null,
+    ) {
+        $this->releases = $releases ?? new \App\Services\Upgrade\RouterosReleases;
+        $this->packages = $packages ?? new \App\Actions\Upgrade\FetchRouterosPackage($this->releases);
+    }
 
-    public function __invoke(Device $device): void
+    /**
+     * @param  ?string  $version  target RouterOS version; null = latest in the device's channel
+     * @param  string  $source  'mikrotik' (router fetches from MikroTik) or 'mirror' (from us)
+     */
+    public function __invoke(Device $device, ?string $version = null, string $source = 'mikrotik'): void
     {
         $lock = Cache::lock("device-upgrade-inflight:{$device->id}", 900);
         if (! $lock->get()) {
@@ -50,13 +64,13 @@ class UpgradeDevice
         }
 
         try {
-            $this->run($device);
+            $this->run($device, $version, $source);
         } finally {
             $lock->release();
         }
     }
 
-    private function run(Device $device): void
+    private function run(Device $device, ?string $version = null, string $source = 'mikrotik'): void
     {
         if ($device->poll_method !== PollMethod::RouterOs) {
             $this->mark($device, UpgradeStatus::Failed, 'Not a RouterOS device - cannot upgrade.');
@@ -79,10 +93,12 @@ class UpgradeDevice
             return;
         }
 
-        $this->mark($device, UpgradeStatus::Checking, 'Checking for updates...');
+        $this->mark($device, UpgradeStatus::Checking, $version !== null ? "Preparing {$version}..." : 'Checking for updates...');
 
         try {
-            $rebooted = $this->checkAndMaybeReboot($device);
+            $rebooted = $version !== null
+                ? $this->installTargeted($device, $version, $source)
+                : $this->checkAndMaybeReboot($device);
 
             if (! $rebooted) {
                 return; // up_to_date already marked
@@ -142,6 +158,85 @@ class UpgradeDevice
         } finally {
             $conn->close();
         }
+    }
+
+    /**
+     * Install a specific version: fetch its per-arch .npk onto the router and reboot. The
+     * router pulls the package straight from MikroTik (source 'mikrotik') or from our cache
+     * (source 'mirror'); on reboot RouterOS installs any .npk in root. We verify the package
+     * landed before rebooting - never reboot on a failed fetch. Returns true if a reboot issued.
+     */
+    private function installTargeted(Device $device, string $version, string $source): bool
+    {
+        $conn = $this->client->open(RouterOsTarget::fromDevice($device));
+
+        try {
+            $res = $conn->query('/system/resource/print')[0] ?? [];
+            $arch = ($device->arch !== null && $device->arch !== '') ? $device->arch : trim((string) ($res['architecture-name'] ?? ''));
+            $installed = self::normalizeVersion((string) ($res['version'] ?? ''));
+            $device->os_version = $installed ?? $device->os_version;
+            $device->latest_version = $version;
+            $device->save();
+
+            if ($arch === '') {
+                $this->mark($device, UpgradeStatus::Failed, 'Could not determine the device architecture.');
+
+                return false;
+            }
+            if ($installed !== null && self::normalizeVersion($version) === $installed) {
+                $this->mark($device, UpgradeStatus::UpToDate, "Already on {$version}.");
+
+                return false;
+            }
+
+            $filename = $this->releases->packageFilename($version, $arch);
+
+            if ($source === 'mirror') {
+                $pkg = $this->packages->fetch($version, $arch);
+                if (! $pkg->isReady()) {
+                    $this->mark($device, UpgradeStatus::Failed, "Couldn't cache {$version}/{$arch}: ".($pkg->error ?? 'download failed').'.');
+
+                    return false;
+                }
+                $url = url('/rospkg/'.$pkg->token);
+            } else {
+                $url = $this->releases->packageUrl($version, $arch);
+            }
+
+            $this->mark($device, UpgradeStatus::Downloading, "Fetching {$version} ({$arch}) to the device...");
+            $mode = str_starts_with($url, 'https') ? 'https' : 'http';
+            $conn->query('/tool/fetch', ['url' => $url, 'dst-path' => $filename, 'mode' => $mode]);
+
+            if (! $this->fileOnDevice($conn, $filename)) {
+                $this->mark($device, UpgradeStatus::Failed, "The package didn't download onto {$device->name} - not rebooting.");
+
+                return false;
+            }
+
+            $this->mark($device, UpgradeStatus::Rebooting, "Rebooting to apply {$version}...");
+            $conn->query('/system/reboot');
+
+            return true;
+        } finally {
+            $conn->close();
+        }
+    }
+
+    /** Is a >1MB file with this name present on the router (the fetched .npk)? */
+    private function fileOnDevice(RouterOsConnection $conn, string $name): bool
+    {
+        try {
+            $rows = $conn->query('/file/print');
+        } catch (Throwable) {
+            return false;
+        }
+        foreach ($rows as $row) {
+            if (($row['name'] ?? null) === $name && (int) ($row['size'] ?? 0) > 1_000_000) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** Read the live RouterOS version after a reboot; null if the device isn't answering yet. */

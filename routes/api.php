@@ -182,6 +182,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Custom SNMP sensors (user-defined OIDs).
     Route::apiResource('sensors', \App\Http\Controllers\Api\SensorController::class)
         ->only(['index', 'store', 'update', 'destroy']);
+    // RouterOS upgrade catalog + package mirror.
+    Route::get('routeros/catalog', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'catalog'])->name('routeros.catalog');
+    Route::post('routeros/packages', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'fetch'])->name('routeros.packages.fetch');
+    Route::delete('routeros/packages/{package}', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'destroy'])->name('routeros.packages.destroy');
     Route::post('alert-transports/{transport}/test', [AlertTransportController::class, 'test'])
         ->middleware('throttle:6,1')->name('alert-transports.test');
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');
