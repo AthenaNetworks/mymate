@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, MagnifyingGlass, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -22,6 +22,7 @@ import { useLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
 import { useMap, useAddDeviceToMap, useRemoveDeviceFromMap } from '../../maps/api/maps';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
+import { AddLinkDialog } from './LinkBinderDialog';
 import { ChartModal } from './ChartModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
@@ -475,6 +476,7 @@ export function DeviceInspector() {
     const discover = useDiscoverDevice();
     const delLink = useDeleteLink();
     const [editingLink, setEditingLink] = useState<Link | null>(null);
+    const [addingLink, setAddingLink] = useState(false);
     const [deletingLink, setDeletingLink] = useState<{ id: number; label: string } | null>(null);
     const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
     const [chartExpanded, setChartExpanded] = useState(false);
@@ -727,7 +729,7 @@ export function DeviceInspector() {
 
             <Section title={`Links - ${deviceLinks.length}`}>
                 {deviceLinks.length === 0 ? (
-                    <Empty>No links yet - drag this device onto another on the map to bind one.</Empty>
+                    <Empty>No links yet - drag this device onto another on the map, or use Add link below to reach a device on any map.</Empty>
                 ) : (
                     <div className="space-y-1.5">
                         {deviceLinks.map((l) => {
@@ -765,6 +767,11 @@ export function DeviceInspector() {
                             );
                         })}
                     </div>
+                )}
+                {isAdmin && (
+                    <button onClick={() => setAddingLink(true)} className={`${actionBtn} mt-1 w-full justify-center`}>
+                        <LinkSimple weight="bold" className="h-3.5 w-3.5" /> Add link
+                    </button>
                 )}
             </Section>
 
@@ -823,6 +830,11 @@ export function DeviceInspector() {
                     defaultTab="edit"
                     onClose={() => setEditingLink(null)}
                 />
+            )}
+
+            {/* Add a link from this device to any other - including one on a different map. */}
+            {addingLink && (
+                <AddLinkDialog aDevice={device} devices={devices ?? []} onClose={() => setAddingLink(false)} />
             )}
 
             {/* Enlarged, time-adjustable total-throughput chart. */}

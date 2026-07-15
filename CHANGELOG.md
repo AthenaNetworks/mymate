@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Cross-map links.** Link a device to any other device, including one on a different
+  map, from the inspector's Add link button - search for the far end by name or IP,
+  bind each interface, done. The link shows as a portal on each map where only one end
+  is present. Previously links could only be drawn by dragging two devices together on
+  the same map.
 - **RouterOS upgrades: choose a version + package mirror.** Pick a specific RouterOS
   version (from the release channels or typed in) instead of only "latest", and
   choose where each router pulls the package from - straight from MikroTik, or from a
