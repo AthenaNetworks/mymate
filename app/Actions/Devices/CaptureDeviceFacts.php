@@ -137,7 +137,12 @@ class CaptureDeviceFacts
 
         // ENTITY-MIB gives a clean cross-vendor model + serial (chassis row). Walk each and
         // take the first meaningful value. Falls back to null (never a wrong guess).
-        $model = self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model']));
+        $model = self::cleanModel(self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model'])));
+        // MikroTik's ENTITY-MIB model row is a useless hex board id, but the real board name is
+        // right there in sysDescr ("RouterOS RB5009UPr+S+") - use it when ENTITY gave nothing.
+        if ($model === null) {
+            $model = self::modelFromSysDescr($descr);
+        }
         $serial = self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_serial']));
 
         // hrMemorySize is physical RAM in KB.
@@ -145,7 +150,7 @@ class CaptureDeviceFacts
 
         return [
             'vendor' => self::vendorFromSysDescr($descr),
-            'model' => self::cleanModel($model),
+            'model' => $model,
             'serial' => $serial,
             'ram_bytes' => is_numeric($memKb) && (int) $memKb > 0 ? (int) $memKb * 1024 : null,
             'uptime_seconds' => $ticks !== null ? intdiv((int) $ticks, 100) : null, // TimeTicks (1/100s) -> s
@@ -160,6 +165,24 @@ class CaptureDeviceFacts
      * can't map to a product page or mean anything to an operator, so drop them to null and let
      * the drawn family icon stand in. (Serials, which are legitimately numeric, are untouched.)
      */
+    /**
+     * Best-effort model from sysDescr when the ENTITY-MIB model row is missing or junk. MikroTik
+     * puts the board name in sysDescr ("RouterOS RB5009UPr+S+") and in the longer entPhysicalDescr
+     * form ("RouterOS 7.x (...) on RB5009UPr+S+") - both are the real, operator-recognisable model.
+     */
+    private static function modelFromSysDescr(string $descr): ?string
+    {
+        $descr = trim($descr);
+        if (preg_match('/\bon\s+(\S+)\s*$/i', $descr, $m) === 1) {
+            return self::cleanModel($m[1]);
+        }
+        if (preg_match('/^RouterOS\s+(\S+)$/i', $descr, $m) === 1) {
+            return self::cleanModel($m[1]);
+        }
+
+        return null;
+    }
+
     private static function cleanModel(mixed $model): ?string
     {
         $m = trim((string) $model);

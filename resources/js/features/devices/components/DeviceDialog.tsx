@@ -59,6 +59,15 @@ export function DeviceDialog({
 
     const busy = create.isPending || update.isPending;
     const isError = create.isError || update.isError;
+    // Surface the server's actual reason (e.g. "The mgmt ip has already been taken.") rather than
+    // a generic message, so a duplicate IP or bad field is obvious.
+    const serverError = (() => {
+        const e = (create.error ?? update.error) as { response?: { data?: { message?: string; errors?: Record<string, string[]> } } } | null;
+        const data = e?.response?.data;
+        if (!data) return null;
+        const firstField = data.errors ? Object.values(data.errors)[0]?.[0] : undefined;
+        return firstField ?? data.message ?? null;
+    })();
     const needsCredential = pollMethod !== 'none';
     const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
 
@@ -171,7 +180,7 @@ export function DeviceDialog({
                         </button>
                     </div>
 
-                    {isError && <p className="text-xs text-rose-400/90">Couldn't save - check the fields (a valid, routable IP is required).</p>}
+                    {isError && <p className="text-xs text-rose-400/90">{serverError ?? "Couldn't save - check the fields (a valid, routable IP is required)."}</p>}
                 </div>
             </form>
         </div>,

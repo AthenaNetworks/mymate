@@ -28,40 +28,90 @@ class FetchMikrotikIcon
         return Storage::disk('local')->exists($path) ? $path : null;
     }
 
+    /**
+     * MikroTik's product-page slugs use the marketing name (e.g. "hAP ac²" -> hap_ac2), but SNMP
+     * reports the board code ("RBD53iG-5HacD2HnD"). This maps the board-code prefix to the
+     * marketing slug for the families where the two diverge. Each entry is verified to resolve to
+     * a real product page + image; a wrong photo is worse than none, so only add verified rows.
+     */
+    private const ALIASES = [
+        'RBD53' => 'hap_ac2',
+        'RBD52' => 'hap_ac2',
+        'RBD22' => 'hap_ax_lite',
+        'C52iG' => 'hap_ax2',
+        'C53' => 'hap_ax3',
+        'cAPGi-5Hax' => 'cap_ax',
+        'cAPGi-5ac' => 'cap_ac',
+        'RBcAPGi-5Hac' => 'cap_ac',
+        'RBcAPGi-5ac' => 'cap_ac',
+        'RBwAPGR' => 'wap_ac',
+        'RBwAPG' => 'wap_ac',
+        'wAPG-5Hax' => 'wap_ax',
+        'wAPR' => 'wap_lte_kit',
+    ];
+
+    /**
+     * Ordered product-page slugs to try for a model: the verified marketing alias first, then the
+     * board-code slug and its country-variant suffixes (MikroTik pages are often only reachable as
+     * `<slug>_in` / `<slug>_us`). The stored filename is always the base slug so cachedPath() finds it.
+     *
+     * @return list<string>
+     */
+    private static function candidateSlugs(string $model): array
+    {
+        $base = self::slug($model);
+        $slugs = [];
+        foreach (self::ALIASES as $prefix => $alias) {
+            if (stripos($model, $prefix) === 0) {
+                $slugs[] = $alias;
+                break;
+            }
+        }
+        foreach ([$base, $base.'_in', $base.'_us'] as $s) {
+            if ($s !== '' && ! in_array($s, $slugs, true)) {
+                $slugs[] = $s;
+            }
+        }
+
+        return $slugs;
+    }
+
     /** Fetch + cache the image for this model. Returns the stored path, or null on any failure. */
     public function fetch(string $model): ?string
     {
-        $slug = self::slug($model);
-        if ($slug === '') {
+        $base = self::slug($model);
+        if ($base === '') {
             return null;
         }
 
-        try {
-            $page = Http::timeout(6)->withHeaders(['User-Agent' => 'my-mate-device-icons'])
-                ->get("https://mikrotik.com/product/{$slug}");
-            if (! $page->successful()) {
-                return null;
+        foreach (self::candidateSlugs($model) as $slug) {
+            try {
+                $page = Http::timeout(6)->withHeaders(['User-Agent' => 'my-mate-device-icons'])
+                    ->get("https://mikrotik.com/product/{$slug}");
+                // The main product image lives at cdn.mikrotik.com/web-assets/rb_images/<id>_lg.webp.
+                if (! $page->successful() || ! preg_match('#rb_images/(\d+)_#', $page->body(), $m)) {
+                    continue; // try the next candidate slug
+                }
+
+                $img = Http::timeout(8)->withHeaders(['User-Agent' => 'my-mate-device-icons'])
+                    ->get("https://cdn.mikrotik.com/web-assets/rb_images/{$m[1]}_lg.webp");
+                if (! $img->successful() || $img->body() === '') {
+                    continue;
+                }
+
+                // Always store under the base slug so cachedPath($model) finds it regardless of
+                // which candidate resolved.
+                $path = self::DIR."/{$base}.webp";
+                Storage::disk('local')->put($path, $img->body());
+                self::makeReadable($path);
+
+                return $path;
+            } catch (\Throwable) {
+                // network hiccup on this candidate - try the next.
             }
-
-            // The main product image lives at cdn.mikrotik.com/web-assets/rb_images/<id>_lg.webp.
-            if (! preg_match('#rb_images/(\d+)_#', $page->body(), $m)) {
-                return null;
-            }
-
-            $img = Http::timeout(8)->withHeaders(['User-Agent' => 'my-mate-device-icons'])
-                ->get("https://cdn.mikrotik.com/web-assets/rb_images/{$m[1]}_lg.webp");
-            if (! $img->successful() || $img->body() === '') {
-                return null;
-            }
-
-            $path = self::DIR."/{$slug}.webp";
-            Storage::disk('local')->put($path, $img->body());
-            self::makeReadable($path);
-
-            return $path;
-        } catch (\Throwable) {
-            return null;
         }
+
+        return null;
     }
 
     /**

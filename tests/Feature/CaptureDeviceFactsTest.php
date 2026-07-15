@@ -87,6 +87,27 @@ class CaptureDeviceFactsTest extends TestCase
         $this->assertSame(65536 * 1024, $device->ram_bytes);
     }
 
+    public function test_mikrotik_snmp_model_falls_back_to_sysdescr_when_entity_is_a_junk_board_id(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS RB5009UPr+S+',
+            $oids['sys_uptime'] => '100',
+        ];
+        // MikroTik's ENTITY-MIB model row is a useless hex board id - it must be rejected and
+        // the real board name recovered from sysDescr instead.
+        $snmp->walks[$oids['ent_model']] = [1 => '0x0002'];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+
+        $this->assertSame('RB5009UPr+S+', $device->fresh()->model);
+    }
+
     public function test_snmp_facts_populate_vendor_and_uptime(): void
     {
         $cred = Credential::factory()->create(['snmp_community' => 'public-test']);

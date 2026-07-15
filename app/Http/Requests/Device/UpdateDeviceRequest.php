@@ -19,7 +19,7 @@ class UpdateDeviceRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', new ManageableIp],
+            'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', Rule::unique('devices', 'mgmt_ip')->ignore($this->route('device')?->id), new ManageableIp],
             'poll_method' => ['sometimes', 'required', Rule::enum(PollMethod::class)],
             // Enable/disable monitoring - false pauses throughput + metrics polling.
             'monitored' => ['sometimes', 'boolean'],
