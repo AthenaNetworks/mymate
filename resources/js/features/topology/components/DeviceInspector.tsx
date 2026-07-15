@@ -23,6 +23,7 @@ import { useDeleteLink } from '../api/deleteLink';
 import { useMap, useAddDeviceToMap, useRemoveDeviceFromMap } from '../../maps/api/maps';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddLinkDialog } from './LinkBinderDialog';
+import { DeviceDialog } from '../../devices/components/DeviceDialog';
 import { ChartModal } from './ChartModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
@@ -476,6 +477,7 @@ export function DeviceInspector() {
     const discover = useDiscoverDevice();
     const delLink = useDeleteLink();
     const [editingLink, setEditingLink] = useState<Link | null>(null);
+    const [editingDevice, setEditingDevice] = useState(false);
     const [addingLink, setAddingLink] = useState(false);
     const [deletingLink, setDeletingLink] = useState<{ id: number; label: string } | null>(null);
     const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
@@ -639,6 +641,12 @@ export function DeviceInspector() {
                     </button>
                 )}
             </div>
+
+            {isAdmin && (
+                <button onClick={() => setEditingDevice(true)} className={`${actionBtn} w-full justify-center`}>
+                    <PencilSimple weight="bold" className="h-3.5 w-3.5" /> Edit device options
+                </button>
+            )}
 
             {/* Firmware version / live upgrade state. */}
             {dev.poll_method === 'routeros' && (dev.os_version || dev.upgrade_status) && (
@@ -835,6 +843,11 @@ export function DeviceInspector() {
             {/* Add a link from this device to any other - including one on a different map. */}
             {addingLink && (
                 <AddLinkDialog aDevice={device} devices={devices ?? []} onClose={() => setAddingLink(false)} />
+            )}
+
+            {/* Edit this device's options (name, IP, poll method, credential, type, monitoring). */}
+            {editingDevice && (
+                <DeviceDialog mode="edit" device={device} onClose={() => setEditingDevice(false)} />
             )}
 
             {/* Enlarged, time-adjustable total-throughput chart. */}

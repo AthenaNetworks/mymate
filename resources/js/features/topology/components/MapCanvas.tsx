@@ -13,7 +13,8 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowsOutCardinal, CaretDown, CircleDashed, Graph, Info, LineSegment, LinkBreak, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowsOutCardinal, CaretDown, CircleDashed, Globe, Graph, Info, LineSegment, LinkBreak, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
@@ -32,7 +33,7 @@ import { useDeleteLink } from '../api/deleteLink';
 import { computeLayout, declump, type LayoutKind } from '../lib/layout';
 import { selectDevice, setEdgeStyle, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
-import type { DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '../../../types';
+import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '../../../types';
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
 const nodeTypes = { device: DeviceNode, portal: MapPortalNode };
@@ -147,6 +148,8 @@ export function MapCanvas() {
     const [util, setUtil] = useState<UtilMap>({});
     const [deviceUtil, setDeviceUtil] = useState<Record<number, number | null>>({});
     const [deviceLoad, setDeviceLoad] = useState<Record<number, number | null>>({});
+    // Add-device / add-internet-object dialog (null = closed). defaults preset the internet stub.
+    const [deviceDialog, setDeviceDialog] = useState<{ defaults?: DeviceDialogDefaults } | null>(null);
     const [pending, setPending] = useState<PendingLink | null>(null);
     const [historyLinkId, setHistoryLinkId] = useState<number | null>(null);
     const [deleteLinkId, setDeleteLinkId] = useState<number | null>(null);
@@ -575,6 +578,26 @@ export function MapCanvas() {
                         </button>
                     </div>
                     {isAdmin && (
+                        <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
+                            <button
+                                onClick={() => setDeviceDialog({})}
+                                title="Add a device to this map"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <Plus weight="bold" className="h-4 w-4 text-emerald-300" />
+                                <span className="hidden sm:inline">Add device</span>
+                            </button>
+                            <button
+                                onClick={() => setDeviceDialog({ defaults: { name: 'Internet', mgmt_ip: '1.1.1.1', device_type: 'internet', poll_method: 'none' } })}
+                                title="Add a generic internet / upstream object - link a device's uplink interface back to it"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <Globe weight="light" className="h-4 w-4 text-sky-300" />
+                                <span className="hidden md:inline">Internet</span>
+                            </button>
+                        </div>
+                    )}
+                    {isAdmin && (
                     <div className="relative">
                         <button
                             onClick={() => setLayoutMenu((o) => !o)}
@@ -641,6 +664,24 @@ export function MapCanvas() {
             )}
 
             {pending && devices && <LinkBinderDialog pending={pending} devices={devices} onClose={() => setPending(null)} />}
+
+            {/* Add a device (or a generic internet object) straight onto this map: create it, then
+                drop it at the current viewport centre and select it. */}
+            {deviceDialog && (
+                <DeviceDialog
+                    mode="create"
+                    defaults={deviceDialog.defaults}
+                    onClose={() => setDeviceDialog(null)}
+                    onCreated={(d: Device) => {
+                        if (activeMapId === null) return;
+                        const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                        addToMap.mutate(
+                            { mapId: activeMapId, deviceId: d.id },
+                            { onSuccess: () => { savePosition.mutate({ mapId: activeMapId, deviceId: d.id, x: pos.x, y: pos.y }); selectDevice(d.id); } },
+                        );
+                    }}
+                />
+            )}
 
             {/* Single-click an edge -> history + an Edit tab to re-bind either end. */}
             {historyLinkId !== null && devices && links?.some((l) => l.id === historyLinkId) && (

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ArrowClockwise, CircleNotch, Eye, FloppyDisk, X } from '@phosphor-icons/react';
 import { useDeviceBackups, useDeviceLatestConfig, useProvisionSshKey, useRunBackup, useUpdateBackupConfig } from '../api/backups';
 import { pushToast } from '../../../lib/toast';
@@ -25,7 +26,10 @@ function fmtBytes(bytes: number | null): string {
 /** A read-only modal showing the latest stored config text (fetched on open). */
 function ConfigViewer({ device, onClose }: { device: Device; onClose: () => void }) {
     const { data: config, isLoading } = useDeviceLatestConfig(device.id, true);
-    return (
+    // Portal to <body>: the inspector sidebar sits inside a transformed/animated ancestor, which
+    // would otherwise become the containing block for this position:fixed overlay and trap it
+    // inside the sidebar instead of covering the whole window.
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
             <div
                 className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[#0d0d11] ring-1 ring-white/10"
@@ -52,7 +56,8 @@ function ConfigViewer({ device, onClose }: { device: Device; onClose: () => void
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 
