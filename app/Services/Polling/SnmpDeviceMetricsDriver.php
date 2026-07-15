@@ -5,6 +5,7 @@ namespace App\Services\Polling;
 use App\Models\Device;
 use App\Services\Snmp\SnmpClient;
 use App\Services\Snmp\SnmpClientException;
+use App\Services\Snmp\SnmpCredential;
 
 /**
  * CPU / memory / temperature over SNMP, driven by a per-vendor OID profile
@@ -51,7 +52,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
      * @param  array<string, mixed>  $profile
      * @return array{signal:?float, snr:?float, ccq:?float, clients:?int}
      */
-    private function wireless(string $host, string $community, array $profile): array
+    private function wireless(string $host, SnmpCredential $community, array $profile): array
     {
         return [
             'signal' => $this->rfMeasure($host, $community, $profile['signal_oids'] ?? [], $profile['signal_walk'] ?? []),
@@ -68,7 +69,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
      * @param  string|list<string>  $oids   scalar OIDs to GET
      * @param  string|list<string>  $walks  table column OIDs to walk
      */
-    private function rfMeasure(string $host, string $community, string|array $oids, string|array $walks): ?float
+    private function rfMeasure(string $host, SnmpCredential $community, string|array $oids, string|array $walks): ?float
     {
         $vals = [];
         foreach ((array) $oids as $oid) {
@@ -87,7 +88,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
     }
 
     /** @param array<string, mixed> $profile */
-    private function rfClients(string $host, string $community, array $profile): ?int
+    private function rfClients(string $host, SnmpCredential $community, array $profile): ?int
     {
         // A registration/station table: one row per associated station -> count the rows.
         if (! empty($profile['clients_walk'])) {
@@ -122,7 +123,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
     }
 
     /** @param array<string, mixed> $profile */
-    private function cpu(string $host, string $community, array $profile): ?float
+    private function cpu(string $host, SnmpCredential $community, array $profile): ?float
     {
         if (! empty($profile['cpu_walk'])) {
             $loads = $this->numericValues($this->snmp->walk($host, $community, (string) $profile['cpu_walk']));
@@ -142,7 +143,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
     }
 
     /** @param array<string, mixed> $profile */
-    private function memory(string $host, string $community, array $profile): ?float
+    private function memory(string $host, SnmpCredential $community, array $profile): ?float
     {
         return match ($profile['mem'] ?? null) {
             'hrstorage' => $this->hrStorageMemory($host, $community),
@@ -155,7 +156,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
      * Host-resources-MIB memory: walk the storage table, pick the physical-RAM row
      * (largest size among memory rows, skipping virtual/swap/cache), used/size %.
      */
-    private function hrStorageMemory(string $host, string $community): ?float
+    private function hrStorageMemory(string $host, SnmpCredential $community): ?float
     {
         $oids = config('mymate.device_metrics.hrstorage', []);
         $descr = $this->snmp->walk($host, $community, (string) $oids['descr']);
@@ -186,7 +187,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
     }
 
     /** Cisco memory pools: sum used / (used + free) across pools. */
-    private function ciscoMemory(string $host, string $community, array $profile): ?float
+    private function ciscoMemory(string $host, SnmpCredential $community, array $profile): ?float
     {
         $used = $this->numericValues($this->snmp->walk($host, $community, (string) $profile['mem_used_walk']));
         $free = $this->numericValues($this->snmp->walk($host, $community, (string) $profile['mem_free_walk']));
@@ -199,7 +200,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
     }
 
     /** @param array<string, mixed> $profile */
-    private function temperature(string $host, string $community, array $profile): ?float
+    private function temperature(string $host, SnmpCredential $community, array $profile): ?float
     {
         $divisor = max(1, (int) ($profile['temp_divisor'] ?? 1));
         $values = [];
@@ -221,18 +222,18 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
      * Resolve host + decrypted community. Mirrors SnmpThroughputDriver so a metrics
      * poll and a throughput poll fail the same way on a missing community.
      *
-     * @return array{0: string, 1: string}
+     * @return array{0: string, 1: SnmpCredential}
      */
     private function target(Device $device): array
     {
         $device->loadMissing('credential');
-        $community = $device->credential?->snmp_community;
+        $cred = SnmpCredential::fromCredential($device->credential);
 
-        if ($community === null || $community === '') {
-            throw new SnmpClientException("Device {$device->id} ({$device->name}) has no SNMP community.");
+        if (! $cred->isUsable()) {
+            throw new SnmpClientException("Device {$device->id} ({$device->name}) has no usable SNMP credential.");
         }
 
-        return [$device->mgmt_ip, $community];
+        return [$device->mgmt_ip, $cred];
     }
 
     /**

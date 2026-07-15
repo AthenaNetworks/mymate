@@ -7,8 +7,9 @@ namespace App\Services\Snmp;
  * not a concrete extension/package. Keeps the driver fakeable in tests (no
  * hardware) and lets us swap php-snmp for e.g. freedsx/snmp later.
  *
- * v2c only (64-bit ifHC counters + GETBULK). Implementations MUST use a short
- * timeout and fail fast - a filtered/black-holing host must never wedge a worker.
+ * v1/v2c (community) and v3 (USM auth/priv) - the SnmpCredential value object carries whichever
+ * applies. Uses 64-bit ifHC counters + GETBULK. Implementations MUST use a short timeout and
+ * fail fast - a filtered/black-holing host must never wedge a worker.
  */
 interface SnmpClient
 {
@@ -20,7 +21,7 @@ interface SnmpClient
      *
      * @throws SnmpClientException on timeout / transport error.
      */
-    public function get(string $host, string $community, array $oids): array;
+    public function get(string $host, SnmpCredential $cred, array $oids): array;
 
     /**
      * Walk a table column (GETBULK). Keys are the OID **suffix** relative to the
@@ -30,5 +31,5 @@ interface SnmpClient
      *
      * @throws SnmpClientException on timeout / transport error.
      */
-    public function walk(string $host, string $community, string $baseOid): array;
+    public function walk(string $host, SnmpCredential $cred, string $baseOid): array;
 }

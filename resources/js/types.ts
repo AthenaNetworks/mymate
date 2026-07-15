@@ -196,6 +196,12 @@ export interface Credential {
     has_secret: boolean;
     has_private_key: boolean;
     device_count: number;
+    // SNMP version + non-secret v3 USM params (passphrases are never returned).
+    snmp_version: '1' | '2c' | '3' | null;
+    snmp_sec_name: string | null;
+    snmp_sec_level: 'noAuthNoPriv' | 'authNoPriv' | 'authPriv' | null;
+    snmp_auth_protocol: string | null;
+    snmp_priv_protocol: string | null;
 }
 
 // Update check - this install's version vs the latest GitHub release.

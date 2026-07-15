@@ -14,6 +14,21 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **SNMPv3.** Credentials can now use SNMPv3 (USM) alongside v1/v2c: pick a security
+  level (noAuthNoPriv / authNoPriv / authPriv), an auth protocol (MD5, SHA, SHA-2) and
+  a privacy protocol (DES, AES), with the passphrases stored encrypted. Central polling,
+  discovery, device facts and custom sensors all authenticate with v3 where configured.
+- **Add & edit devices from the map.** An Add device button on the map toolbar creates a
+  device and drops it on the current map; the inspector gains an Edit device options
+  dialog (name, IP, poll method, credential, type, and a monitoring on/off toggle) - no
+  more round-trip to the Devices page.
+- **Generic internet / uplink object.** Add a placeholder upstream node from the map
+  (ping-only, defaults to pinging 1.1.1.1) and link a device's uplink interface back to
+  it - so you can monitor an uplink even when the upstream device or port was never
+  discovered.
+- **Factory reset.** A clean-slate reset (the `mymate:factory-reset` command and an
+  admin-only, password-confirmed Danger zone in Settings) wipes all monitoring data -
+  devices, maps, credentials, history, everything - and keeps only admin accounts.
 - **Cross-map links.** Link a device to any other device, including one on a different
   map, from the inspector's Add link button - search for the far end by name or IP,
   bind each interface, done. The link shows as a portal on each map where only one end
@@ -99,6 +114,20 @@ of commit subjects.
   layout (drawer navigation, off-canvas device inspector).
 
 ### Fixed
+- The device LOAD tile no longer shows a dash when interface speed is unknown: it now
+  falls back to the busiest interface's absolute throughput (e.g. 5.0M, 1.2G). The
+  percentage form needs a known link speed, which RouterOS virtual interfaces and any
+  port with no negotiated rate don't report.
+- Device product photos now show reliably: SNMP model capture no longer stores raw board
+  ids (like `0x0002`) that can't map to a product page, the map glyph skips the lookup
+  for unresolvable models, and the icon cache is written world-readable so a packaged
+  install's web user can serve it.
+- The map list scrolls when it's longer than the screen (previously it just ran off the
+  bottom with no way to reach the maps below).
+- Native dropdowns and number inputs in the credential and device forms no longer render
+  white-on-white in dark mode.
+- The latest-config viewer opens as a full-window modal instead of being trapped inside
+  the inspector sidebar.
 - The Settings "System status" panel no longer reports the polling loop as stopped
   right after an upgrade: it falls back to recent polling activity when the loop's
   heartbeat is stale (the long-running loop process may not have restarted yet).

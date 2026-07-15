@@ -23,13 +23,13 @@ class PhpSnmpClient implements SnmpClient
         private int $retries = 1,
     ) {}
 
-    public function get(string $host, string $community, array $oids): array
+    public function get(string $host, SnmpCredential $cred, array $oids): array
     {
         if ($oids === []) {
             return [];
         }
 
-        $session = $this->session($host, $community);
+        $session = $this->session($host, $cred);
 
         try {
             $result = @$session->get($oids);
@@ -45,9 +45,9 @@ class PhpSnmpClient implements SnmpClient
         }
     }
 
-    public function walk(string $host, string $community, string $baseOid): array
+    public function walk(string $host, SnmpCredential $cred, string $baseOid): array
     {
-        $session = $this->session($host, $community);
+        $session = $this->session($host, $cred);
 
         try {
             // suffix_as_keys = true -> keys are the table index (ifIndex) relative
@@ -83,9 +83,25 @@ class PhpSnmpClient implements SnmpClient
         return $value;
     }
 
-    private function session(string $host, string $community): SNMP
+    private function session(string $host, SnmpCredential $cred): SNMP
     {
-        $session = new SNMP(SNMP::VERSION_2c, $host, $community, $this->timeoutUs, $this->retries);
+        if ($cred->version === '3') {
+            // v3: the "community" slot carries the USM security (user) name; credentials are then
+            // applied with setSecurity. Only pass the auth/priv params the level actually uses so
+            // net-snmp doesn't choke on empty protocol strings.
+            $session = new SNMP(SNMP::VERSION_3, $host, $cred->secName, $this->timeoutUs, $this->retries);
+            if ($cred->secLevel === 'noAuthNoPriv') {
+                $session->setSecurity('noAuthNoPriv');
+            } elseif ($cred->secLevel === 'authNoPriv') {
+                $session->setSecurity('authNoPriv', $cred->authProtocol, $cred->authPassphrase);
+            } else {
+                $session->setSecurity('authPriv', $cred->authProtocol, $cred->authPassphrase, $cred->privProtocol, $cred->privPassphrase);
+            }
+        } else {
+            $version = $cred->version === '1' ? SNMP::VERSION_1 : SNMP::VERSION_2c;
+            $session = new SNMP($version, $host, $cred->community, $this->timeoutUs, $this->retries);
+        }
+
         $session->valueRetrieval = SNMP_VALUE_PLAIN;
         $session->oid_output_format = SNMP_OID_OUTPUT_NUMERIC;
         $session->enum_print = false;

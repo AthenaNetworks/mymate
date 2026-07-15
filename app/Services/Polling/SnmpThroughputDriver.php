@@ -5,6 +5,7 @@ namespace App\Services\Polling;
 use App\Models\Device;
 use App\Services\Snmp\SnmpClient;
 use App\Services\Snmp\SnmpClientException;
+use App\Services\Snmp\SnmpCredential;
 
 /**
  * Throughput via SNMP v2c, 64-bit ifXTable counters.
@@ -78,18 +79,18 @@ class SnmpThroughputDriver implements ThroughputDriver
     /**
      * Resolve the host + decrypted community for this device.
      *
-     * @return array{0: string, 1: string}
+     * @return array{0: string, 1: SnmpCredential}
      */
     private function target(Device $device): array
     {
         $device->loadMissing('credential');
-        $community = $device->credential?->snmp_community;
+        $cred = SnmpCredential::fromCredential($device->credential);
 
-        if ($community === null || $community === '') {
-            throw new SnmpClientException("Device {$device->id} ({$device->name}) has no SNMP community.");
+        if (! $cred->isUsable()) {
+            throw new SnmpClientException("Device {$device->id} ({$device->name}) has no usable SNMP credential.");
         }
 
-        return [$device->mgmt_ip, $community];
+        return [$device->mgmt_ip, $cred];
     }
 
     /** @return array<string, string> */

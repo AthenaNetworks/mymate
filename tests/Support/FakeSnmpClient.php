@@ -4,6 +4,7 @@ namespace Tests\Support;
 
 use App\Services\Snmp\SnmpClient;
 use App\Services\Snmp\SnmpClientException;
+use App\Services\Snmp\SnmpCredential;
 
 /**
  * In-memory SnmpClient for tests - no hardware.
@@ -27,10 +28,13 @@ class FakeSnmpClient implements SnmpClient
     /** When true, a table walk throws (simulates an SNMP timeout / filtered port). */
     public bool $throwOnWalk = false;
 
-    public function get(string $host, string $community, array $oids): array
+    public function get(string $host, SnmpCredential $cred, array $oids): array
     {
-        if (array_key_exists($community, $this->getsByCommunity)) {
-            return $this->getsByCommunity[$community];
+        // Discovery scripts responses by the identity that answered - the community for v1/v2c,
+        // the USM user for v3.
+        $key = $cred->version === '3' ? $cred->secName : $cred->community;
+        if (array_key_exists($key, $this->getsByCommunity)) {
+            return $this->getsByCommunity[$key];
         }
 
         if ($this->throwOnUnknownGet) {
@@ -40,7 +44,7 @@ class FakeSnmpClient implements SnmpClient
         return [];
     }
 
-    public function walk(string $host, string $community, string $baseOid): array
+    public function walk(string $host, SnmpCredential $cred, string $baseOid): array
     {
         if ($this->throwOnWalk) {
             throw new SnmpClientException("SNMP walk failed for {$host}: no response");

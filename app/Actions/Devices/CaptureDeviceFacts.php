@@ -123,8 +123,8 @@ class CaptureDeviceFacts
     private function fromSnmp(Device $device): array
     {
         $device->loadMissing('credential');
-        $community = $device->credential?->snmp_community;
-        if ($community === null || $community === '') {
+        $community = \App\Services\Snmp\SnmpCredential::fromCredential($device->credential);
+        if (! $community->isUsable()) {
             return [];
         }
 

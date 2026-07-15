@@ -39,8 +39,8 @@ class PollSensors
         $history = [];
 
         foreach ($devices as $device) {
-            $community = $device->credential?->snmp_community;
-            if (! $community) {
+            $community = \App\Services\Snmp\SnmpCredential::fromCredential($device->credential);
+            if (! $community->isUsable()) {
                 continue; // custom sensors are SNMP GETs - skip non-SNMP devices
             }
 

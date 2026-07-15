@@ -294,6 +294,12 @@ function CredentialForm({ initial, onDone }: { initial?: Credential; onDone: () 
         name: initial?.name ?? '',
         type: initial?.type ?? 'snmp',
         api_port: initial?.api_port ?? 8728,
+        // SNMP version + non-secret v3 params pre-populate on edit; passphrases start blank.
+        snmp_version: initial?.snmp_version ?? '2c',
+        snmp_sec_name: initial?.snmp_sec_name ?? '',
+        snmp_sec_level: initial?.snmp_sec_level ?? 'authPriv',
+        snmp_auth_protocol: initial?.snmp_auth_protocol ?? 'SHA',
+        snmp_priv_protocol: initial?.snmp_priv_protocol ?? 'AES',
     });
     const set = <K extends keyof CredentialInput>(k: K, v: CredentialInput[K]) => setForm((f) => ({ ...f, [k]: v }));
     const keepHint = initial ? 'leave blank to keep' : '';
@@ -317,13 +323,64 @@ function CredentialForm({ initial, onDone }: { initial?: Credential; onDone: () 
                 <option value="ssh">SSH (for backups)</option>
             </select>
             {form.type === 'snmp' ? (
-                <input
-                    className={field}
-                    type="password"
-                    placeholder={`SNMP community ${keepHint}`.trim()}
-                    value={form.snmp_community ?? ''}
-                    onChange={(e) => set('snmp_community', e.target.value)}
-                />
+                <>
+                    <select className={field} value={form.snmp_version ?? '2c'} onChange={(e) => set('snmp_version', e.target.value as CredentialInput['snmp_version'])}>
+                        <option value="2c">SNMP v2c</option>
+                        <option value="1">SNMP v1</option>
+                        <option value="3">SNMP v3</option>
+                    </select>
+                    {form.snmp_version === '3' ? (
+                        <>
+                            <input
+                                className={field}
+                                placeholder="Security (user) name"
+                                value={form.snmp_sec_name ?? ''}
+                                onChange={(e) => set('snmp_sec_name', e.target.value)}
+                            />
+                            <select className={field} value={form.snmp_sec_level ?? 'authPriv'} onChange={(e) => set('snmp_sec_level', e.target.value as CredentialInput['snmp_sec_level'])}>
+                                <option value="authPriv">authPriv (auth + encrypt)</option>
+                                <option value="authNoPriv">authNoPriv (auth only)</option>
+                                <option value="noAuthNoPriv">noAuthNoPriv</option>
+                            </select>
+                            {form.snmp_sec_level !== 'noAuthNoPriv' && (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select className={field} value={form.snmp_auth_protocol ?? 'SHA'} onChange={(e) => set('snmp_auth_protocol', e.target.value)}>
+                                        {['SHA', 'MD5', 'SHA-256', 'SHA-512', 'SHA-224', 'SHA-384'].map((p) => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                    <input
+                                        className={field}
+                                        type="password"
+                                        placeholder={`Auth passphrase ${keepHint}`.trim()}
+                                        value={form.snmp_auth_passphrase ?? ''}
+                                        onChange={(e) => set('snmp_auth_passphrase', e.target.value)}
+                                    />
+                                </div>
+                            )}
+                            {form.snmp_sec_level === 'authPriv' && (
+                                <div className="grid grid-cols-2 gap-2">
+                                    <select className={field} value={form.snmp_priv_protocol ?? 'AES'} onChange={(e) => set('snmp_priv_protocol', e.target.value)}>
+                                        {['AES', 'DES', 'AES-192', 'AES-256'].map((p) => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                    <input
+                                        className={field}
+                                        type="password"
+                                        placeholder={`Privacy passphrase ${keepHint}`.trim()}
+                                        value={form.snmp_priv_passphrase ?? ''}
+                                        onChange={(e) => set('snmp_priv_passphrase', e.target.value)}
+                                    />
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <input
+                            className={field}
+                            type="password"
+                            placeholder={`SNMP community ${keepHint}`.trim()}
+                            value={form.snmp_community ?? ''}
+                            onChange={(e) => set('snmp_community', e.target.value)}
+                        />
+                    )}
+                </>
             ) : (
                 <>
                     <input

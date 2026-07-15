@@ -49,8 +49,8 @@ class HostProber
         $sysNameOid = (string) config('mymate.snmp.oids.sys_name', '.1.3.6.1.2.1.1.5.0');
 
         foreach ($creds as $cred) {
-            $community = (string) $cred->snmp_community;
-            if ($community === '') {
+            $community = \App\Services\Snmp\SnmpCredential::fromCredential($cred);
+            if (! $community->isUsable()) {
                 continue;
             }
             try {

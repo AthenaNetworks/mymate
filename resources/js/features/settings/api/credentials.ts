@@ -23,6 +23,14 @@ export interface CredentialInput {
     password?: string;
     private_key?: string;
     api_port?: number | null;
+    // SNMPv3 (USM). Passphrases are write-only; blank on edit keeps the stored value.
+    snmp_version?: '1' | '2c' | '3';
+    snmp_sec_name?: string;
+    snmp_sec_level?: 'noAuthNoPriv' | 'authNoPriv' | 'authPriv';
+    snmp_auth_protocol?: string;
+    snmp_auth_passphrase?: string;
+    snmp_priv_protocol?: string;
+    snmp_priv_passphrase?: string;
 }
 
 export function useSaveCredential() {
