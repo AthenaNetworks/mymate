@@ -534,6 +534,10 @@ export function MapCanvas() {
                 }}
                 fitView
                 fitViewOptions={{ padding: 0.3 }}
+                // React Flow's default minZoom is 0.5 - far too tight to fit a large map (dozens of
+                // 200px nodes), so fitView would clamp and land zoomed into a corner, especially on
+                // a phone. Allow it to zoom right out so the whole topology fits on any screen.
+                minZoom={0.1}
                 snapToGrid
                 snapGrid={[16, 16]}
                 colorMode="dark"
