@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\DeviceBackupController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DiscoverDeviceController;
 use App\Http\Controllers\Api\DiscoveryCandidateController;
+use App\Http\Controllers\Api\FactoryResetController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InterfaceController;
@@ -62,6 +63,11 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
         Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     });
+
+    // Danger zone: wipe all monitoring data, keep only admin accounts. Admin-only + password-
+    // confirmed in the controller, and tightly rate-limited.
+    Route::post('system/factory-reset', [FactoryResetController::class, 'store'])
+        ->middleware(['admin', 'throttle:3,10'])->name('system.factory-reset');
 
     // Device CRUD + map position.
     Route::patch('devices/{device}/position', [DeviceController::class, 'updatePosition'])

@@ -8,6 +8,7 @@ import { useCredentials, useSaveCredential, useDeleteCredential, type Credential
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
 import { useAgents, useEnrolAgent, useDeleteAgent } from '../api/agents';
+import { useFactoryReset } from '../api/factoryReset';
 import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
 import { ConfirmDialog } from '../../../components/Dialog';
@@ -1085,6 +1086,89 @@ function AboutSection() {
     );
 }
 
+function DangerZoneSection() {
+    const reset = useFactoryReset();
+    const [open, setOpen] = useState(false);
+    const [password, setPassword] = useState('');
+    const [confirmText, setConfirmText] = useState('');
+    const ready = password.length > 0 && confirmText.trim().toUpperCase() === 'RESET' && !reset.isPending;
+
+    function run() {
+        reset.mutate(password, {
+            onSuccess: (r) => {
+                pushToast({ title: 'Factory reset complete', detail: r.message, tone: 'info' });
+                setOpen(false);
+                setPassword('');
+                setConfirmText('');
+            },
+            onError: (e: unknown) => {
+                const msg = (e as { response?: { data?: { errors?: { password?: string[] }; message?: string } } })?.response?.data;
+                pushToast({ title: 'Reset failed', detail: msg?.errors?.password?.[0] ?? msg?.message ?? 'Check your password.', tone: 'down' });
+            },
+        });
+    }
+
+    return (
+        <section className={`${card} ring-rose-500/20`}>
+            <div className="mb-3 flex items-center gap-2">
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25">
+                    <Trash weight="light" className="h-4 w-4" />
+                </span>
+                <div>
+                    <h2 className="text-sm font-bold text-white">Danger zone</h2>
+                    <p className="text-[11px] text-white/40">Irreversible actions</p>
+                </div>
+            </div>
+
+            <p className="text-xs leading-relaxed text-white/55">
+                Factory reset permanently deletes every device, interface, link, map, credential,
+                agent, sensor, alert rule and all history - returning My Mate to a clean install.
+                Only admin accounts are kept; operator accounts are removed.
+            </p>
+
+            {!open ? (
+                <button
+                    onClick={() => setOpen(true)}
+                    className="mt-3 rounded-xl bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-300 ring-1 ring-rose-400/25 transition hover:bg-rose-500/20"
+                >
+                    Factory reset...
+                </button>
+            ) : (
+                <div className="mt-3 space-y-2.5 rounded-xl bg-rose-500/[0.04] p-3 ring-1 ring-rose-400/15">
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Confirm your password"
+                        className={field}
+                    />
+                    <input
+                        value={confirmText}
+                        onChange={(e) => setConfirmText(e.target.value)}
+                        placeholder='Type RESET to confirm'
+                        className={field}
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                        <button
+                            onClick={() => { setOpen(false); setPassword(''); setConfirmText(''); }}
+                            className="rounded-full px-3 py-1.5 text-xs font-medium text-white/60 transition hover:text-white/90"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={run}
+                            disabled={!ready}
+                            className="rounded-full bg-rose-500 px-4 py-1.5 text-xs font-semibold text-white shadow-[0_8px_24px_-8px_rgba(244,63,94,0.6)] transition hover:bg-rose-400 disabled:opacity-40"
+                        >
+                            {reset.isPending ? 'Resetting...' : 'Wipe everything'}
+                        </button>
+                    </div>
+                </div>
+            )}
+        </section>
+    );
+}
+
 export function SettingsView() {
     // Engine cadence, mail server and credentials are admin-only config.
     // A read-only operator keeps just self-service (change own password) and the roster.
@@ -1125,6 +1209,11 @@ export function SettingsView() {
                     {isAdmin && (
                         <div className="min-w-0 lg:col-span-2">
                             <SensorsSection />
+                        </div>
+                    )}
+                    {isAdmin && (
+                        <div className="min-w-0 lg:col-span-2">
+                            <DangerZoneSection />
                         </div>
                     )}
                 </div>
