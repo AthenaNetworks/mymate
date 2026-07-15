@@ -13,7 +13,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowsOutCardinal, CaretDown, CircleDashed, Globe, Graph, Info, LineSegment, LinkBreak, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
@@ -154,6 +154,7 @@ export function MapCanvas() {
     const [historyLinkId, setHistoryLinkId] = useState<number | null>(null);
     const [deleteLinkId, setDeleteLinkId] = useState<number | null>(null);
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
+    const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
     const [pendingLayout, setPendingLayout] = useState<LayoutKind | null>(null); // awaiting confirm before it overwrites positions
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
@@ -568,6 +569,9 @@ export function MapCanvas() {
                     or wraps to its own - plain justify-between would collapse a lone wrapped
                     item to the left edge instead. */}
                 <div className="ml-auto flex items-center gap-2">
+                    {/* Desktop / tablet: the tool clusters inline. Below lg they collapse into the
+                        single overflow menu below so the toolbar never wraps over the map. */}
+                    <div className="hidden items-center gap-2 lg:flex">
                     {/* Curved / straight link geometry. */}
                     <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
                         <button onClick={() => setEdgeStyle('curved')} title="Curved links" className={edgeBtn(edgeStyle === 'curved')}>
@@ -639,6 +643,57 @@ export function MapCanvas() {
                         )}
                     </div>
                     )}
+                    </div>
+
+                    {/* Below lg: one overflow button holding every map tool, so the toolbar stays a
+                        single row on a phone instead of wrapping across the top of the map. */}
+                    <div className="relative lg:hidden">
+                        <button
+                            onClick={() => setToolsMenu((o) => !o)}
+                            title="Map tools"
+                            className="flex items-center justify-center rounded-full bg-white/5 p-2 text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                        >
+                            <DotsThreeVertical weight="bold" className="h-4 w-4" />
+                        </button>
+                        {toolsMenu && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setToolsMenu(false)} />
+                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl bg-[#0d0d11]/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Links</p>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setEdgeStyle('curved'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'curved' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <WaveSine weight="bold" className="h-4 w-4" /> Curved
+                                        </button>
+                                        <button onClick={() => { setEdgeStyle('straight'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'straight' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <LineSegment weight="bold" className="h-4 w-4" /> Straight
+                                        </button>
+                                    </div>
+                                    {isAdmin && (
+                                        <>
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <button onClick={() => { setDeviceDialog({}); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Plus weight="bold" className="h-4 w-4 text-emerald-300" /> Add device
+                                            </button>
+                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Internet', mgmt_ip: '1.1.1.1', device_type: 'internet', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Globe weight="light" className="h-4 w-4 text-sky-300" /> Add internet object
+                                            </button>
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
+                                            {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
+                                                <button key={kind} onClick={() => { requestLayout(kind); setToolsMenu(false); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${layoutKind === kind ? 'text-emerald-300' : 'text-white/75'}`}>
+                                                    <Icon weight="light" className={`h-4 w-4 ${iconClass ?? ''}`} />
+                                                    <span className="flex-1">{label}</span>
+                                                </button>
+                                            ))}
+                                            <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
+                                                <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </div>
             </div>
 
