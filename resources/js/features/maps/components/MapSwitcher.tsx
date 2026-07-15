@@ -99,7 +99,8 @@ export function MapSwitcher() {
                 {open && (
                     <>
                         <button aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
-                        <div className="absolute left-0 z-20 mt-1.5 w-64 rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                        <div className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-64 flex-col rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                            <div className="min-h-0 flex-1 overflow-y-auto">
                             {maps?.map((m) => (
                                 <div key={m.id} className={`group flex items-center gap-0.5 rounded-lg ${m.id === activeId ? 'bg-emerald-500/10' : ''}`}>
                                     <button
@@ -127,8 +128,9 @@ export function MapSwitcher() {
                                     )}
                                 </div>
                             ))}
+                            </div>
                             {isAdmin && (
-                                <button onClick={() => openDialog({ mode: 'create' })} className="mt-1 flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
+                                <button onClick={() => openDialog({ mode: 'create' })} className="mt-1 flex w-full shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
                                     <Plus weight="bold" className="h-3.5 w-3.5" /> New map
                                 </button>
                             )}

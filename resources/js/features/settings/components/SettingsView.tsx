@@ -16,6 +16,9 @@ import type { Credential, Operator } from '../../../types';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
+    // [color-scheme:dark] makes native controls (the <select> option popup, number spinners)
+    // render dark - without it the browser draws the option list white-on-white in dark mode.
+    'placeholder:text-white/30 [color-scheme:dark] ' +
     'transition duration-300 ease-fluid focus:bg-white/[0.05] focus:ring-2 focus:ring-emerald-400/60';
 
 // Narrow numeric input - NOT `field` (its w-full would stretch full width and crush the label).

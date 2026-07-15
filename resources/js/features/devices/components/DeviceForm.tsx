@@ -17,7 +17,8 @@ const DEVICE_TYPES: { value: DeviceType; label: string }[] = [
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
-    'transition duration-300 ease-fluid placeholder:text-white/30 focus:bg-white/[0.05] focus:ring-2 focus:ring-emerald-400/60';
+    // [color-scheme:dark] keeps native <select> option popups dark instead of white-on-white.
+    'transition duration-300 ease-fluid placeholder:text-white/30 [color-scheme:dark] focus:bg-white/[0.05] focus:ring-2 focus:ring-emerald-400/60';
 
 export function DeviceForm() {
     const isAdmin = useIsAdmin();
