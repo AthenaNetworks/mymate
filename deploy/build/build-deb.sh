@@ -90,6 +90,9 @@ tar -C "$REPO_ROOT" \
     --exclude='./.env' \
     --exclude='./.env.*' \
     --exclude='./CREDS' \
+    --exclude='./scripts/*.db' \
+    --exclude='./scripts/export' \
+    --exclude='./scripts/__pycache__' \
     --exclude='./storage/logs/*' \
     --exclude='./storage/framework/cache/data/*' \
     --exclude='./storage/framework/sessions/*' \

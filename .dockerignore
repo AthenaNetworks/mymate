@@ -18,6 +18,13 @@ CREDS
 .predeploy.log
 *.log
 
+# Local Dude-import working data - customer databases + exports live here during testing and
+# must NEVER end up in a published image (they can contain device credentials). Ship only the
+# extraction script itself.
+scripts/*.db
+scripts/export
+scripts/__pycache__
+
 # Not needed inside the web image
 agent
 tests
