@@ -45,8 +45,13 @@ export function DeviceGlyph({
     className?: string;
 }) {
     const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
     const isMikrotik = (vendor ?? '').toLowerCase().includes('mikrotik');
-    const useImage = isMikrotik && !!model;
+    // Only chase a product photo for a real model name. Devices whose model never resolved past
+    // a raw board id (e.g. "0x0002") can't map to a MikroTik product page, so don't 404-loop on
+    // them - go straight to the drawn family icon.
+    const realModel = !!model && !/^0x[0-9a-f]+$/i.test(model.trim());
+    const useImage = isMikrotik && realModel && !failed;
     const Fallback = familyIcon(type, model ?? '');
 
     return (
@@ -56,6 +61,7 @@ export function DeviceGlyph({
                     src={`/api/devices/${deviceId}/icon`}
                     alt=""
                     onLoad={() => setLoaded(true)}
+                    onError={() => setFailed(true)}
                     className={`${className} object-contain ${loaded ? '' : 'hidden'}`}
                 />
             )}

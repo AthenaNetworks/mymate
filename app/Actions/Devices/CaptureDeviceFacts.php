@@ -101,7 +101,7 @@ class CaptureDeviceFacts
 
             return [
                 'vendor' => 'MikroTik',
-                'model' => $model !== null ? trim((string) $model) : null,
+                'model' => self::cleanModel($model),
                 'arch' => $arch !== '' ? $arch : null,
                 'serial' => $serial !== '' ? $serial : null,
                 'cpu' => self::formatCpu(
@@ -145,7 +145,7 @@ class CaptureDeviceFacts
 
         return [
             'vendor' => self::vendorFromSysDescr($descr),
-            'model' => $model,
+            'model' => self::cleanModel($model),
             'serial' => $serial,
             'ram_bytes' => is_numeric($memKb) && (int) $memKb > 0 ? (int) $memKb * 1024 : null,
             'uptime_seconds' => $ticks !== null ? intdiv((int) $ticks, 100) : null, // TimeTicks (1/100s) -> s
@@ -154,6 +154,22 @@ class CaptureDeviceFacts
     }
 
     /** First non-empty, non-placeholder value from an SNMP walk (skips "", "N/A", "none"). */
+    /**
+     * A model should read like a product name. Some MikroTik SNMP boards expose a raw board
+     * id ("0x0002") or a bare number in the ENTITY-MIB model row instead of a real name - those
+     * can't map to a product page or mean anything to an operator, so drop them to null and let
+     * the drawn family icon stand in. (Serials, which are legitimately numeric, are untouched.)
+     */
+    private static function cleanModel(mixed $model): ?string
+    {
+        $m = trim((string) $model);
+        if ($m === '' || preg_match('/^0x[0-9a-f]+$/i', $m) === 1 || preg_match('/^\d+$/', $m) === 1) {
+            return null;
+        }
+
+        return mb_substr($m, 0, 128);
+    }
+
     private static function firstMeaningful(array $walk): ?string
     {
         foreach ($walk as $value) {

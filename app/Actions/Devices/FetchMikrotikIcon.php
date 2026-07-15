@@ -56,10 +56,26 @@ class FetchMikrotikIcon
 
             $path = self::DIR."/{$slug}.webp";
             Storage::disk('local')->put($path, $img->body());
+            self::makeReadable($path);
 
             return $path;
         } catch (\Throwable) {
             return null;
+        }
+    }
+
+    /**
+     * The `local` disk is private (0700 dirs / 0600 files by default), but these are public
+     * product photos that the web-server process must be able to read - and on a packaged
+     * install that process (php-fpm pool) runs as www-data, not the queue-worker user that
+     * wrote the file. Widen the cache dir chain + file so any local user can serve it.
+     */
+    private static function makeReadable(string $path): void
+    {
+        $disk = Storage::disk('local');
+        foreach ([self::DIR, dirname(self::DIR), $path] as $rel) {
+            $abs = $disk->path($rel);
+            @chmod($abs, is_dir($abs) ? 0755 : 0644);
         }
     }
 
