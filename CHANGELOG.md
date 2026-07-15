@@ -114,6 +114,10 @@ of commit subjects.
   layout (drawer navigation, off-canvas device inspector).
 
 ### Fixed
+- The Dude import now brings in links the operator drew but wasn't bandwidth-monitoring.
+  Previously only monitored links were imported; plain topology lines (which have no
+  monitored-link object in the Dude DB) were dropped, so maps came in missing links. They
+  now import as plain device-to-device links, skipping any pair a monitored link covers.
 - The device LOAD tile no longer shows a dash when interface speed is unknown: it now
   falls back to the busiest interface's absolute throughput (e.g. 5.0M, 1.2G). The
   percentage form needs a known link speed, which RouterOS virtual interfaces and any

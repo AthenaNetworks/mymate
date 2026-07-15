@@ -81,9 +81,11 @@ class DudeImportTest extends TestCase
         $ether1 = NetworkInterface::where('device_id', $router->id)->where('if_index', 1)->firstOrFail();
         $this->assertSame(1000, $ether1->speed_mbps); // 1e9 bps -> 1000 Mbps
 
-        // Link: A end real interface, B end a best-effort stub on the peer.
-        $this->assertSame(1, Link::count());
-        $link = Link::first();
+        // Links: the monitored link (real A interface + stub peer) plus one plain link from an
+        // unmonitored map line (switch-b <-> api-only). The already-monitored 100<->200 map line
+        // is skipped, so 2 links total, not 3.
+        $this->assertSame(2, Link::count());
+        $link = Link::whereNotNull('a_interface_id')->firstOrFail();
         $this->assertSame($ether1->id, $link->a_interface_id);
         $stub = NetworkInterface::find($link->b_interface_id);
         $this->assertSame($switch->id, $stub->device_id);
@@ -111,6 +113,25 @@ class DudeImportTest extends TestCase
         $this->assertEqualsWithDelta(20.0, (float) $ether1->util_in, 0.01);
         $this->assertEqualsWithDelta(40.0, (float) $ether1->util_out, 0.01);
         $this->assertSame(1, $summary['history']['seeded_util']); // one interface seeded (both directions)
+    }
+
+    public function test_unmonitored_map_lines_become_plain_links(): void
+    {
+        $this->doImport();
+
+        $switch = Device::where('mgmt_ip', '10.0.0.2')->firstOrFail();
+        $apiOnly = Device::where('mgmt_ip', '10.0.0.3')->firstOrFail();
+
+        // The drawn (but unmonitored) switch-b <-> api-only line is imported as a plain,
+        // interface-less link so the map reflects the topology the operator actually drew.
+        $plain = Link::where(fn ($q) => $q->where('a_device_id', $switch->id)->where('b_device_id', $apiOnly->id))
+            ->orWhere(fn ($q) => $q->where('a_device_id', $apiOnly->id)->where('b_device_id', $switch->id))
+            ->firstOrFail();
+        $this->assertNull($plain->a_interface_id);
+        $this->assertNull($plain->b_interface_id);
+
+        // The 100<->200 map line duplicates the monitored link, so it's not added twice.
+        $this->assertSame(2, Link::count());
     }
 
     public function test_placements_are_decompacted_so_nodes_do_not_overlap(): void
@@ -141,7 +162,8 @@ class DudeImportTest extends TestCase
         $this->doImport();
 
         $this->assertSame(3, Device::count());
-        $this->assertSame(1, Link::count());
+        // Monitored link + one plain link from the unmonitored map line; re-import adds neither.
+        $this->assertSame(2, Link::count());
         $this->assertSame(1, Credential::where('name', 'v2-public')->count());
         // History re-imports add rows (append-only) - config stays stable, which is the contract.
     }

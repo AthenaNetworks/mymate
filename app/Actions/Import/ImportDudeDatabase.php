@@ -83,6 +83,7 @@ class ImportDudeDatabase
             $this->progress->checkCancelled();
             $this->progress->stage('Importing links', 12);
             $this->importLinks();
+            $this->importMapLinks();
             $this->progress->stage('Importing outages', 14);
             $this->importOutages();
         });
@@ -570,6 +571,57 @@ class ImportDudeDatabase
         }
 
         $this->summary['links'] = ['created' => $created, 'skipped' => $skipped];
+    }
+
+    /**
+     * Unmonitored topology lines: every link line drawn on a Dude map that wasn't bandwidth-
+     * monitored (so it has no class-31 Link and never reached links.csv). Create a plain
+     * device<->device link (no interfaces, like a ping-only link) for any pair a monitored link
+     * from importLinks() didn't already cover - so the map shows the topology the operator drew,
+     * not just the links they happened to be graphing.
+     */
+    private function importMapLinks(): void
+    {
+        if (! CsvReader::exists($this->path('map_links.csv'))) {
+            return; // older extract without this file - nothing to do
+        }
+
+        $created = 0;
+        $skipped = 0;
+        foreach (CsvReader::rows($this->path('map_links.csv')) as $r) {
+            $aDeviceId = $this->deviceIdMap[$r['a_deviceID']] ?? null;
+            $bDeviceId = $this->deviceIdMap[$r['b_deviceID']] ?? null;
+            if ($aDeviceId === null || $bDeviceId === null || $aDeviceId === $bDeviceId) {
+                $skipped++;
+
+                continue;
+            }
+
+            // A monitored link (with real interfaces) or an earlier map-link between the same
+            // pair wins - don't stack a second, interface-less line on top. Match either direction.
+            $already = DB::table('links')
+                ->where(fn ($q) => $q->where('a_device_id', $aDeviceId)->where('b_device_id', $bDeviceId))
+                ->orWhere(fn ($q) => $q->where('a_device_id', $bDeviceId)->where('b_device_id', $aDeviceId))
+                ->exists();
+            if ($already) {
+                $skipped++;
+
+                continue;
+            }
+
+            try {
+                DB::table('links')->insert([
+                    'a_device_id' => $aDeviceId, 'a_interface_id' => null,
+                    'b_device_id' => $bDeviceId, 'b_interface_id' => null,
+                    'created_at' => now(), 'updated_at' => now(),
+                ]);
+                $created++;
+            } catch (\Throwable) {
+                $skipped++; // trigger/unique violation - leave the rest of the import intact
+            }
+        }
+
+        $this->summary['map_links'] = ['created' => $created, 'skipped' => $skipped];
     }
 
     /** Find-or-create a placeholder interface on the peer device for a link end. */

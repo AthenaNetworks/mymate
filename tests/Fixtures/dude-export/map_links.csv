@@ -1,0 +1,3 @@
+elementID,mapID,a_deviceID,a_device,b_deviceID,b_device
+700,10,100,router-a,200,switch-b
+701,10,200,switch-b,300,api-only

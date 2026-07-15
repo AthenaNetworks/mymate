@@ -319,6 +319,23 @@ dump('links.csv', 31,
       'b_deviceID','b_device','tx_probe','rx_probe','map'],
      _link_row)
 
+# map_links.csv: EVERY drawn link line (class-74 kind=link, 0x5ddf==4), including ones Dude
+# was NOT bandwidth-monitoring - those have no class-31 Link object, so they never reach
+# links.csv even though the operator drew them. Both endpoints must resolve to devices
+# (0x5ddb / 0x5ddc -> node element -> its device). The importer turns each into a plain
+# device<->device link for any pair a monitored link didn't already cover.
+with open(f'{OUT}/map_links.csv','w',newline='') as fh:
+    w = csv.writer(fh); w.writerow(['elementID','mapID','a_deviceID','a_device','b_deviceID','b_device'])
+    _mln = 0
+    for _oid, _o in objs.items():
+        if _o.get('classid') != 74 or _o.get(0x5ddf) != 4:
+            continue
+        _a = _node_elem_device.get(_o.get(0x5ddb))
+        _b = _node_elem_device.get(_o.get(0x5ddc))
+        if isinstance(_a, int) and isinstance(_b, int) and _a != _b:
+            w.writerow([_oid, ref(_o.get(0x5dc0)), ref(_a), nm(_a), ref(_b), nm(_b)]); _mln += 1
+    print(f"map_links.csv: {_mln}")
+
 # MIB modules are stored as .txt entries in the class-5 Files tree (content not in DB).
 mibs = sorted(oid for oid,o in objs.items() if o.get('classid')==5 and name[oid].lower().endswith('.txt'))
 with open(f'{OUT}/mib_modules.csv','w',newline='') as fh:
