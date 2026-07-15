@@ -146,6 +146,7 @@ export function MapCanvas() {
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [util, setUtil] = useState<UtilMap>({});
     const [deviceUtil, setDeviceUtil] = useState<Record<number, number | null>>({});
+    const [deviceLoad, setDeviceLoad] = useState<Record<number, number | null>>({});
     const [pending, setPending] = useState<PendingLink | null>(null);
     const [historyLinkId, setHistoryLinkId] = useState<number | null>(null);
     const [deleteLinkId, setDeleteLinkId] = useState<number | null>(null);
@@ -193,6 +194,21 @@ export function MapCanvas() {
             }
             return next;
         });
+        // Busiest absolute throughput (bps) per device - the LOAD tile falls back to this when
+        // no interface speed is known, so util% is null but there's still real traffic to show.
+        setDeviceLoad((prev) => {
+            const next = { ...prev };
+            for (const dev of payload.devices) {
+                let max: number | null = null;
+                for (const f of dev.interfaces) {
+                    for (const v of [f.bps_in, f.bps_out]) {
+                        if (v !== null && (max === null || v > max)) max = v;
+                    }
+                }
+                next[dev.device_id] = max;
+            }
+            return next;
+        });
     }, []);
     const handleStatus = useCallback((e: { name: string; status: DeviceStatus }) => {
         pushToast({
@@ -211,6 +227,8 @@ export function MapCanvas() {
     statusRef.current = statusById;
     const deviceUtilRef = useRef(deviceUtil);
     deviceUtilRef.current = deviceUtil;
+    const deviceLoadRef = useRef(deviceLoad);
+    deviceLoadRef.current = deviceLoad;
     // Current data read inside the (membership-keyed) rebuild effect, so it doesn't need to
     // list these as deps and re-run on every data refetch.
     const mapDevicesRef = useRef(mapDevices);
@@ -252,6 +270,7 @@ export function MapCanvas() {
                 vendor: d.vendor,
                 model: d.model,
                 util: deviceUtilRef.current[d.id] ?? null,
+                load: deviceLoadRef.current[d.id] ?? null,
                 cpu: d.cpu_pct,
                 mem: d.mem_used_pct,
                 temp: d.temp_c,
@@ -329,10 +348,10 @@ export function MapCanvas() {
         setEdges((eds) => eds.map((e) => (e.type === 'util' ? { ...e, data: { ...e.data, ...computeData(e.data as EdgeMeta, util, statusById) } } : e)));
     }, [util, statusById, setEdges]);
 
-    // Patch each device node\'s busiest-util bar in place when live util changes.
+    // Patch each device node\'s busiest-util bar (and bps fallback) in place when live util changes.
     useEffect(() => {
-        setNodes((nds) => nds.map((n) => (n.type === 'device' ? { ...n, data: { ...n.data, util: deviceUtil[Number(n.id)] ?? null } } : n)));
-    }, [deviceUtil, setNodes]);
+        setNodes((nds) => nds.map((n) => (n.type === 'device' ? { ...n, data: { ...n.data, util: deviceUtil[Number(n.id)] ?? null, load: deviceLoad[Number(n.id)] ?? null } } : n)));
+    }, [deviceUtil, deviceLoad, setNodes]);
 
     // Patch device data (status / metrics / name / model) in place when the devices query
     // updates - so a status or cpu/mem/temp change never rebuilds the node graph (which would

@@ -12,11 +12,20 @@ export type DeviceNodeData = {
     device_type: DeviceType;
     vendor: string | null;
     model: string | null;
-    util: number | null; // device's busiest interface utilisation (live)
+    util: number | null; // device's busiest interface utilisation % (live) - null when speed unknown
+    load: number | null; // device's busiest interface throughput in bps (live) - LOAD fallback when util% is null
     cpu: number | null; // resource metrics (live) - null when the device doesn't report them
     mem: number | null;
     temp: number | null;
 };
+
+/** Compact bits-per-second for the LOAD tile fallback ("5.0M", "125M", "1.2G", "12k"). */
+function compactBps(bps: number): string {
+    if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)}G`;
+    if (bps >= 1e6) return `${(bps / 1e6).toFixed(bps < 1e7 ? 1 : 0)}M`;
+    if (bps >= 1e3) return `${Math.round(bps / 1e3)}k`;
+    return `${Math.round(bps)}`;
+}
 
 // The tile can show any of these; the label is the little chip, next cycles on click.
 const METRICS: TileMetric[] = ['throughput', 'cpu', 'mem', 'temp'];
@@ -80,9 +89,21 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     // Resolve the chosen metric to a bar width (0-100), a colour, and a value label.
     const raw = metric === 'throughput' ? d.util : metric === 'cpu' ? d.cpu : metric === 'mem' ? d.mem : d.temp;
     const isTemp = metric === 'temp';
-    const barPct = raw === null ? 0 : isTemp ? Math.min(Math.max((raw / 90) * 100, 0), 100) : Math.min(Math.max(raw, 0), 100);
-    const barColor = down ? 'var(--link-down)' : raw === null ? 'rgba(255,255,255,0.15)' : isTemp ? tempColor(raw) : linkColor(raw, false);
-    const valueLabel = raw === null ? '-' : isTemp ? `${Math.round(raw)}°` : `${raw.toFixed(raw < 10 ? 1 : 0)}%`;
+    // LOAD as a % needs a known interface speed; RouterOS virtual ifaces (and any port with no
+    // negotiated rate) have none, so util is null. Rather than a bare dash, fall back to the
+    // busiest interface's absolute throughput (bps is always measured) with a neutral bar.
+    const showBps = metric === 'throughput' && raw === null && d.load !== null;
+    const barPct = raw === null ? (showBps ? 14 : 0) : isTemp ? Math.min(Math.max((raw / 90) * 100, 0), 100) : Math.min(Math.max(raw, 0), 100);
+    const barColor = down
+        ? 'var(--link-down)'
+        : showBps
+            ? 'rgba(255,255,255,0.35)'
+            : raw === null
+                ? 'rgba(255,255,255,0.15)'
+                : isTemp
+                    ? tempColor(raw)
+                    : linkColor(raw, false);
+    const valueLabel = showBps ? compactBps(d.load as number) : raw === null ? '-' : isTemp ? `${Math.round(raw)}°` : `${raw.toFixed(raw < 10 ? 1 : 0)}%`;
 
     return (
         // Double-bezel: outer shell (machined tray) + inner core (glass plate). No backdrop-blur
@@ -138,7 +159,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                             style={{ width: `${barPct}%`, background: barColor }}
                         />
                     </div>
-                    <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-white/45">
+                    <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
                         {valueLabel}
                     </span>
                 </div>
