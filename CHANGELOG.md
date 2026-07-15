@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-15
+
 ### Added
 - **SNMPv3.** Credentials can now use SNMPv3 (USM) alongside v1/v2c: pick a security
   level (noAuthNoPriv / authNoPriv / authPriv), an auth protocol (MD5, SHA, SHA-2) and
@@ -199,7 +201,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/AthenaNetworks/mymate/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/AthenaNetworks/mymate/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AthenaNetworks/mymate/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AthenaNetworks/mymate/releases/tag/v1.0.0
