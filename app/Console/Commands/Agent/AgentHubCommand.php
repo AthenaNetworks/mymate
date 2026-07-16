@@ -39,6 +39,12 @@ class AgentHubCommand extends Command
 
     protected $description = 'Run the remote-agent WebSocket hub (agents connect here).';
 
+    // Server-side keepalive: ping every connected agent this often. Must stay well under the
+    // reverse-proxy read timeout on /agent (nginx: 3600s) AND any stateful firewall's idle
+    // timeout on the path, so a quiet link (agents are idle between polls) is never dropped and
+    // a dead peer is spotted within one interval.
+    private const KEEPALIVE_SECONDS = 30;
+
     /** @var array<int, ConnectionInterface> agentId => live connection */
     private array $conns = [];
 
@@ -59,6 +65,10 @@ class AgentHubCommand extends Command
         $socket->on('connection', fn (ConnectionInterface $c) => $this->onConnection($c));
 
         $this->subscribeRedis($loop);
+
+        // Keepalive pings keep idle agent links warm through nginx / firewalls and surface dead
+        // peers promptly (a failed write closes the connection -> onClose marks it offline).
+        $loop->addPeriodicTimer(self::KEEPALIVE_SECONDS, fn () => $this->pingAll());
 
         $this->info("agent hub listening on ws://$host:$port  (proxy /agent -> here)");
         EngineLog::info('agent hub started', ['host' => $host, 'port' => $port]);
@@ -215,6 +225,14 @@ class AgentHubCommand extends Command
         }
         if (! empty($job['scan']['subnets'])) {
             $this->send($agentId, ['type' => 'scan', 'payload' => $job['scan']]);
+        }
+    }
+
+    /** Send a WebSocket ping to every connected agent (keepalive). The agent auto-pongs. */
+    private function pingAll(): void
+    {
+        foreach ($this->conns as $conn) {
+            $conn->write((new Frame('mm', true, Frame::OP_PING))->getContents());
         }
     }
 

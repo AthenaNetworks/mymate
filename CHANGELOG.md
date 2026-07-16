@@ -27,6 +27,10 @@ of commit subjects.
 - **Remote agent as a `.deb`.**
 
 ### Fixed
+- **Remote-agent connections stay up.** The hub now sends a WebSocket keepalive ping to each
+  connected agent every 30s, and the `/agent` reverse-proxy read timeout was raised to an hour,
+  so a quiet link (agents are idle between polls) is no longer dropped by nginx or a stateful
+  firewall - and a genuinely dead agent is detected within one interval.
 - **Discovery scans now find every responder.** Two bugs meant hosts that clearly respond
   (e.g. routers on `.253`/`.254`) were missed: fping was resolved via `PATH`, so a
   web-request context whose `PATH` omitted `/usr/local/sbin` couldn't find it and every
