@@ -132,8 +132,10 @@ return [
                 'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
                 'mem' => 'hrstorage',
                 // mtxrHlProcessorTemperature, then board temperature (whichever answers).
+                // RouterOS reports these health temperatures in tenths of a degree C
+                // (e.g. 440 -> 44.0C), so scale by 10.
                 'temp_oids' => ['.1.3.6.1.4.1.14988.1.1.3.11.0', '.1.3.6.1.4.1.14988.1.1.3.10.0'],
-                'temp_divisor' => 1,
+                'temp_divisor' => 10,
                 // Wireless (MIKROTIK-MIB): count the registration table (one row per associated
                 // station) for client count; station signal strength for a CPE. SNR/CCQ over
                 // SNMP aren't standardised on RouterOS - the RouterOS API path fills those in.

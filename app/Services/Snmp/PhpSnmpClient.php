@@ -34,11 +34,22 @@ class PhpSnmpClient implements SnmpClient
         try {
             $result = @$session->get($oids);
             if ($result === false) {
-                throw new SnmpClientException("SNMP get failed for {$host}: ".$session->getError());
+                $err = $session->getError();
+                // A device that answers "no such object/instance" for an OID it doesn't
+                // implement is reachable - that's an absent value, not a transport failure.
+                // Return empty so a best-effort caller (metrics) reads null instead of the
+                // whole poll aborting; only real transport errors (timeout/filtered) throw.
+                if (self::isAbsence($err)) {
+                    return [];
+                }
+                throw new SnmpClientException("SNMP get failed for {$host}: ".$err);
             }
 
             return is_array($result) ? array_map(self::plain(...), $result) : [];
         } catch (\SNMPException $e) {
+            if (self::isAbsence($e->getMessage())) {
+                return [];
+            }
             throw new SnmpClientException("SNMP get failed for {$host}: ".$e->getMessage(), 0, $e);
         } finally {
             $this->close($session);
@@ -54,15 +65,40 @@ class PhpSnmpClient implements SnmpClient
             // to $baseOid; default max_repetitions uses GETBULK on v2c.
             $result = @$session->walk($baseOid, true);
             if ($result === false) {
-                throw new SnmpClientException("SNMP walk failed for {$host}: ".$session->getError());
+                $err = $session->getError();
+                // An empty subtree (nonexistent table / past the end of the MIB) is a valid
+                // "nothing here" answer, not a transport failure - return an empty table.
+                if (self::isAbsence($err)) {
+                    return [];
+                }
+                throw new SnmpClientException("SNMP walk failed for {$host}: ".$err);
             }
 
             return is_array($result) ? array_map(self::plain(...), $result) : [];
         } catch (\SNMPException $e) {
+            if (self::isAbsence($e->getMessage())) {
+                return [];
+            }
             throw new SnmpClientException("SNMP walk failed for {$host}: ".$e->getMessage(), 0, $e);
         } finally {
             $this->close($session);
         }
+    }
+
+    /**
+     * True when an ext-snmp error means the agent answered that an OID/subtree is absent
+     * (device reachable) rather than a transport failure (timeout / filtered / auth). These
+     * are the standard net-snmp phrasings for the noSuchObject / noSuchInstance / endOfMibView
+     * PDU exceptions - a best-effort read should treat them as "no value", not a failed poll.
+     */
+    private static function isAbsence(string $error): bool
+    {
+        $e = strtolower($error);
+
+        return str_contains($e, 'no such object')
+            || str_contains($e, 'no such instance')
+            || str_contains($e, 'no more variables left') // "...past the end of the MIB tree"
+            || str_contains($e, 'end of mib');
     }
 
     /**

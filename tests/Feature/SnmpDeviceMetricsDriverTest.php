@@ -43,7 +43,8 @@ class SnmpDeviceMetricsDriverTest extends TestCase
         $snmp->walks[$hr['size']] = [1 => '1000', 2 => '2000'];
         $snmp->walks[$hr['used']] = [1 => '250', 2 => '100'];
         // Temperature via the MikroTik scalar OID (the fake returns this map for any GET).
-        $snmp->getsByCommunity['public-test'] = ['.1.3.6.1.4.1.14988.1.1.3.11.0' => '45'];
+        // RouterOS reports this in tenths of a degree (450 -> 45.0C, temp_divisor=10).
+        $snmp->getsByCommunity['public-test'] = ['.1.3.6.1.4.1.14988.1.1.3.11.0' => '450'];
 
         $m = $this->driver($snmp)->sample($this->device());
 

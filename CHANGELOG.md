@@ -35,6 +35,13 @@ of commit subjects.
   shows identically on the map node and in the inspector header.
 
 ### Fixed
+- **CPU / memory now read over SNMP for wired devices.** A device answering "no such object"
+  for an OID it doesn't implement (e.g. a wired router or switch queried for a wireless-only
+  signal OID) was treated as a total poll failure, so its cpu/mem/temp came back blank even
+  though they were readable. Such an absent OID is now handled per-metric, so each metric is
+  read independently as intended. Genuine transport failures (timeout/filtered) still isolate
+  the device. Also fixed MikroTik temperature reading 10x too high (it's reported in tenths
+  of a degree).
 - **Links attach to the sides you drew them from.** Dragging a link now binds each end to
   the exact handle you started and finished on (e.g. bottom-to-top) instead of always
   springing the "from" end to the top of the node. Links drawn the old way, or via the Add
