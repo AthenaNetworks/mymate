@@ -488,23 +488,26 @@ export function DeviceInspector() {
     const removeFromMap = useRemoveDeviceFromMap();
     const device = devices?.find((d) => d.id === id);
 
-    // Default the selection to the upstream/root device on the *first* load (prefer an
-    // `internet` node, else a parentless one) - but let an explicit deselect (clicking the
-    // empty canvas) leave the panel showing the map tools instead of snapping back to root.
-    // A module flag (autoHomedOnce) survives remounts within the session; only a deleted
-    // selection re-homes after that.
+    // Default the selection to the upstream/root device ON THE CURRENT MAP on the *first* load
+    // (prefer an `internet`/uplink node, else a parentless one) - but only among devices actually
+    // placed on this map. A blank map has none, so nothing is selected and the panel shows the
+    // map tools/palette instead of snapping onto some off-map device. An explicit deselect
+    // (clicking the empty canvas) also leaves the tools showing. A module flag (autoHomedOnce)
+    // survives remounts within the session; only a deleted selection re-homes after that.
     useEffect(() => {
-        if (!devices || devices.length === 0) return;
+        if (!devices || devices.length === 0 || !mapDetail) return;
         const deleted = id !== null && !devices.some((d) => d.id === id);
         if (deleted || (id === null && !autoHomedOnce)) {
+            const onMap = new Set((mapDetail.positions ?? []).map((p) => p.device_id));
+            const here = devices.filter((d) => onMap.has(d.id));
             const root =
-                devices.find((d) => d.device_type === 'internet') ??
-                devices.find((d) => d.parent_device_id === null) ??
-                devices[0];
-            selectDevice(root.id);
+                here.find((d) => d.device_type === 'internet') ??
+                here.find((d) => d.parent_device_id === null) ??
+                here[0];
+            if (root) selectDevice(root.id); // nothing on the map -> stay deselected (show tools)
         }
         autoHomedOnce = true; // after devices first load, a plain deselect no longer re-homes
-    }, [id, devices]);
+    }, [id, devices, mapDetail]);
 
     const ifaces = interfaces ?? [];
     // Device total throughput (sum of every interface\'s latest bps) - shown instead of
