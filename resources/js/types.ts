@@ -176,6 +176,7 @@ export interface Link {
     // The node side each end attaches to (React Flow handle id); null = auto/floating.
     a_handle: string | null;
     b_handle: string | null;
+    media_type: LinkMediaType | null;
     a_interface: NetworkInterface | null;
     b_interface: NetworkInterface | null;
     // Per-link bandwidth override + resolved effective speed per direction.
@@ -262,12 +263,38 @@ export interface InterMapLink {
     portal_y: number | null;
 }
 
+// Physical medium a link can be tagged with, for map styling (GitHub #9).
+export type LinkMediaType = 'fiber' | 'ethernet' | 'wireless' | 'other';
+
+// A child map placed as a node on an overview/parent map.
+export interface ChildMapNode {
+    id: number;
+    name: string;
+    node_x: number | null;
+    node_y: number | null;
+    device_count: number;
+}
+
+// A manual, device-less link between two child-map nodes on a canvas.
+export interface MapLink {
+    id: number;
+    map_id: number;
+    a_map_id: number;
+    b_map_id: number;
+    a_handle: string | null;
+    b_handle: string | null;
+    media_type: LinkMediaType | null;
+    label: string | null;
+}
+
 export interface MapDetail {
     id: number;
     name: string;
     parent_map_id: number | null;
     positions: MapPosition[];
     inter_map_links: InterMapLink[];
+    child_maps: ChildMapNode[];
+    map_links: MapLink[];
 }
 
 // Alerting.

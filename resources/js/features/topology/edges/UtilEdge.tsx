@@ -9,13 +9,16 @@ import {
 import { X } from '@phosphor-icons/react';
 import { linkColor, linkWidth } from '../lib/linkColor';
 import { getFloatingParams } from '../lib/floatingEdge';
+import { mediaDash } from '../lib/mediaType';
 import { formatMbps } from '../../../lib/formatRate';
 import { useEdgeStyle } from '../../../lib/shellStore';
+import type { LinkMediaType } from '../../../types';
 
 export type UtilEdgeData = {
     util: number | null; // higher of in/out across both bound interfaces
     mbps: number | null; // derived load on the busier end (util% x speed)
     down: boolean; // either endpoint device is down
+    mediaType?: LinkMediaType | null; // physical medium - dash pattern only (load keeps the colour)
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
     emphasized?: boolean; // touches the selected device - bring it forward
     dimmed?: boolean; // a device is selected but this link isn't its - push it back
@@ -101,7 +104,9 @@ export function UtilEdge({
                     strokeLinecap: 'round',
                     opacity,
                     cursor: 'pointer', // click an edge to open its utilisation history
-                    strokeDasharray: d.down ? '2 8' : undefined,
+                    // Down = dotted; otherwise the medium's dash (wireless dashes) so the type
+                    // reads at a glance without losing the load colour.
+                    strokeDasharray: d.down ? '2 8' : mediaDash(d.mediaType),
                     // colour glides rather than snaps as utilisation changes
                     transition: 'stroke 600ms var(--ease-fluid), stroke-width 250ms var(--ease-fluid), opacity 400ms var(--ease-fluid)',
                 }}

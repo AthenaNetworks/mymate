@@ -144,6 +144,13 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
+    // Child-map nodes on an overview map + manual device-less links between them (GitHub #9).
+    Route::post('maps/{map}/child-maps', [MapController::class, 'addChildMap'])->name('maps.children.add');
+    Route::patch('maps/{map}/child-maps/{child}/position', [MapController::class, 'saveChildPosition'])->name('maps.children.position');
+    Route::delete('maps/{map}/child-maps/{child}', [MapController::class, 'removeChildMap'])->name('maps.children.remove');
+    Route::post('maps/{map}/map-links', [MapController::class, 'storeMapLink'])->name('maps.maplinks.store');
+    Route::patch('maps/{map}/map-links/{mapLink}', [MapController::class, 'updateMapLink'])->name('maps.maplinks.update');
+    Route::delete('maps/{map}/map-links/{mapLink}', [MapController::class, 'destroyMapLink'])->name('maps.maplinks.destroy');
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');

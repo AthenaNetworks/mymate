@@ -4,7 +4,8 @@ import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
 import { useDiscoverDevice } from '../api/discoverDevice';
 import { useCreateLink } from '../api/createLink';
 import { useIsAdmin } from '../../auth/api/auth';
-import type { Device, NetworkInterface } from '../../../types';
+import { MediaTypePicker } from './MediaTypePicker';
+import type { Device, LinkMediaType, NetworkInterface } from '../../../types';
 
 export type PendingLink = { aDeviceId: number; bDeviceId: number; aHandle?: string | null; bHandle?: string | null };
 
@@ -235,6 +236,7 @@ export function AddLinkDialog({
     const [bDev, setBDev] = useState<Device | null>(null);
     const [aIf, setAIf] = useState('');
     const [bIf, setBIf] = useState('');
+    const [media, setMedia] = useState<LinkMediaType | null>(null);
     const create = useCreateLink();
     const busy = create.isPending;
     const isError = create.isError;
@@ -257,6 +259,7 @@ export function AddLinkDialog({
                 a_interface_id: aPingOnly ? null : Number(aIf),
                 b_device_id: bDev.id,
                 b_interface_id: bPingOnly ? null : Number(bIf),
+                media_type: media,
             },
             { onSuccess: onClose },
         );
@@ -290,6 +293,7 @@ export function AddLinkDialog({
                         <EndPicker device={aDevice} value={aIf} onChange={setAIf} />
                         <PeerPicker devices={candidates} value={bDev} onChange={setBDev} />
                         {bDev && <EndPicker device={bDev} value={bIf} onChange={setBIf} />}
+                        <MediaTypePicker value={media} onChange={setMedia} />
                     </div>
 
                     {isError && (
@@ -336,6 +340,7 @@ export function LinkBinderDialog({
     const bDev = devices.find((d) => d.id === pending.bDeviceId);
     const [aIf, setAIf] = useState('');
     const [bIf, setBIf] = useState('');
+    const [media, setMedia] = useState<LinkMediaType | null>(null);
     const create = useCreateLink();
     const busy = create.isPending;
     const isError = create.isError;
@@ -358,6 +363,7 @@ export function LinkBinderDialog({
                 b_interface_id: bPingOnly ? null : Number(bIf),
                 a_handle: pending.aHandle ?? null,
                 b_handle: pending.bHandle ?? null,
+                media_type: media,
             },
             { onSuccess: onClose },
         );
@@ -391,6 +397,7 @@ export function LinkBinderDialog({
                     <div className="space-y-3.5">
                         <EndPicker device={aDev} value={aIf} onChange={setAIf} />
                         <EndPicker device={bDev} value={bIf} onChange={setBIf} />
+                        <MediaTypePicker value={media} onChange={setMedia} />
                     </div>
 
                     {isError && (

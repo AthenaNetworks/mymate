@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Map\StoreMapRequest;
 use App\Http\Requests\Map\UpdateMapRequest;
+use App\Http\Resources\MapLinkResource;
 use App\Http\Resources\MapResource;
 use App\Models\Device;
 use App\Models\DeviceMapPosition;
 use App\Models\Link;
 use App\Models\Map;
+use App\Models\MapLink;
 use App\Models\MapLinkPosition;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -114,6 +117,16 @@ class MapController extends Controller
             ];
         }
 
+        // Child maps placed as nodes on this canvas (GitHub #9 overview maps), and the manual
+        // device-less links drawn between them.
+        $childMaps = $map->children()->withCount('positions')->get()
+            ->map(fn (Map $c) => [
+                'id' => $c->id, 'name' => $c->name,
+                'node_x' => $c->node_x, 'node_y' => $c->node_y,
+                'device_count' => $c->positions_count,
+            ])->all();
+        $mapLinks = MapLinkResource::collection($map->mapLinks()->get())->resolve();
+
         return response()->json([
             'data' => [
                 'id' => $map->id,
@@ -123,6 +136,8 @@ class MapController extends Controller
                     'device_id' => $p->device_id, 'x' => $p->x, 'y' => $p->y,
                 ])->all(),
                 'inter_map_links' => $interMap,
+                'child_maps' => $childMaps,
+                'map_links' => $mapLinks,
             ],
         ]);
     }
@@ -176,5 +191,103 @@ class MapController extends Controller
         DeviceMapPosition::where('map_id', $map->id)->where('device_id', $device->id)->delete();
 
         return response()->noContent();
+    }
+
+    // --- Child-map nodes + manual links (GitHub #9) -----------------------
+
+    /** Place an existing map as a node on this map (nesting it as a child) at a position. */
+    public function addChildMap(Request $request, Map $map): JsonResponse
+    {
+        $data = $request->validate([
+            'child_map_id' => [
+                'required', 'integer', Rule::exists('maps', 'id'),
+                Rule::notIn([$map->id]), // a map can't be a node on itself
+            ],
+            'x' => ['nullable', 'numeric'],
+            'y' => ['nullable', 'numeric'],
+        ]);
+
+        $child = Map::findOrFail($data['child_map_id']);
+        // Guard against a cycle: the target can't be an ancestor of this map.
+        abort_if($this->isAncestor($child, $map), Response::HTTP_UNPROCESSABLE_ENTITY, 'That would nest a map inside itself.');
+
+        $child->update([
+            'parent_map_id' => $map->id,
+            'node_x' => $data['x'] ?? 0,
+            'node_y' => $data['y'] ?? 0,
+        ]);
+
+        return response()->json(['ok' => true], Response::HTTP_CREATED);
+    }
+
+    /** Move a child-map node on this canvas. */
+    public function saveChildPosition(Request $request, Map $map, Map $child): JsonResponse
+    {
+        abort_unless($child->parent_map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $data = $request->validate(['x' => ['required', 'numeric'], 'y' => ['required', 'numeric']]);
+        $child->update(['node_x' => $data['x'], 'node_y' => $data['y']]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /** Remove a child-map node from this canvas (detach it; the map itself is untouched). */
+    public function removeChildMap(Map $map, Map $child): Response
+    {
+        if ($child->parent_map_id === $map->id) {
+            $child->update(['parent_map_id' => null, 'node_x' => null, 'node_y' => null]);
+        }
+
+        return response()->noContent();
+    }
+
+    /** Draw a manual link between two child-map nodes on this canvas. */
+    public function storeMapLink(Request $request, Map $map): JsonResponse
+    {
+        $data = $request->validate([
+            'a_map_id' => ['required', 'integer', Rule::exists('maps', 'id')->where('parent_map_id', $map->id)],
+            'b_map_id' => ['required', 'integer', 'different:a_map_id', Rule::exists('maps', 'id')->where('parent_map_id', $map->id)],
+            'a_handle' => ['sometimes', 'nullable', 'string', Rule::in(MapLink::HANDLES)],
+            'b_handle' => ['sometimes', 'nullable', 'string', Rule::in(MapLink::HANDLES)],
+            'media_type' => ['sometimes', 'nullable', Rule::in(MapLink::MEDIA_TYPES)],
+            'label' => ['sometimes', 'nullable', 'string', 'max:80'],
+        ]);
+
+        $link = $map->mapLinks()->create($data);
+
+        return (new MapLinkResource($link))->response()->setStatusCode(Response::HTTP_CREATED);
+    }
+
+    /** Update a manual link's medium / label. */
+    public function updateMapLink(Request $request, Map $map, MapLink $mapLink): MapLinkResource
+    {
+        abort_unless($mapLink->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $data = $request->validate([
+            'media_type' => ['sometimes', 'nullable', Rule::in(MapLink::MEDIA_TYPES)],
+            'label' => ['sometimes', 'nullable', 'string', 'max:80'],
+        ]);
+        $mapLink->update($data);
+
+        return new MapLinkResource($mapLink);
+    }
+
+    /** Delete a manual link. */
+    public function destroyMapLink(Map $map, MapLink $mapLink): Response
+    {
+        abort_unless($mapLink->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $mapLink->delete();
+
+        return response()->noContent();
+    }
+
+    /** True when $candidate is $map itself or an ancestor of it (cycle guard for nesting). */
+    private function isAncestor(Map $candidate, Map $map): bool
+    {
+        for ($m = $map; $m !== null; $m = $m->parent) {
+            if ($m->id === $candidate->id) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Link extends Model
 {
+    /** Physical medium a link can be tagged with, for map styling. */
+    public const MEDIA_TYPES = ['fiber', 'ethernet', 'wireless', 'other'];
+
     protected $fillable = [
         'a_device_id', 'a_interface_id', 'b_device_id', 'b_interface_id',
-        'a_handle', 'b_handle',
+        'a_handle', 'b_handle', 'media_type',
         'bw_ab_mbps', 'bw_ba_mbps',
     ];
 

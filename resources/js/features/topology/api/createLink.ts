@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { Link } from '../../../types';
+import type { Link, LinkMediaType } from '../../../types';
 import { linkKeys } from './getLinks';
 
 export interface CreateLinkInput {
@@ -10,6 +10,7 @@ export interface CreateLinkInput {
     b_interface_id: number | null;
     a_handle?: string | null; // node side each end attaches to (from the drag); null = auto
     b_handle?: string | null;
+    media_type?: LinkMediaType | null; // physical medium (map styling); null = unspecified
 }
 
 export function useCreateLink() {

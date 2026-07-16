@@ -18,11 +18,13 @@ class Map extends Model
     /** @use HasFactory<MapFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position'];
+    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y'];
 
     protected $casts = [
         'is_default' => 'boolean',
         'position' => 'integer',
+        'node_x' => 'float',
+        'node_y' => 'float',
     ];
 
     public function parent(): BelongsTo
@@ -39,6 +41,12 @@ class Map extends Model
     public function positions(): HasMany
     {
         return $this->hasMany(DeviceMapPosition::class);
+    }
+
+    /** Manual (device-less) links drawn on this map between its child-map nodes. */
+    public function mapLinks(): HasMany
+    {
+        return $this->hasMany(MapLink::class);
     }
 
     public function devices(): BelongsToMany

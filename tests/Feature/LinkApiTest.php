@@ -46,6 +46,30 @@ class LinkApiTest extends TestCase
         $this->assertDatabaseHas('links', ['a_interface_id' => $aIf->id, 'b_interface_id' => $bIf->id]);
     }
 
+    public function test_persists_and_returns_a_media_type(): void
+    {
+        [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id, 'media_type' => 'fiber',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.media_type', 'fiber');
+
+        $this->assertDatabaseHas('links', ['media_type' => 'fiber']);
+    }
+
+    public function test_rejects_an_unknown_media_type(): void
+    {
+        [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id, 'media_type' => 'smoke-signal',
+        ])->assertJsonValidationErrors('media_type');
+    }
+
     public function test_persists_and_returns_the_dragged_end_handles(): void
     {
         [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { MapDetail, NetworkMap } from '../../../types';
+import type { LinkMediaType, MapDetail, MapLink, NetworkMap } from '../../../types';
 
 export const mapKeys = {
     all: ['maps'] as const,
@@ -97,5 +97,88 @@ export function useRemoveDeviceFromMap() {
             qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
             qc.invalidateQueries({ queryKey: mapKeys.all });
         },
+    });
+}
+
+// --- Child-map nodes + manual links (GitHub #9) ---------------------------
+
+/** Place an existing map as a node on this canvas (nests it as a child). */
+export function useAddChildMap() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, childMapId, x, y }: { mapId: number; childMapId: number; x?: number; y?: number }): Promise<void> => {
+            await apiClient.post(`/maps/${mapId}/child-maps`, { child_map_id: childMapId, x, y });
+        },
+        onSuccess: (_d, { mapId }) => {
+            qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
+            qc.invalidateQueries({ queryKey: mapKeys.all });
+        },
+    });
+}
+
+/** Move a child-map node on the canvas (drag). Not invalidated - the node already moved. */
+export function useSaveChildMapPosition() {
+    return useMutation({
+        mutationFn: async ({ mapId, childMapId, x, y }: { mapId: number; childMapId: number; x: number; y: number }): Promise<void> => {
+            await apiClient.patch(`/maps/${mapId}/child-maps/${childMapId}/position`, { x, y });
+        },
+    });
+}
+
+/** Detach a child-map node from this canvas (the map itself is untouched). */
+export function useRemoveChildMap() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, childMapId }: { mapId: number; childMapId: number }): Promise<void> => {
+            await apiClient.delete(`/maps/${mapId}/child-maps/${childMapId}`);
+        },
+        onSuccess: (_d, { mapId }) => {
+            qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
+            qc.invalidateQueries({ queryKey: mapKeys.all });
+        },
+    });
+}
+
+export interface CreateMapLinkInput {
+    mapId: number;
+    a_map_id: number;
+    b_map_id: number;
+    a_handle?: string | null;
+    b_handle?: string | null;
+    media_type?: LinkMediaType | null;
+}
+
+/** Draw a manual link between two child-map nodes on this canvas. */
+export function useCreateMapLink() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, ...body }: CreateMapLinkInput): Promise<MapLink> => {
+            const { data } = await apiClient.post<{ data: MapLink }>(`/maps/${mapId}/map-links`, body);
+            return data.data;
+        },
+        onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
+    });
+}
+
+/** Update a manual link's medium / label. */
+export function useUpdateMapLink() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, mapLinkId, media_type, label }: { mapId: number; mapLinkId: number; media_type?: LinkMediaType | null; label?: string | null }): Promise<MapLink> => {
+            const { data } = await apiClient.patch<{ data: MapLink }>(`/maps/${mapId}/map-links/${mapLinkId}`, { media_type, label });
+            return data.data;
+        },
+        onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
+    });
+}
+
+/** Delete a manual link. */
+export function useDeleteMapLink() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, mapLinkId }: { mapId: number; mapLinkId: number }): Promise<void> => {
+            await apiClient.delete(`/maps/${mapId}/map-links/${mapLinkId}`);
+        },
+        onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
     });
 }

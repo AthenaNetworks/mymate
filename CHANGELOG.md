@@ -16,6 +16,14 @@ of commit subjects.
 ## [1.3.0] - 2026-07-16
 
 ### Added
+- **Overview maps: child-map nodes and manual links (GitHub #9).** Place a map as a node on
+  another map (Add map on the toolbar), double-click it to drill in, and draw links between
+  those map-nodes to build a top-level topology - no device or interface needed. Nesting is
+  cycle-guarded, nodes drag to reposition, and links drag to remove.
+- **Links can be tagged by media type.** Fiber / Ethernet / Wireless / Other, styled on the
+  map so link types read at a glance - manual overview links colour by medium, and device
+  links keep their load colour but pick up the medium's line style (wireless dashes). Set it
+  when creating a link, or click an overview link to change it.
 - **Remote agents now report CPU / memory / temperature.** A device polled through a remote
   agent previously showed no resource metrics; the agent now reads cpu/mem/temp (SNMP by the
   same per-vendor OID profile the central poller uses, or the RouterOS API) and reports them

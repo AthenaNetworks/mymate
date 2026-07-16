@@ -17,14 +17,18 @@ import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, G
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
+import { ChildMapNode } from '../nodes/ChildMapNode';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
+import { MapLinkEdge } from '../edges/MapLinkEdge';
 import { LinkBinderDialog, type PendingLink } from './LinkBinderDialog';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
+import { AddChildMapDialog } from './AddChildMapDialog';
+import { MapLinkEditor } from './MapLinkEditor';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap } from '../../maps/api/maps';
+import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
@@ -36,8 +40,13 @@ import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '../../../types';
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
-const nodeTypes = { device: DeviceNode, portal: MapPortalNode };
-const edgeTypes = { util: UtilEdge };
+const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode };
+const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge };
+
+// Child-map nodes are keyed with this prefix so they never collide with device ids.
+const CHILD_PREFIX = 'childmap:';
+const childNodeId = (mapId: number) => `${CHILD_PREFIX}${mapId}`;
+const childMapId = (nodeId: string) => Number(nodeId.slice(CHILD_PREFIX.length));
 
 const miniColor: Record<DeviceStatus, string> = {
     up: '#34d399',
@@ -139,6 +148,9 @@ export function MapCanvas() {
     const { data: mapDetail } = useMap(activeMapId); // membership + per-map positions + inter-map links
     const savePosition = useSaveMapPosition();
     const saveLinkPosition = useSaveMapLinkPosition();
+    const saveChildPosition = useSaveChildMapPosition();
+    const createMapLink = useCreateMapLink();
+    const deleteMapLink = useDeleteMapLink();
     const deleteLink = useDeleteLink();
     const addToMap = useAddDeviceToMap();
     const { fitView, screenToFlowPosition } = useReactFlow();
@@ -153,6 +165,9 @@ export function MapCanvas() {
     const [pending, setPending] = useState<PendingLink | null>(null);
     const [historyLinkId, setHistoryLinkId] = useState<number | null>(null);
     const [deleteLinkId, setDeleteLinkId] = useState<number | null>(null);
+    const [addChildMap, setAddChildMap] = useState(false); // "Add map" dialog (place a child map)
+    const [deleteMapLinkId, setDeleteMapLinkId] = useState<number | null>(null);
+    const [editMapLinkId, setEditMapLinkId] = useState<number | null>(null);
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
     const [pendingLayout, setPendingLayout] = useState<LayoutKind | null>(null); // awaiting confirm before it overwrites positions
@@ -173,6 +188,9 @@ export function MapCanvas() {
         () => (links ?? []).filter((l) => memberSet.has(l.a_device_id) && memberSet.has(l.b_device_id)),
         [links, memberSet],
     );
+    // Child-map nodes placed on this canvas + the manual links between them (GitHub #9).
+    const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
+    const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
 
     // Live throughput -> util map (folded by useMapChannel from InterfaceUtilUpdated).
     const handleUtil = useCallback((payload: InterfaceUtilUpdatedPayload) => {
@@ -241,6 +259,8 @@ export function MapCanvas() {
     interMapLinksRef.current = interMapLinks;
     const posByIdRef = useRef(posById);
     posByIdRef.current = posById;
+    const childMapsRef = useRef(childMaps);
+    childMapsRef.current = childMaps;
 
     // A stable signature of *which* nodes are on the map and *where* - NOT their live data.
     // The full node rebuild keys off this so a metrics/status update (every ~30s) patches data
@@ -255,8 +275,10 @@ export function MapCanvas() {
                 })
                 .join('|') +
             '#' +
-            interMapLinks.map((il) => `${il.id}@${il.portal_x ?? ''},${il.portal_y ?? ''}`).join('|'),
-        [mapDevices, posById, interMapLinks],
+            interMapLinks.map((il) => `${il.id}@${il.portal_x ?? ''},${il.portal_y ?? ''}`).join('|') +
+            '#' +
+            childMaps.map((c) => `${c.id}@${Math.round(c.node_x ?? 0)},${Math.round(c.node_y ?? 0)}`).join('|'),
+        [mapDevices, posById, interMapLinks, childMaps],
     );
 
     // Map devices -> nodes, positioned per-map; plus a portal node per inter-map link. Rebuilds
@@ -310,7 +332,16 @@ export function MapCanvas() {
                 selectable: true,
             };
         });
-        setNodes([...deviceNodes, ...portalNodes]);
+        // Child-map nodes placed on this overview canvas (GitHub #9).
+        const childNodes: Node[] = childMapsRef.current.map((c, i) => ({
+            id: childNodeId(c.id),
+            type: 'childmap',
+            position: { x: c.node_x ?? 40 + (i % 5) * 240, y: c.node_y ?? 40 + Math.floor(i / 5) * 140 },
+            data: { mapId: c.id, name: c.name, deviceCount: c.device_count },
+            draggable: isAdmin,
+            selectable: true,
+        }));
+        setNodes([...deviceNodes, ...portalNodes, ...childNodes]);
     }, [membershipKey, setNodes, isAdmin]);
 
     // Intra-map links -> util edges; inter-map links -> dashed portal edges. Seed util.
@@ -324,7 +355,7 @@ export function MapCanvas() {
             sourceHandle: l.a_handle ?? undefined,
             targetHandle: l.b_handle ?? undefined,
             type: 'util',
-            data: { ...computeData(metaOf(l), linkUtil(l), statusRef.current), onRemove: isAdmin ? () => requestDelete(l.id) : undefined },
+            data: { ...computeData(metaOf(l), linkUtil(l), statusRef.current), mediaType: l.media_type, onRemove: isAdmin ? () => requestDelete(l.id) : undefined },
         }));
         const interEdges: Edge[] = interMapLinks.map((il) => ({
             id: `inter:${il.id}`,
@@ -334,7 +365,17 @@ export function MapCanvas() {
             deletable: false,
             style: { stroke: 'rgba(129,140,248,0.55)', strokeDasharray: '6 4' },
         }));
-        setEdges([...utilEdges, ...interEdges]);
+        // Manual device-less links between child-map nodes (GitHub #9), styled by medium.
+        const mapLinkEdges: Edge[] = mapLinks.map((ml) => ({
+            id: `maplink:${ml.id}`,
+            source: childNodeId(ml.a_map_id),
+            target: childNodeId(ml.b_map_id),
+            sourceHandle: ml.a_handle ?? undefined,
+            targetHandle: ml.b_handle ?? undefined,
+            type: 'mapLink',
+            data: { mediaType: ml.media_type, label: ml.label, onRemove: isAdmin ? () => setDeleteMapLinkId(ml.id) : undefined },
+        }));
+        setEdges([...utilEdges, ...interEdges, ...mapLinkEdges]);
 
         setUtil((prev) => {
             const base: UtilMap = {};
@@ -355,7 +396,7 @@ export function MapCanvas() {
             }
             return { ...base, ...prev };
         });
-    }, [intraLinks, interMapLinks, setEdges, requestDelete, isAdmin]);
+    }, [intraLinks, interMapLinks, mapLinks, setEdges, requestDelete, isAdmin]);
 
     // Recolour util edges in place when live util or device status changes.
     useEffect(() => {
@@ -505,19 +546,38 @@ export function MapCanvas() {
                         if (linkId) saveLinkPosition.mutate({ mapId: activeMapId, linkId, x: node.position.x, y: node.position.y });
                         return;
                     }
+                    if (node.type === 'childmap') {
+                        saveChildPosition.mutate({ mapId: activeMapId, childMapId: childMapId(node.id), x: node.position.x, y: node.position.y });
+                        return;
+                    }
                     if (node.type !== 'device') return;
                     savePosition.mutate({ mapId: activeMapId, deviceId: Number(node.id), x: node.position.x, y: node.position.y });
                 }}
                 onConnect={(c: Connection) => {
-                    if (!isAdmin) return;
-                    if (c.source && c.target && c.source !== c.target && !c.source.startsWith('portal:') && !c.target.startsWith('portal:')) {
+                    if (!isAdmin || !c.source || !c.target || c.source === c.target) return;
+                    const bothChild = c.source.startsWith(CHILD_PREFIX) && c.target.startsWith(CHILD_PREFIX);
+                    const bothDevice = !c.source.startsWith('portal:') && !c.target.startsWith('portal:') && !c.source.startsWith(CHILD_PREFIX) && !c.target.startsWith(CHILD_PREFIX);
+                    if (bothChild && activeMapId !== null) {
+                        // Manual overview link between two child-map nodes (GitHub #9).
+                        createMapLink.mutate({
+                            mapId: activeMapId,
+                            a_map_id: childMapId(c.source), b_map_id: childMapId(c.target),
+                            a_handle: c.sourceHandle ?? null, b_handle: c.targetHandle ?? null,
+                        });
+                    } else if (bothDevice) {
                         // Remember the exact handles dragged so the link attaches where the operator
                         // started/stopped, not the auto-floating side.
                         setPending({ aDeviceId: Number(c.source), bDeviceId: Number(c.target), aHandle: c.sourceHandle ?? null, bHandle: c.targetHandle ?? null });
                     }
                 }}
-                onEdgesDelete={(deleted) => isAdmin && deleted.forEach((e) => e.type === 'util' && deleteLink.mutate(Number(e.id)))}
-                onEdgeClick={(_, edge) => edge.type === 'util' && setHistoryLinkId(Number(edge.id))}
+                onEdgesDelete={(deleted) => isAdmin && deleted.forEach((e) => {
+                    if (e.type === 'util') deleteLink.mutate(Number(e.id));
+                    else if (e.type === 'mapLink' && activeMapId !== null) deleteMapLink.mutate({ mapId: activeMapId, mapLinkId: Number(String(e.id).replace('maplink:', '')) });
+                })}
+                onEdgeClick={(_, edge) => {
+                    if (edge.type === 'util') setHistoryLinkId(Number(edge.id));
+                    else if (edge.type === 'mapLink') setEditMapLinkId(Number(String(edge.id).replace('maplink:', '')));
+                }}
                 onNodeClick={(_, node) => {
                     if (node.type === 'device') {
                         selectDevice(Number(node.id));
@@ -614,6 +674,14 @@ export function MapCanvas() {
                             >
                                 <Globe weight="light" className="h-4 w-4 text-sky-300" />
                                 <span className="hidden md:inline">Internet</span>
+                            </button>
+                            <button
+                                onClick={() => setAddChildMap(true)}
+                                title="Place another map as a node on this overview, then link them"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <TreeStructure weight="light" className="h-4 w-4 text-indigo-300" />
+                                <span className="hidden md:inline">Add map</span>
                             </button>
                         </div>
                     )}
@@ -806,6 +874,35 @@ export function MapCanvas() {
                     confirmLabel="Arrange"
                     onConfirm={() => runLayout(pendingLayout)}
                     onClose={() => setPendingLayout(null)}
+                />
+            )}
+
+            {/* Place a map as a node on this overview (GitHub #9). */}
+            {addChildMap && activeMapId !== null && (
+                <AddChildMapDialog mapId={activeMapId} onClose={() => setAddChildMap(false)} />
+            )}
+
+            {/* Click a manual overview link -> set its medium + label. */}
+            {editMapLinkId !== null && activeMapId !== null && mapLinks.some((ml) => ml.id === editMapLinkId) && (
+                <MapLinkEditor mapId={activeMapId} link={mapLinks.find((ml) => ml.id === editMapLinkId)!} onClose={() => setEditMapLinkId(null)} />
+            )}
+
+            {/* ✕ on a manual map-link -> confirm, then remove it. */}
+            {deleteMapLinkId !== null && activeMapId !== null && (
+                <ConfirmDialog
+                    title="Remove link"
+                    icon={<LinkBreak weight="light" className="h-5 w-5" />}
+                    message={<>Remove this overview link? The maps it connects stay - only the drawn link is removed.</>}
+                    confirmLabel="Remove link"
+                    tone="danger"
+                    busy={deleteMapLink.isPending}
+                    onConfirm={() =>
+                        deleteMapLink.mutate(
+                            { mapId: activeMapId, mapLinkId: deleteMapLinkId },
+                            { onSuccess: () => setDeleteMapLinkId(null), onError: () => setDeleteMapLinkId(null) },
+                        )
+                    }
+                    onClose={() => setDeleteMapLinkId(null)}
                 />
             )}
         </>

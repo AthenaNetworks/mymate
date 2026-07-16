@@ -39,6 +39,8 @@ class StoreLinkRequest extends FormRequest
             // (React Flow handle id). Nullable = auto/floating.
             'a_handle' => ['sometimes', 'nullable', 'string', Rule::in(self::HANDLES)],
             'b_handle' => ['sometimes', 'nullable', 'string', Rule::in(self::HANDLES)],
+            // Physical medium (map styling only): fiber / ethernet / wireless / other.
+            'media_type' => ['sometimes', 'nullable', Rule::in(\App\Models\Link::MEDIA_TYPES)],
             // Per-direction bandwidth override. Nullable = "use the
             // derived speed (slowest end)"; 0 rejected (divide by zero).
             'bw_ab_mbps' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:4294967295'],
