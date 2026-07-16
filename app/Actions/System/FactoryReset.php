@@ -2,6 +2,7 @@
 
 namespace App\Actions\System;
 
+use App\Models\Map;
 use App\Models\User;
 use App\Support\EngineLog;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,11 @@ class FactoryReset
             // Operators are wiped with everything else; only admin accounts survive so whoever
             // triggered the reset stays able to log in and rebuild the fleet.
             User::query()->where('is_admin', false)->delete();
+
+            // Re-seed the default "Main" map (matches the install migration). The app assumes one
+            // always exists - new devices are placed on it, and the map view targets it - so a
+            // reset must leave a usable blank default rather than zero maps.
+            Map::create(['name' => 'Main', 'is_default' => true, 'position' => 0]);
         });
 
         EngineLog::warning('factory reset: all monitoring data cleared, admin accounts retained');

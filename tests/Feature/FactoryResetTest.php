@@ -23,6 +23,11 @@ class FactoryResetTest extends TestCase
         $this->assertDatabaseCount('devices', 0);
         $this->assertDatabaseHas('users', ['id' => $admin->id]);
         $this->assertDatabaseMissing('users', ['id' => $operator->id]);
+
+        // A usable default map must remain - the app places new devices on it and the map view
+        // targets it, so a reset that left zero maps would strand the map page.
+        $this->assertDatabaseHas('maps', ['is_default' => true]);
+        $this->assertSame(1, \App\Models\Map::count());
     }
 
     public function test_endpoint_is_admin_only_and_password_confirmed(): void
