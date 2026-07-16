@@ -135,7 +135,7 @@ class AgentHubCommand extends Command
         $state->mb = new MessageBuffer(
             new CloseFrameChecker,
             fn (Message $m) => $this->onMessage($agent->id, $m->getPayload()),
-            fn (Frame $f) => $this->onControl($conn, $f),
+            fn (Frame $f) => $this->onControl($conn, $agent->id, $f),
             true, // client -> server frames are masked
         );
 
@@ -190,11 +190,21 @@ class AgentHubCommand extends Command
         }
     }
 
-    private function onControl(ConnectionInterface $conn, Frame $frame): void
+    private function onControl(ConnectionInterface $conn, int $agentId, Frame $frame): void
     {
+        $opcode = $frame->getOpcode();
+
         // Reply to the agent's keepalive pings so its read deadline advances.
-        if ($frame->getOpcode() === Frame::OP_PING) {
+        if ($opcode === Frame::OP_PING) {
             $conn->write((new Frame($frame->getPayload(), true, Frame::OP_PONG))->getContents());
+        }
+
+        // Every ping (from the agent) or pong (its reply to our keepalive) is a heartbeat -
+        // refresh last_seen so "online" means "heard from within a keepalive or two", and the
+        // reaper can flip a silent agent offline promptly instead of waiting on a TCP/proxy
+        // timeout to notice the socket died.
+        if ($opcode === Frame::OP_PING || $opcode === Frame::OP_PONG) {
+            Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
         }
     }
 

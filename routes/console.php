@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\AgentStatus;
 use App\Jobs\ManageHistoryPartitionsJob;
+use App\Models\Agent;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -24,3 +26,14 @@ Schedule::command('mymate:backup:run --scheduled')->hourly()->name('device-backu
 
 // Sweep cached RouterOS upgrade packages past the retention window (default 90 days).
 Schedule::command('mymate:routeros:prune-packages')->daily()->name('routeros-package-prune')->withoutOverlapping();
+
+// Reap silent agents. A connected agent heartbeats via the hub keepalive every ~30s; if an
+// "online" one hasn't been heard from in 90s its socket is dead (e.g. a blackholed link that
+// never sent a TCP close, which the raised /agent proxy timeout would otherwise mask for up to
+// an hour) - flip it offline so the UI and job dispatch don't treat a gone agent as connected.
+Schedule::call(function () {
+    Agent::query()
+        ->where('status', AgentStatus::Online)
+        ->where('last_seen_at', '<', now()->subSeconds(90))
+        ->update(['status' => AgentStatus::Offline]);
+})->everyMinute()->name('agent-reap-stale')->withoutOverlapping();
