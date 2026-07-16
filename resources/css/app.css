@@ -28,6 +28,22 @@ body,
     height: 100%;
 }
 
+/* The app shell (and each view inside it) owns all scrolling, so the page itself must NEVER
+   scroll. Without this the document is taller than the visual viewport on mobile (the layout
+   viewport ignores the address bar) and can scroll, which lets the address bar shove the top
+   bar + left controls off-screen on a same-tab load. Lock it to the viewport in both axes. */
+html,
+body {
+    overflow: hidden;
+}
+
+/* Pin the document to the viewport so the address bar can't scroll the chrome off. */
+body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+}
+
 body {
     background-color: #060608; /* deepest OLED-ish base */
     color: rgb(244 244 245 / 0.92);
@@ -36,7 +52,6 @@ body {
     /* Mobile app-like feel: no page rubber-band / pull-to-refresh hijacking a map drag,
        no sideways scroll, no iOS text inflation on rotate, no grey tap-flash. */
     overscroll-behavior: none;
-    overflow-x: hidden;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
 }
