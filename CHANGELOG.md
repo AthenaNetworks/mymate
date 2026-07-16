@@ -29,8 +29,16 @@ of commit subjects.
   so the discovery page shows a real progress bar and a live "found" count for agent scans -
   and the loop no longer stacks overlapping sweeps of the same subnet.
 - **Remote agent as a `.deb`.**
+- **Custom device icon and colour.** Edit a device to pick its map glyph from a set of
+  role icons (router, switch, AP, dish, server, firewall, camera, NVR, and more) and tint
+  it any colour - or leave it on Auto to keep the vendor/type icon. The chosen icon now
+  shows identically on the map node and in the inspector header.
 
 ### Fixed
+- **Links attach to the sides you drew them from.** Dragging a link now binds each end to
+  the exact handle you started and finished on (e.g. bottom-to-top) instead of always
+  springing the "from" end to the top of the node. Links drawn the old way, or via the Add
+  link dialog, still auto-float to whichever sides face each other.
 - **Remote-agent connections stay up, and offline is detected fast.** The hub sends a WebSocket
   keepalive ping to each connected agent every 30s (and the `/agent` proxy read timeout was
   raised to an hour), so a quiet link is no longer dropped by nginx or a stateful firewall.

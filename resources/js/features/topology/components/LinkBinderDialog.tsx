@@ -6,7 +6,7 @@ import { useCreateLink } from '../api/createLink';
 import { useIsAdmin } from '../../auth/api/auth';
 import type { Device, NetworkInterface } from '../../../types';
 
-export type PendingLink = { aDeviceId: number; bDeviceId: number };
+export type PendingLink = { aDeviceId: number; bDeviceId: number; aHandle?: string | null; bHandle?: string | null };
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -356,6 +356,8 @@ export function LinkBinderDialog({
                 a_interface_id: aPingOnly ? null : Number(aIf),
                 b_device_id: pending.bDeviceId,
                 b_interface_id: bPingOnly ? null : Number(bIf),
+                a_handle: pending.aHandle ?? null,
+                b_handle: pending.bHandle ?? null,
             },
             { onSuccess: onClose },
         );

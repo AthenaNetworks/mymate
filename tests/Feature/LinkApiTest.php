@@ -46,6 +46,31 @@ class LinkApiTest extends TestCase
         $this->assertDatabaseHas('links', ['a_interface_id' => $aIf->id, 'b_interface_id' => $bIf->id]);
     }
 
+    public function test_persists_and_returns_the_dragged_end_handles(): void
+    {
+        [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id, 'a_handle' => 's-bottom',
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id, 'b_handle' => 't-top',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.a_handle', 's-bottom')
+            ->assertJsonPath('data.b_handle', 't-top');
+
+        $this->assertDatabaseHas('links', ['a_handle' => 's-bottom', 'b_handle' => 't-top']);
+    }
+
+    public function test_rejects_an_unknown_handle(): void
+    {
+        [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id, 'a_handle' => 'nonsense',
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id,
+        ])->assertJsonValidationErrors('a_handle');
+    }
+
     public function test_index_lists_links_with_both_interfaces(): void
     {
         [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();

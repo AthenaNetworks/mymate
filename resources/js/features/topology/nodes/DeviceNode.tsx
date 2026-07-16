@@ -49,8 +49,8 @@ const handle = '!h-1.5 !w-1.5 !border-0 !bg-white/25';
 // Bottom source are left id-less so existing/programmatic edges (which carry no handle
 // id) still bind exactly as before; the rest are id\'d extra anchors + drag points.
 const SIDES = [
-    { pos: Position.Top, srcId: 's-top', tgtId: null },
-    { pos: Position.Bottom, srcId: null, tgtId: 't-bottom' },
+    { pos: Position.Top, srcId: 's-top', tgtId: 't-top' },
+    { pos: Position.Bottom, srcId: 's-bottom', tgtId: 't-bottom' },
     { pos: Position.Left, srcId: 's-left', tgtId: 't-left' },
     { pos: Position.Right, srcId: 's-right', tgtId: 't-right' },
 ] as const;
@@ -60,8 +60,8 @@ function SideHandles() {
         <>
             {SIDES.map(({ pos, srcId, tgtId }) => (
                 <span key={pos}>
-                    <Handle type="target" position={pos} id={tgtId ?? undefined} className={handle} />
-                    <Handle type="source" position={pos} id={srcId ?? undefined} className={handle} />
+                    <Handle type="target" position={pos} id={tgtId} className={handle} />
+                    <Handle type="source" position={pos} id={srcId} className={handle} />
                 </span>
             ))}
         </>

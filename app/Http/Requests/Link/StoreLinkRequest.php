@@ -9,6 +9,12 @@ use Illuminate\Validation\Rule;
 
 class StoreLinkRequest extends FormRequest
 {
+    /** Valid React Flow handle ids a link end can attach to (source + target, all four sides). */
+    public const HANDLES = [
+        's-top', 's-bottom', 's-left', 's-right',
+        't-top', 't-bottom', 't-left', 't-right',
+    ];
+
     public function authorize(): bool
     {
         return $this->user() !== null; // authenticated operators only
@@ -29,6 +35,10 @@ class StoreLinkRequest extends FormRequest
                 'nullable', 'integer',
                 Rule::exists('interfaces', 'id')->where('device_id', $this->input('b_device_id')),
             ],
+            // The node side each end attaches to, captured from where the operator dragged
+            // (React Flow handle id). Nullable = auto/floating.
+            'a_handle' => ['sometimes', 'nullable', 'string', Rule::in(self::HANDLES)],
+            'b_handle' => ['sometimes', 'nullable', 'string', Rule::in(self::HANDLES)],
             // Per-direction bandwidth override. Nullable = "use the
             // derived speed (slowest end)"; 0 rejected (divide by zero).
             'bw_ab_mbps' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:4294967295'],

@@ -315,6 +315,10 @@ export function MapCanvas() {
             id: String(l.id),
             source: String(l.a_device_id),
             target: String(l.b_device_id),
+            // Bind to the exact sides the operator dragged (persisted per end). Without a
+            // handle we leave it undefined so UtilEdge floats to the facing side as before.
+            sourceHandle: l.a_handle ?? undefined,
+            targetHandle: l.b_handle ?? undefined,
             type: 'util',
             data: { ...computeData(metaOf(l), linkUtil(l), statusRef.current), onRemove: isAdmin ? () => requestDelete(l.id) : undefined },
         }));
@@ -503,7 +507,9 @@ export function MapCanvas() {
                 onConnect={(c: Connection) => {
                     if (!isAdmin) return;
                     if (c.source && c.target && c.source !== c.target && !c.source.startsWith('portal:') && !c.target.startsWith('portal:')) {
-                        setPending({ aDeviceId: Number(c.source), bDeviceId: Number(c.target) });
+                        // Remember the exact handles dragged so the link attaches where the operator
+                        // started/stopped, not the auto-floating side.
+                        setPending({ aDeviceId: Number(c.source), bDeviceId: Number(c.target), aHandle: c.sourceHandle ?? null, bHandle: c.targetHandle ?? null });
                     }
                 }}
                 onEdgesDelete={(deleted) => isAdmin && deleted.forEach((e) => e.type === 'util' && deleteLink.mutate(Number(e.id)))}

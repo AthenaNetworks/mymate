@@ -20,8 +20,10 @@ class LinkResource extends JsonResource
             'id' => $this->id,
             'a_device_id' => $this->a_device_id,
             'a_interface_id' => $this->a_interface_id,
+            'a_handle' => $this->a_handle,
             'b_device_id' => $this->b_device_id,
             'b_interface_id' => $this->b_interface_id,
+            'b_handle' => $this->b_handle,
             'a_interface' => new InterfaceResource($this->whenLoaded('aInterface')),
             'b_interface' => new InterfaceResource($this->whenLoaded('bInterface')),
             // Per-link bandwidth override + the resolved effective speed per direction

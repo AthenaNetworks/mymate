@@ -9,6 +9,7 @@ class Link extends Model
 {
     protected $fillable = [
         'a_device_id', 'a_interface_id', 'b_device_id', 'b_interface_id',
+        'a_handle', 'b_handle',
         'bw_ab_mbps', 'bw_ba_mbps',
     ];
 

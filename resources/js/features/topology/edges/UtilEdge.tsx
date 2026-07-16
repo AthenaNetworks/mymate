@@ -40,6 +40,8 @@ export function UtilEdge({
     targetY,
     sourcePosition,
     targetPosition,
+    sourceHandleId,
+    targetHandleId,
     data,
     selected,
 }: EdgeProps) {
@@ -57,7 +59,11 @@ export function UtilEdge({
         ty = targetY,
         sPos = sourcePosition,
         tPos = targetPosition;
-    if (sourceNode?.measured?.width && targetNode?.measured?.width) {
+    // Only float when the link carries no explicit handles. An operator-dragged link
+    // pins each end to the side it was drawn from/to (sourceHandleId/targetHandleId),
+    // so we honour React Flow's handle-derived props instead of floating to the facing side.
+    const pinned = Boolean(sourceHandleId) || Boolean(targetHandleId);
+    if (!pinned && sourceNode?.measured?.width && targetNode?.measured?.width) {
         const p = getFloatingParams(sourceNode, targetNode);
         sx = p.sx;
         sy = p.sy;

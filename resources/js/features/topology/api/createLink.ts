@@ -8,6 +8,8 @@ export interface CreateLinkInput {
     a_interface_id: number | null; // null = ping-only end (no interface)
     b_device_id: number;
     b_interface_id: number | null;
+    a_handle?: string | null; // node side each end attaches to (from the drag); null = auto
+    b_handle?: string | null;
 }
 
 export function useCreateLink() {

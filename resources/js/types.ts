@@ -170,6 +170,9 @@ export interface Link {
     a_interface_id: number | null;
     b_device_id: number;
     b_interface_id: number | null;
+    // The node side each end attaches to (React Flow handle id); null = auto/floating.
+    a_handle: string | null;
+    b_handle: string | null;
     a_interface: NetworkInterface | null;
     b_interface: NetworkInterface | null;
     // Per-link bandwidth override + resolved effective speed per direction.
