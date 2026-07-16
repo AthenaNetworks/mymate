@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { deviceKeys } from '../../devices/api/getDevices';
 import { linkKeys } from '../api/getLinks';
-import type { Device, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import type { Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
 type DeviceStatusChangedPayload = {
     id: number;
@@ -72,6 +72,20 @@ export function useMapChannel(
                                   wireless_clients: f.wireless_clients,
                               }
                             : d;
+                    }) ?? prev,
+            );
+        });
+
+        // Live ping latency/loss -> folded into the devices cache so the internet/upstream
+        // card reflects current rtt without a refetch. Same coalesced shape as metrics.
+        channel.listen('.DeviceLatencyUpdated', (e: DeviceLatencyUpdatedPayload) => {
+            const byId = new Map(e.devices.map((f) => [f.device_id, f]));
+            qc.setQueryData<Device[]>(
+                deviceKeys.list(),
+                (prev) =>
+                    prev?.map((d) => {
+                        const f = byId.get(d.id);
+                        return f ? { ...d, rtt_ms: f.rtt_ms, loss_pct: f.loss_pct } : d;
                     }) ?? prev,
             );
         });

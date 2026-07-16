@@ -34,6 +34,11 @@ class UpdateDeviceRequest extends FormRequest
             'icon_color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'vendor' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // Latency quality thresholds (internet/upstream card), 0-65535ms. Ordering
+            // (good <= bad) is enforced in the editor; the card's colour logic tolerates
+            // either order regardless.
+            'latency_good_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
+            'latency_bad_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
             'parent_device_id' => [
                 'sometimes', 'nullable', 'integer', 'exists:devices,id',
                 Rule::notIn([$this->route('device')?->id]), // a device can't be its own parent

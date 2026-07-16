@@ -59,6 +59,9 @@ export function DeviceDialog({
     const [monitored, setMonitored] = useState<boolean>(device?.monitored ?? true);
     const [icon, setIcon] = useState<string | null>(device?.icon ?? null);
     const [iconColor, setIconColor] = useState<string | null>(device?.icon_color ?? null);
+    // Latency quality thresholds (internet/upstream card). Empty string = use the card default.
+    const [latencyGood, setLatencyGood] = useState<string>(device?.latency_good_ms != null ? String(device.latency_good_ms) : '');
+    const [latencyBad, setLatencyBad] = useState<string>(device?.latency_bad_ms != null ? String(device.latency_bad_ms) : '');
 
     const busy = create.isPending || update.isPending;
     const isError = create.isError || update.isError;
@@ -95,8 +98,14 @@ export function DeviceDialog({
                 { onSuccess: (d) => { onCreated?.(d); onClose(); } },
             );
         } else if (device) {
+            const latGood = latencyGood.trim() === '' ? null : Number(latencyGood);
+            const latBad = latencyBad.trim() === '' ? null : Number(latencyBad);
             update.mutate(
-                { id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor },
+                {
+                    id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
+                    credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor,
+                    latency_good_ms: latGood, latency_bad_ms: latBad,
+                },
                 { onSuccess: onClose },
             );
         }
@@ -167,6 +176,36 @@ export function DeviceDialog({
                         <div className="flex items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/10">
                             <span className="text-sm text-white/75">Monitoring {monitored ? 'on' : 'paused'}</span>
                             <Toggle checked={monitored} onChange={setMonitored} label="Monitoring" />
+                        </div>
+                    )}
+
+                    {mode === 'edit' && deviceType === 'internet' && (
+                        <div className="space-y-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+                            <span className="block text-xs font-medium text-white/55">Latency quality (ms)</span>
+                            <div className="flex items-center gap-2">
+                                <label className="flex-1 space-y-1">
+                                    <span className="px-0.5 text-[11px] text-emerald-300/80">Good at or below</span>
+                                    <input
+                                        type="number" min={0} inputMode="numeric"
+                                        value={latencyGood} onChange={(e) => setLatencyGood(e.target.value)}
+                                        placeholder="30" className={field}
+                                    />
+                                </label>
+                                <label className="flex-1 space-y-1">
+                                    <span className="px-0.5 text-[11px] text-rose-300/80">Bad at or above</span>
+                                    <input
+                                        type="number" min={0} inputMode="numeric"
+                                        value={latencyBad} onChange={(e) => setLatencyBad(e.target.value)}
+                                        placeholder="150" className={field}
+                                    />
+                                </label>
+                            </div>
+                            {latencyGood.trim() !== '' && latencyBad.trim() !== '' && Number(latencyGood) > Number(latencyBad) && (
+                                <p className="px-0.5 text-[11px] text-amber-300/80">Good should be lower than bad.</p>
+                            )}
+                            <p className="px-0.5 text-[11px] leading-snug text-white/35">
+                                The internet card shows ping latency, green below the good mark and red above the bad. Leave blank for defaults.
+                            </p>
                         </div>
                     )}
 

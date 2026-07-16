@@ -16,6 +16,8 @@ type UpdateDeviceInput = {
     credential_id?: number | null;
     ssh_credential_id?: number | null;
     agent_id?: number | null;
+    latency_good_ms?: number | null;
+    latency_bad_ms?: number | null;
 };
 
 /** Patch a device (e.g. reclassify its type). Invalidates the device list so the map

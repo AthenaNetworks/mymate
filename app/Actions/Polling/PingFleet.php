@@ -4,6 +4,7 @@ namespace App\Actions\Polling;
 
 use App\Actions\Outages\RecordOutage;
 use App\Enums\DeviceStatus;
+use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Models\Device;
 use App\Services\Ping\Pinger;
@@ -86,6 +87,7 @@ class PingFleet
 
         $ts = now();
         $rows = [];
+        $frames = []; // live rtt/loss for the internet card
         foreach ($devices as $device) {
             $s = $samples[$device->mgmt_ip] ?? null;
             if ($s === null) {
@@ -99,10 +101,19 @@ class PingFleet
                 'loss_pct' => $s->lossPct,
                 'jitter_ms' => $s->jitterMs,
             ];
+            $frames[] = [
+                'device_id' => $device->id,
+                'rtt_ms' => $s->rttMs,
+                'loss_pct' => $s->lossPct,
+            ];
         }
 
         if ($rows !== []) {
             DB::table('ping_samples')->insert($rows);
+        }
+
+        if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
+            DeviceLatencyUpdated::dispatch($frames);
         }
     }
 }

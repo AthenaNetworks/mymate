@@ -280,6 +280,10 @@ export function MapCanvas() {
                 cpu: d.cpu_pct,
                 mem: d.mem_used_pct,
                 temp: d.temp_c,
+                rtt_ms: d.rtt_ms,
+                loss_pct: d.loss_pct,
+                latency_good_ms: d.latency_good_ms,
+                latency_bad_ms: d.latency_bad_ms,
             },
         }));
         const perDevice: Record<number, number> = {};
@@ -374,7 +378,7 @@ export function MapCanvas() {
                 if (n.type !== 'device') return n;
                 const d = byId.get(Number(n.id));
                 return d
-                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c } }
+                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c, rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms } }
                     : n;
             }),
         );

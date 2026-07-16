@@ -157,6 +157,26 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('data.uptime_seconds', 3600);
     }
 
+    public function test_it_updates_and_exposes_latency_quality_thresholds(): void
+    {
+        $device = Device::factory()->create(['device_type' => DeviceType::Internet, 'poll_method' => 'none']);
+
+        $this->patchJson("/api/devices/{$device->id}", ['latency_good_ms' => 25, 'latency_bad_ms' => 200])
+            ->assertOk()
+            ->assertJsonPath('data.latency_good_ms', 25)
+            ->assertJsonPath('data.latency_bad_ms', 200);
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'latency_good_ms' => 25, 'latency_bad_ms' => 200]);
+    }
+
+    public function test_it_rejects_a_negative_latency_threshold(): void
+    {
+        $device = Device::factory()->create();
+
+        $this->patchJson("/api/devices/{$device->id}", ['latency_bad_ms' => -5])
+            ->assertJsonValidationErrors('latency_bad_ms');
+    }
+
     public function test_it_defaults_device_type_to_unknown(): void
     {
         $this->postJson('/api/devices', ['name' => 'Plain', 'mgmt_ip' => '10.0.0.9', 'poll_method' => 'snmp'])

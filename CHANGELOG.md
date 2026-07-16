@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Internet/upstream card shows latency, not load.** An internet device now displays its
+  ping latency (and a packet-loss badge) instead of a load/cpu/mem tile, coloured by a
+  per-device quality band you set in the device editor - green at or below the "good"
+  threshold, red at or above the "bad" one, amber in between (defaults 30ms / 150ms).
+  Latency updates live on the map as sweeps run.
 - **Discovery probes SNMP, RouterOS and SSH per host.** A responding host is now tried
   against all three credential types in one pass, so both its poll credential (SNMP or
   RouterOS) and a matching SSH credential (for config backups) are linked when you approve

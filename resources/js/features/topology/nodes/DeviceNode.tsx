@@ -19,7 +19,28 @@ export type DeviceNodeData = {
     cpu: number | null; // resource metrics (live) - null when the device doesn't report them
     mem: number | null;
     temp: number | null;
+    rtt_ms: number | null; // ping latency (live) - the internet/upstream card shows this
+    loss_pct: number | null;
+    latency_good_ms: number | null; // <= good -> green, >= bad -> red, between -> amber
+    latency_bad_ms: number | null;
 };
+
+// Fallback quality thresholds when a device has none set (typical broadband RTT feel).
+const LATENCY_GOOD_DEFAULT = 30;
+const LATENCY_BAD_DEFAULT = 150;
+
+// Colour the latency reading by the device's quality band. Loss trumps latency - any
+// sustained packet loss reads red. Null rtt (never pinged) stays neutral grey.
+function latencyColor(rtt: number | null, loss: number | null, good: number, bad: number): string {
+    if (loss !== null && loss >= 5) return '#f87171';
+    if (rtt === null) return 'rgba(255,255,255,0.15)';
+    // Tolerate good/bad set in either order.
+    const lo = Math.min(good, bad);
+    const hi = Math.max(good, bad);
+    if (rtt <= lo) return '#34d399';
+    if (rtt >= hi) return '#f87171';
+    return '#fbbf24';
+}
 
 /** Compact bits-per-second for the LOAD tile fallback ("5.0M", "125M", "1.2G", "12k"). */
 function compactBps(bps: number): string {
@@ -84,6 +105,10 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
     const meta = typeMeta[d.device_type] ?? typeMeta.unknown;
     const down = d.status === 'down';
 
+    // The internet/upstream object isn't polled for load/cpu/mem - its health is latency.
+    // Render a fixed LATENCY readout (rtt + loss) coloured by the device's quality band.
+    const isInternet = d.device_type === 'internet';
+
     // Which resource this tile shows (per-device, persisted). Clicking the chip cycles it.
     const metric = useDeviceTileMetric(Number(id));
     const cycle = () => setDeviceTileMetric(Number(id), METRICS[(METRICS.indexOf(metric) + 1) % METRICS.length]);
@@ -106,6 +131,14 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                     ? tempColor(raw)
                     : linkColor(raw, false);
     const valueLabel = showBps ? compactBps(d.load as number) : raw === null ? '-' : isTemp ? `${Math.round(raw)}°` : `${raw.toFixed(raw < 10 ? 1 : 0)}%`;
+
+    // Internet card: latency readout instead of the load/cpu/mem tile.
+    const latGood = d.latency_good_ms ?? LATENCY_GOOD_DEFAULT;
+    const latBad = d.latency_bad_ms ?? LATENCY_BAD_DEFAULT;
+    const latColor = down ? 'var(--link-down)' : latencyColor(d.rtt_ms, d.loss_pct, latGood, latBad);
+    const latBarPct = d.rtt_ms === null ? 0 : Math.min((d.rtt_ms / Math.max(latBad, 1)) * 100, 100);
+    const latValue = down ? 'down' : d.rtt_ms === null ? '-' : `${Math.round(d.rtt_ms)}ms`;
+    const hasLoss = !down && d.loss_pct !== null && d.loss_pct > 0;
 
     return (
         // Double-bezel: outer shell (machined tray) + inner core (glass plate). No backdrop-blur
@@ -144,27 +177,51 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                     <StatusDot status={d.status} className="mt-0.5 self-start" />
                 </div>
 
-                {/* Chosen resource - clickable metric chip + bar + value. The chip carries
-                    `nodrag` so clicking it cycles the metric instead of dragging the node. */}
-                <div className="mt-2.5 flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); cycle(); }}
-                        title="Click to change the metric shown"
-                        className="nodrag shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white/70"
-                    >
-                        {METRIC_LABEL[metric]}
-                    </button>
-                    <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-                        <div
-                            className="h-full rounded-full transition-all duration-500 ease-fluid"
-                            style={{ width: `${barPct}%`, background: barColor }}
-                        />
+                {isInternet ? (
+                    /* Internet/upstream: a fixed LATENCY readout (rtt + optional loss badge),
+                       coloured by the device's quality thresholds. No metric cycling. */
+                    <div className="mt-2.5 flex items-center gap-2">
+                        <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10">
+                            LATENCY
+                        </span>
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                                className="h-full rounded-full transition-all duration-500 ease-fluid"
+                                style={{ width: `${latBarPct}%`, background: latColor }}
+                            />
+                        </div>
+                        {hasLoss && (
+                            <span className="shrink-0 rounded bg-rose-500/15 px-1 text-[9px] font-semibold tabular-nums text-rose-300 ring-1 ring-rose-400/25">
+                                {d.loss_pct! < 10 ? d.loss_pct!.toFixed(1) : Math.round(d.loss_pct!)}% loss
+                            </span>
+                        )}
+                        <span className="w-11 shrink-0 text-right text-[10px] tabular-nums" style={{ color: latColor }}>
+                            {latValue}
+                        </span>
                     </div>
-                    <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
-                        {valueLabel}
-                    </span>
-                </div>
+                ) : (
+                    /* Chosen resource - clickable metric chip + bar + value. The chip carries
+                       `nodrag` so clicking it cycles the metric instead of dragging the node. */
+                    <div className="mt-2.5 flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); cycle(); }}
+                            title="Click to change the metric shown"
+                            className="nodrag shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white/70"
+                        >
+                            {METRIC_LABEL[metric]}
+                        </button>
+                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                            <div
+                                className="h-full rounded-full transition-all duration-500 ease-fluid"
+                                style={{ width: `${barPct}%`, background: barColor }}
+                            />
+                        </div>
+                        <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
+                            {valueLabel}
+                        </span>
+                    </div>
+                )}
 
             </div>
         </div>

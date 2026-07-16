@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\Polling\PingFleet;
 use App\Enums\DeviceStatus;
+use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Models\Device;
 use App\Models\Outage;
@@ -74,6 +75,21 @@ class PingFleetTest extends TestCase
         $this->assertSame(0.0, $device->loss_pct);
         $this->assertNotNull($device->ping_at);
         $this->assertDatabaseHas('ping_samples', ['device_id' => $device->id, 'rtt_ms' => 12.5, 'loss_pct' => 0]);
+    }
+
+    public function test_broadcasts_live_latency_for_the_internet_card(): void
+    {
+        Event::fake([DeviceLatencyUpdated::class]);
+        $device = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Up]);
+        $this->fakePinger(['10.0.0.1']);
+
+        app(PingFleet::class)();
+
+        Event::assertDispatched(DeviceLatencyUpdated::class, function (DeviceLatencyUpdated $e) use ($device) {
+            $frame = $e->devices[0];
+
+            return $frame['device_id'] === $device->id && $frame['rtt_ms'] === 12.5 && $frame['loss_pct'] === 0.0;
+        });
     }
 
     public function test_unchanged_status_emits_no_event(): void

@@ -60,6 +60,8 @@ class DeviceResource extends JsonResource
             'rtt_ms' => $this->rtt_ms,
             'loss_pct' => $this->loss_pct,
             'ping_at' => $this->ping_at,
+            'latency_good_ms' => $this->latency_good_ms,
+            'latency_bad_ms' => $this->latency_bad_ms,
             // Config-backup mirror - last run cached from Rusted.
             'backup_enabled' => (bool) $this->backup_enabled,
             'backup_driver' => $this->backup_driver,

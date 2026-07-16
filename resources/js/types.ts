@@ -74,6 +74,9 @@ export interface Device {
     rtt_ms: number | null;
     loss_pct: number | null;
     ping_at: string | null;
+    // Latency quality thresholds for the internet/upstream card (ms). Null = UI default.
+    latency_good_ms: number | null;
+    latency_bad_ms: number | null;
     // Config-backup mirror - last Rusted run, cached on the device.
     backup_enabled: boolean;
     backup_driver: string | null;
@@ -408,6 +411,18 @@ export interface DeviceMetricsFrame {
 
 export interface DeviceMetricsUpdatedPayload {
     devices: DeviceMetricsFrame[];
+    device_count: number;
+}
+
+// Live ping latency/loss (internet card), coalesced across devices - mirrors metrics.
+export interface DeviceLatencyFrame {
+    device_id: number;
+    rtt_ms: number | null;
+    loss_pct: number | null;
+}
+
+export interface DeviceLatencyUpdatedPayload {
+    devices: DeviceLatencyFrame[];
     device_count: number;
 }
 
