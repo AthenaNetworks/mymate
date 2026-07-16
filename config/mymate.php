@@ -8,6 +8,11 @@ return [
 
     // Up/down loop (fping). interval in seconds; timeout in ms.
     'ping' => [
+        // Path to the fping >=5.5 binary. Null = auto-detect (common sbin/bin locations, then
+        // PATH). Set explicitly if fping lives somewhere unusual. Resolving by absolute path
+        // matters because php-fpm (web requests) often runs with a PATH that omits
+        // /usr/local/sbin, where the from-source fping is installed.
+        'fping' => env('MYMATE_FPING_PATH'),
         'interval' => (int) env('MYMATE_PING_INTERVAL', 5),
         'timeout_ms' => (int) env('MYMATE_PING_TIMEOUT_MS', 500),
         'retries' => (int) env('MYMATE_PING_RETRIES', 1),

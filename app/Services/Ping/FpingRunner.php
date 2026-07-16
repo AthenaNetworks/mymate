@@ -39,13 +39,35 @@ class FpingRunner implements Pinger
         return self::parseSamples($this->run($ips), $ips);
     }
 
+    /**
+     * Absolute path to the fping binary. Symfony Process resolves a bare command name against
+     * the caller's PATH, but php-fpm (web requests, e.g. a synchronous "scan now") frequently
+     * runs with a PATH that omits /usr/local/sbin - where the required fping >=5.5 is installed
+     * from source - so it wouldn't find fping at all and every sweep would come back empty.
+     * Honour the configured path, else probe the usual locations, else fall back to the PATH.
+     */
+    private static function binary(): string
+    {
+        $configured = config('mymate.ping.fping');
+        if (is_string($configured) && $configured !== '' && is_executable($configured)) {
+            return $configured;
+        }
+        foreach (['/usr/local/sbin/fping', '/usr/sbin/fping', '/usr/local/bin/fping', '/usr/bin/fping'] as $path) {
+            if (is_executable($path)) {
+                return $path;
+            }
+        }
+
+        return 'fping'; // last resort - relies on PATH
+    }
+
     /** Run one fping sweep over the given IPs and return its raw JSON-Lines stdout. */
     private function run(array $ips): string
     {
         // --json emits JSON Lines (NDJSON); it requires a count/loop mode, so -c N sends N
         // pings per host. -p spaces multi-probe sweeps out so they stay snappy. Each host
         // gets a {"summary": {...}} line (rcv/loss) and one {"resp": {...}} line per reply.
-        $args = ['fping', '--json', '-c', (string) max(1, $this->count)];
+        $args = [self::binary(), '--json', '-c', (string) max(1, $this->count)];
         if ($this->count > 1) {
             $args[] = '-p';
             $args[] = (string) max(1, $this->periodMs);
