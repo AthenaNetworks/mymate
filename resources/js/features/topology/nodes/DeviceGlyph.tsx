@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Globe, WifiHigh, Broadcast, HardDrives, ShareNetwork, StackSimple, Cube, type Icon } from '@phosphor-icons/react';
 import type { DeviceType } from '../../../types';
 import { deviceIcon } from '../../../components/deviceIcons';
@@ -80,7 +80,21 @@ export function DeviceGlyph({
     className?: string;
 }) {
     const [loaded, setLoaded] = useState(false);
-    const [failed, setFailed] = useState(false);
+    // Errored on the current attempt; `attempt` bumps the request (cache-busted) to re-fetch.
+    const [errored, setErrored] = useState(false);
+    const [attempt, setAttempt] = useState(0);
+    const MAX_RETRIES = 3;
+
+    // First request for an uncached MikroTik photo 404s but dispatches a server-side fetch; poll
+    // a few more times (backing off) so the freshly cached image appears without a page reload.
+    useEffect(() => {
+        if (!errored || attempt >= MAX_RETRIES) return;
+        const t = setTimeout(() => {
+            setErrored(false);
+            setAttempt((a) => a + 1);
+        }, 2000 * (attempt + 1));
+        return () => clearTimeout(t);
+    }, [errored, attempt]);
 
     // An explicit operator-chosen icon wins over the auto photo/monogram/family glyph.
     const Custom = deviceIcon(icon);
@@ -93,7 +107,8 @@ export function DeviceGlyph({
     // a raw board id (e.g. "0x0002") can't map to a MikroTik product page, so don't 404-loop on
     // them - go straight to the vendor mark / drawn icon.
     const realModel = !!model && !/^0x[0-9a-f]+$/i.test(model.trim());
-    const useImage = isMikrotik && realModel && !failed;
+    const gaveUp = errored && attempt >= MAX_RETRIES;
+    const useImage = isMikrotik && realModel && !gaveUp;
     const mark = vendorMark(vendor);
     const Fallback = familyIcon(type, model ?? '');
 
@@ -101,10 +116,10 @@ export function DeviceGlyph({
         <>
             {useImage && (
                 <img
-                    src={`/api/devices/${deviceId}/icon`}
+                    src={`/api/devices/${deviceId}/icon${attempt > 0 ? `?r=${attempt}` : ''}`}
                     alt=""
                     onLoad={() => setLoaded(true)}
-                    onError={() => setFailed(true)}
+                    onError={() => setErrored(true)}
                     className={`${className} object-contain ${loaded ? '' : 'hidden'}`}
                 />
             )}

@@ -108,6 +108,48 @@ class CaptureDeviceFactsTest extends TestCase
         $this->assertSame('RB5009UPr+S+', $device->fresh()->model);
     }
 
+    public function test_mikrotik_snmp_model_from_modern_sysdescr_with_version_and_channel(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        // Newer RouterOS appends the version + channel after the board name; the model is still
+        // the token right after "RouterOS" (this exact string comes off a live RB5009).
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS RB5009UPr+S+ 7.23.2 (stable)',
+            $oids['sys_uptime'] => '100',
+        ];
+        $snmp->walks[$oids['ent_model']] = [1 => '0x0002'];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+
+        $this->assertSame('RB5009UPr+S+', $device->fresh()->model);
+    }
+
+    public function test_mikrotik_modelless_sysdescr_does_not_capture_a_version_as_the_model(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        // A CHR-less build can report just "RouterOS <version>" - the version must not become
+        // the model (it isn't a product name and can't map to a photo).
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS 7.23.2 (stable)',
+            $oids['sys_uptime'] => '100',
+        ];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+
+        $this->assertNull($device->fresh()->model);
+        $this->assertSame('MikroTik', $device->fresh()->vendor);
+    }
+
     public function test_snmp_facts_populate_vendor_and_uptime(): void
     {
         $cred = Credential::factory()->create(['snmp_community' => 'public-test']);

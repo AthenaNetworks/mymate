@@ -40,6 +40,14 @@ of commit subjects.
   shows identically on the map node and in the inspector header.
 
 ### Fixed
+- **MikroTik product photos show again (model parsed from modern sysDescr).** Newer RouterOS
+  reports its board name with the version appended ("RouterOS RB5009UPr+S+ 7.23.2 (stable)"),
+  which the model parser's end-anchored pattern didn't match - so the model came back empty,
+  the product-photo lookup had nothing to resolve, and the card fell back to the "MT" monogram.
+  The board name is now read regardless of a trailing version, and a modelless build's bare
+  version is no longer mistaken for a model. The map glyph also retries a freshly-fetched photo
+  a few times so it appears without a page reload. (Modelless CHR virtual routers still show the
+  MikroTik monogram - there's no product image for them.)
 - **CPU / memory now read over SNMP for wired devices.** A device answering "no such object"
   for an OID it doesn't implement (e.g. a wired router or switch queried for a wireless-only
   signal OID) was treated as a total poll failure, so its cpu/mem/temp came back blank even

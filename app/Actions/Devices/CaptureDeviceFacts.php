@@ -173,10 +173,16 @@ class CaptureDeviceFacts
     private static function modelFromSysDescr(string $descr): ?string
     {
         $descr = trim($descr);
+        // entPhysicalDescr / longer form: "RouterOS 7.x (...) on RB5009UPr+S+".
         if (preg_match('/\bon\s+(\S+)\s*$/i', $descr, $m) === 1) {
             return self::cleanModel($m[1]);
         }
-        if (preg_match('/^RouterOS\s+(\S+)$/i', $descr, $m) === 1) {
+        // sysDescr: "RouterOS <MODEL> [<version> (channel)]" - the model is the token right
+        // after RouterOS. Older builds omit the version ("RouterOS RB5009UPr+S+"); newer ones
+        // append it ("RouterOS RB5009UPr+S+ 7.23.2 (stable)"), so match without anchoring to
+        // end-of-string. cleanModel() drops a bare version token (a CHR-less build reporting
+        // just "RouterOS 7.23.2").
+        if (preg_match('/^RouterOS\s+(\S+)/i', $descr, $m) === 1) {
             return self::cleanModel($m[1]);
         }
 
@@ -186,7 +192,9 @@ class CaptureDeviceFacts
     private static function cleanModel(mixed $model): ?string
     {
         $m = trim((string) $model);
-        if ($m === '' || preg_match('/^0x[0-9a-f]+$/i', $m) === 1 || preg_match('/^\d+$/', $m) === 1) {
+        // Drop non-names: hex board ids ("0x0002"), and bare or dotted version numbers
+        // ("123", "7.23.2") that a modelless sysDescr can leave in the model slot.
+        if ($m === '' || preg_match('/^0x[0-9a-f]+$/i', $m) === 1 || preg_match('/^\d+(\.\d+)*$/', $m) === 1) {
             return null;
         }
 
