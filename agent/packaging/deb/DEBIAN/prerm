@@ -1,0 +1,12 @@
+#!/bin/sh
+# Stop + disable the service before the binary/unit are removed.
+set -e
+
+case "$1" in
+    remove|deconfigure)
+        systemctl stop mymate-agent >/dev/null 2>&1 || true
+        systemctl disable mymate-agent >/dev/null 2>&1 || true
+        ;;
+esac
+
+exit 0

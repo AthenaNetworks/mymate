@@ -1,0 +1,18 @@
+Template: mymate-agent/url
+Type: string
+Description: My Mate server URL:
+ The address of the central My Mate server this agent connects out to, for
+ example https://mymate.example.com. http(s):// is rewritten to ws(s):// and
+ /agent is appended automatically.
+
+Template: mymate-agent/token
+Type: password
+Description: My Mate agent token:
+ The bearer token that identifies this agent to the server. Create one on the
+ server with:  php artisan mymate:agent:create "Site name"
+
+Template: mymate-agent/no-config
+Type: note
+Description: My Mate agent not configured
+ No server URL or token was provided, so the agent has been installed but not
+ started. Set them later with:  sudo dpkg-reconfigure mymate-agent

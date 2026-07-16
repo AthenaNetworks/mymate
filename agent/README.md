@@ -19,14 +19,32 @@ container, or a Raspberry Pi.
 
 ## Install
 
-1. On the app, enrol the agent and copy its token:
-   ```sh
-   php artisan mymate:agent:create "Site A"
-   ```
-2. On the agent host, download the archive for your platform from the release, unpack it, and:
-   ```sh
-   sudo ./install.sh --url https://mymate.example.com --token mma_xxxxx
-   ```
+First, on the app, enrol the agent and copy its token:
+
+```sh
+php artisan mymate:agent:create "Site A"
+```
+
+### Debian / Ubuntu (.deb) - recommended
+
+Download the `.deb` for your architecture (`amd64`, `arm64`, `armhf`) from the release and:
+
+```sh
+sudo apt install ./mymate-agent_1.2.0_amd64.deb
+```
+
+It asks for the **server URL** and **agent token** during install, writes
+`/etc/mymate-agent/agent.env` (root-only), and enables the systemd service. To change the
+settings later: `sudo dpkg-reconfigure mymate-agent`. Preseed a non-interactive install with
+`debconf-set-selections` (keys `mymate-agent/url` and `mymate-agent/token`).
+
+### Any Linux / macOS (archive)
+
+Download the archive for your platform, unpack it, and:
+
+```sh
+sudo ./install.sh --url https://mymate.example.com --token mma_xxxxx
+```
 
 That installs the binary to `/usr/local/bin/mymate-agent` and registers a service that
 starts at boot and restarts on failure - **systemd** on Linux, **launchd** on macOS.
@@ -57,9 +75,12 @@ restarts the process if it ever exits.
 ```sh
 ./build.sh host        # this machine -> bin/mymate-agent
 VERSION=v1.0.0 ./build.sh   # all platforms -> dist/*.tar.gz (+ SHA256SUMS)
+
+# Debian packages (needs dpkg-deb):
+VERSION=1.0.0 ARCH=amd64 packaging/build-deb.sh   # -> dist/mymate-agent_1.0.0_amd64.deb
 ```
 
-Needs Go 1.25+. CI builds these on every release tag.
+Needs Go 1.25+. CI builds the archives and the `.deb`s on every release tag.
 
 ## Discovery
 

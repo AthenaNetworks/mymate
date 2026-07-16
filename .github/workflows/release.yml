@@ -76,6 +76,9 @@ jobs:
       - name: Cross-compile + package archives
         working-directory: agent
         run: VERSION="${GITHUB_REF_NAME}" ./build.sh
+      - name: Package the agent as .deb (amd64/arm64/armhf)
+        working-directory: agent
+        run: for a in amd64 arm64 armhf; do VERSION="${GITHUB_REF_NAME}" ARCH="$a" packaging/build-deb.sh; done
       - uses: actions/upload-artifact@v4
         with: { name: mymate-agent, path: agent/dist/*, if-no-files-found: error }
 
@@ -105,6 +108,7 @@ jobs:
             dist/*.deb
             dist/*.tar.zst
             dist/agent/*.tar.gz
+            dist/agent/*.deb
             dist/agent/SHA256SUMS
           fail_on_unmatched_files: false
           generate_release_notes: true

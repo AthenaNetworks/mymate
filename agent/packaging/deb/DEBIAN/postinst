@@ -1,0 +1,43 @@
+#!/bin/sh
+# Write the agent config from the debconf answers, then enable + start the service.
+set -e
+
+. /usr/share/debconf/confmodule
+
+ENV_DIR=/etc/mymate-agent
+ENV_FILE=$ENV_DIR/agent.env
+
+case "$1" in
+    configure)
+        db_get mymate-agent/url;   URL="$RET"
+        db_get mymate-agent/token; TOKEN="$RET"
+
+        if [ -n "$URL" ] && [ -n "$TOKEN" ]; then
+            mkdir -p "$ENV_DIR"
+            # Root-only: the file holds the bearer token.
+            umask 077
+            cat > "$ENV_FILE" <<EOF
+# Managed by the mymate-agent package (dpkg-reconfigure mymate-agent to change).
+MYMATE_URL=$URL
+MYMATE_AGENT_TOKEN=$TOKEN
+EOF
+            chmod 600 "$ENV_FILE"
+
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            systemctl enable mymate-agent >/dev/null 2>&1 || true
+            systemctl restart mymate-agent >/dev/null 2>&1 || true
+            echo "mymate-agent: configured for $URL and started. Logs: journalctl -u mymate-agent -f"
+        elif [ ! -f "$ENV_FILE" ]; then
+            # Nothing supplied and no prior config - install the unit but stay stopped.
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            db_input high mymate-agent/no-config || true
+            db_go || true
+        else
+            # Keep the existing config (e.g. an upgrade with the token left in debconf).
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            systemctl restart mymate-agent >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+exit 0

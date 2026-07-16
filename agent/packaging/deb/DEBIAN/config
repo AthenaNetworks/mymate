@@ -1,0 +1,12 @@
+#!/bin/sh
+# debconf config script: ask for the server URL + token before postinst runs. Preseedable
+# for non-interactive installs (debconf-set-selections) and re-runnable via dpkg-reconfigure.
+set -e
+
+. /usr/share/debconf/confmodule
+
+db_input high mymate-agent/url || true
+db_input high mymate-agent/token || true
+db_go || true
+
+exit 0

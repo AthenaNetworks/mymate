@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Remote agent as a `.deb`.** The agent now ships as a Debian package (amd64 / arm64 /
+  armhf) that asks for the server URL and agent token during install, writes the config,
+  and sets up a hardened systemd service - `sudo apt install ./mymate-agent_<ver>_<arch>.deb`.
+  Change it later with `dpkg-reconfigure mymate-agent`. Built and attached to releases by CI.
+
 ## [1.2.0] - 2026-07-15
 
 ### Added

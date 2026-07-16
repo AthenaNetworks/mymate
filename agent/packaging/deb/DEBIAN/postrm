@@ -1,0 +1,17 @@
+#!/bin/sh
+# On purge, remove the config (with its token) and forget the debconf answers.
+set -e
+
+case "$1" in
+    purge)
+        rm -f /etc/mymate-agent/agent.env
+        rmdir /etc/mymate-agent 2>/dev/null || true
+        if [ -e /usr/share/debconf/confmodule ]; then
+            . /usr/share/debconf/confmodule
+            db_purge 2>/dev/null || true
+        fi
+        ;;
+esac
+
+systemctl daemon-reload >/dev/null 2>&1 || true
+exit 0

@@ -1,0 +1,16 @@
+Package: mymate-agent
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Athena Networks <sales@athenanetworks.com.au>
+Depends: ca-certificates
+Section: net
+Priority: optional
+Homepage: https://github.com/AthenaNetworks/mymate
+Description: My Mate remote agent (probe)
+ A lightweight probe that runs inside a remote or management network and connects
+ out to a central My Mate server over an outbound WebSocket, polling the devices
+ on that network locally on the server's behalf. Install it on a small VM,
+ container or Raspberry Pi at each site.
+ .
+ On install it asks for the My Mate server URL and this agent's token, writes the
+ configuration and starts a hardened systemd service that reconnects on failure.
