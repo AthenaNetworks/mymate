@@ -445,6 +445,8 @@ export interface DiscoveryCandidate {
     sysname: string | null;
     detected_method: PollMethod | null;
     matched_credential_id: number | null;
+    // Every credential that authenticated against the host (poll + SSH), for tags in the queue.
+    matched_credentials: { id: number; name: string; type: 'snmp' | 'routeros' | 'ssh' }[];
     first_seen: string | null;
     last_seen: string | null;
 }

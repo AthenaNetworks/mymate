@@ -18,6 +18,9 @@ of commit subjects.
   against all three credential types in one pass, so both its poll credential (SNMP or
   RouterOS) and a matching SSH credential (for config backups) are linked when you approve
   it. A host that only matches SSH becomes a ping-only device with backups configured.
+- **Credential tags in the review queue.** Each discovered host shows a tag for every
+  credential that authenticated against it (SNMP / RouterOS / SSH, named), so you can see
+  at a glance what it'll be polled and backed up with before approving it.
 - **Remote agent as a `.deb`.**
 
 ### Fixed

@@ -110,6 +110,7 @@ class ScanSubnet
                     'detected_method' => $probe->method, // null when only SSH matched (ping-only device)
                     'matched_credential_id' => $probe->credentialId,
                     'matched_ssh_credential_id' => $probe->sshCredentialId,
+                    'matched_credential_ids' => $probe->matchedCredentialIds, // all that worked (tags)
                     'first_seen' => $now,
                     'last_seen' => $now,
                 ]);

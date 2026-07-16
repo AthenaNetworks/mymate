@@ -37,17 +37,29 @@ class HostProber
      */
     public function probe(string $ip, Collection $credentials): ProbeResult
     {
-        // Poll credential: SNMP first (connectionless), else the RouterOS API login.
-        $poll = $this->probeSnmp($ip, $credentials->where('type', PollMethod::Snmp->value));
-        if (! $poll->identified()) {
-            $poll = $this->probeRouterOs($ip, $credentials->where('type', PollMethod::RouterOs->value));
-        }
-
-        // SSH credential (for backups) - tried regardless of the poll result so a device gets
-        // both its poll credential and its backup credential linked in one pass.
+        // Try EVERY credential type so we can tag the host with all that worked (a MikroTik can
+        // answer both SNMP and the RouterOS API). SNMP and RouterOS each yield a poll match; SSH
+        // yields a backup match. (Empty per-type pools return instantly, so this stays cheap when
+        // the operator only has one credential type.)
+        $snmp = $this->probeSnmp($ip, $credentials->where('type', PollMethod::Snmp->value));
+        $routerOs = $this->probeRouterOs($ip, $credentials->where('type', PollMethod::RouterOs->value));
         $sshCredentialId = $this->probeSsh($ip, $credentials->where('type', 'ssh'));
 
-        return $poll->withSsh($sshCredentialId);
+        // Primary poll credential: SNMP preferred (connectionless, no lockout risk), else RouterOS.
+        $poll = $snmp->identified() ? $snmp : $routerOs;
+
+        $matchedCredentialIds = array_values(array_filter(
+            [$snmp->credentialId, $routerOs->credentialId, $sshCredentialId],
+            static fn (?int $id): bool => $id !== null,
+        ));
+
+        return new ProbeResult(
+            method: $poll->method,
+            sysname: $snmp->sysname ?? $routerOs->sysname,
+            credentialId: $poll->credentialId,
+            sshCredentialId: $sshCredentialId,
+            matchedCredentialIds: $matchedCredentialIds,
+        );
     }
 
     /**

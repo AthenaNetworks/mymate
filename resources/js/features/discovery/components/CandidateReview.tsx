@@ -7,25 +7,43 @@ import { useIsAdmin } from '../../auth/api/auth';
 import { relativeTime } from '../../../lib/relativeTime';
 import type { DiscoveryCandidate, DiscoveryStatus } from '../../../types';
 
-const methodBadge: Record<string, string> = {
+const credTag: Record<string, string> = {
     snmp: 'bg-sky-500/15 text-sky-300 ring-sky-400/20',
     routeros: 'bg-violet-500/15 text-violet-300 ring-violet-400/20',
+    ssh: 'bg-amber-500/15 text-amber-300 ring-amber-400/25',
 };
+
+/** One tag per credential that authenticated against the host (SNMP / RouterOS / SSH). */
+function CredentialTags({ candidate }: { candidate: DiscoveryCandidate }) {
+    const creds = candidate.matched_credentials ?? [];
+    if (creds.length === 0) {
+        return (
+            <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/40 ring-1 ring-white/10">
+                unidentified
+            </span>
+        );
+    }
+    return (
+        <>
+            {creds.map((c) => (
+                <span
+                    key={c.id}
+                    title={`${c.type.toUpperCase()} credential: ${c.name}`}
+                    className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${credTag[c.type] ?? 'bg-white/5 text-white/40 ring-white/10'}`}
+                >
+                    <span className="uppercase tracking-wide">{c.type}</span>
+                    <span className="max-w-[7rem] truncate font-normal opacity-70">{c.name}</span>
+                </span>
+            ))}
+        </>
+    );
+}
 
 const statusBadge: Record<DiscoveryStatus, string> = {
     new: 'text-emerald-300',
     approved: 'text-white/40',
     ignored: 'text-white/30',
 };
-
-function MethodChip({ method }: { method: DiscoveryCandidate['detected_method'] }) {
-    const cls = method ? methodBadge[method] : 'bg-white/5 text-white/40 ring-white/10';
-    return (
-        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ring-1 ${cls}`}>
-            {method ?? 'unknown'}
-        </span>
-    );
-}
 
 export function CandidateReview({ open, scanning }: { open: boolean; scanning?: boolean }) {
     const isAdmin = useIsAdmin();
@@ -90,9 +108,9 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
                         className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.02] px-2.5 py-2 ring-1 ring-white/[0.06]"
                     >
                         <span className="min-w-0">
-                            <span className="flex items-center gap-2">
+                            <span className="flex flex-wrap items-center gap-1.5">
                                 <span className="truncate font-mono text-sm text-white/85">{c.ip}</span>
-                                <MethodChip method={c.detected_method} />
+                                <CredentialTags candidate={c} />
                             </span>
                             <span className="block truncate text-xs text-white/40">
                                 {c.sysname ?? 'unidentified'} - seen {relativeTime(c.last_seen)}

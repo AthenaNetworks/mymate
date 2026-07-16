@@ -21,12 +21,13 @@ class DiscoveryCandidate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ip', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'first_seen', 'last_seen',
+        'ip', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'matched_credential_ids', 'first_seen', 'last_seen',
     ];
 
     protected $casts = [
         'status' => DiscoveryStatus::class,
         'detected_method' => PollMethod::class, // nullable - null cast stays null
+        'matched_credential_ids' => 'array',
         'first_seen' => 'datetime',
         'last_seen' => 'datetime',
     ];

@@ -14,22 +14,21 @@ use App\Enums\PollMethod;
  */
 final readonly class ProbeResult
 {
+    /**
+     * @param  list<int>  $matchedCredentialIds  every credential that authenticated (poll + SSH),
+     *                                            for display as tags in the review queue
+     */
     public function __construct(
         public ?PollMethod $method,
         public ?string $sysname,
         public ?int $credentialId,
         public ?int $sshCredentialId = null,
+        public array $matchedCredentialIds = [],
     ) {}
 
     public static function none(): self
     {
-        return new self(null, null, null, null);
-    }
-
-    /** A copy of this result with an SSH credential match attached. */
-    public function withSsh(?int $sshCredentialId): self
-    {
-        return new self($this->method, $this->sysname, $this->credentialId, $sshCredentialId);
+        return new self(null, null, null, null, []);
     }
 
     /** Did a poll credential (SNMP or RouterOS) identify the host? */
