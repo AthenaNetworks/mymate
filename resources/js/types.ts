@@ -435,6 +435,7 @@ export interface Subnet {
     enabled: boolean;
     scan_interval_s: number;
     last_scanned_at: string | null;
+    scanning: boolean; // a sweep is running right now (user-triggered or scheduled)
     agent_id: number | null; // scanned by a remote agent when set, else centrally
 }
 

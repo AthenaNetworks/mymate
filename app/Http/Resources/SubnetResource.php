@@ -19,6 +19,10 @@ class SubnetResource extends JsonResource
             'scan_interval_s' => $this->scan_interval_s,
             'agent_id' => $this->agent_id,
             'last_scanned_at' => $this->last_scanned_at,
+            // A sweep is running right now. Guarded by age so a worker killed mid-sweep (which
+            // couldn't clear the flag) doesn't leave it "scanning" forever - well past any real
+            // sweep, which is bounded by the probe budget + a 300s overlap lock.
+            'scanning' => $this->scanning_since !== null && $this->scanning_since->diffInSeconds(now()) < 300,
         ];
     }
 }

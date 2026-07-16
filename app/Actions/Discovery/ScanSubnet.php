@@ -53,6 +53,19 @@ class ScanSubnet
             ]);
         }
 
+        // Mark the sweep as running so the UI can show live progress; always cleared below.
+        $subnet->update(['scanning_since' => now()]);
+
+        try {
+            return $this->sweep($subnet, $hosts);
+        } finally {
+            $subnet->update(['scanning_since' => null, 'last_scanned_at' => now()]);
+        }
+    }
+
+    /** @param  list<string>  $hosts */
+    private function sweep(Subnet $subnet, array $hosts): int
+    {
         $reachable = $this->pinger->reachable($hosts);
         $now = now();
 
@@ -118,8 +131,7 @@ class ScanSubnet
             }
         }
 
-        $subnet->update(['last_scanned_at' => $now]);
-
+        // last_scanned_at + scanning_since are cleared in the caller's finally.
         EngineLog::info('discovery: subnet scanned', [
             'subnet_id' => $subnet->id,
             'cidr' => $subnet->cidr,

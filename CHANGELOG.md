@@ -21,6 +21,9 @@ of commit subjects.
 - **Credential tags in the review queue.** Each discovered host shows a tag for every
   credential that authenticated against it (SNMP / RouterOS / SSH, named), so you can see
   at a glance what it'll be polled and backed up with before approving it.
+- **Live scan-progress on the discovery page.** A sweep in progress now shows a banner with
+  an animated progress bar and the subnet(s) being scanned - for scheduled scans too, not
+  just ones you kicked off - so it's obvious discovery is working while devices trickle in.
 - **Remote agent as a `.deb`.**
 
 ### Fixed

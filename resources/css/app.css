@@ -140,10 +140,34 @@ label,
     animation: cardpulse 2s ease-in-out infinite;
 }
 
+/* Indeterminate progress bar (a scanning sweep with no known %): a bright segment slides
+   across the track left-to-right, forever. Used on the discovery scan banner. */
+@keyframes scanbar {
+    0% {
+        left: -40%;
+        width: 40%;
+    }
+    50% {
+        width: 55%;
+    }
+    100% {
+        left: 100%;
+        width: 40%;
+    }
+}
+.animate-scanbar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-radius: inherit;
+    animation: scanbar 1.3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .animate-rise,
     .animate-toast,
-    .animate-cardpulse {
+    .animate-cardpulse,
+    .animate-scanbar {
         animation: none;
     }
     /* Stop the marching-dash link flow (set inline on the edge path + the flow accent). */

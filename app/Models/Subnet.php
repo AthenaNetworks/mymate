@@ -18,12 +18,13 @@ class Subnet extends Model
     /** @use HasFactory<SubnetFactory> */
     use HasFactory;
 
-    protected $fillable = ['cidr', 'label', 'enabled', 'scan_interval_s', 'last_scanned_at', 'agent_id'];
+    protected $fillable = ['cidr', 'label', 'enabled', 'scan_interval_s', 'last_scanned_at', 'scanning_since', 'agent_id'];
 
     protected $casts = [
         'enabled' => 'boolean',
         'scan_interval_s' => 'integer',
         'last_scanned_at' => 'datetime',
+        'scanning_since' => 'datetime',
     ];
 
     // Mirror the DB defaults on a freshly created instance.

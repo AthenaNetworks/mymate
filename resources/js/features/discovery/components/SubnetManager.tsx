@@ -120,7 +120,7 @@ export function SubnetManager({
                     <li className="rounded-xl px-3 py-2 text-xs text-white/35">No ranges yet - add one to start discovering.</li>
                 )}
                 {subnets?.map((s) => {
-                    const isScanning = s.id in scanning;
+                    const isScanning = s.scanning || s.id in scanning;
                     return (
                         <li
                             key={s.id}
