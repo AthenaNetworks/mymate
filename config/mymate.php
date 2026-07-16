@@ -214,6 +214,13 @@ return [
         'max_hosts_per_subnet' => (int) env('MYMATE_DISCOVERY_MAX_HOSTS', 4096),
         // Lockout-aware spacing between *RouterOS login* attempts on one host (ms).
         'attempt_delay_ms' => (int) env('MYMATE_DISCOVERY_ATTEMPT_DELAY_MS', 200),
+        // Wall-clock budget (s) for credential-probing responders in one sweep. Probing tries
+        // SNMP + RouterOS + SSH per host, which is slow; when the budget is spent the sweep stops
+        // probing new hosts (already-found candidates are skipped next run) so the scan job never
+        // blows past its queue timeout. 0 = no budget (probe every responder).
+        'scan_probe_budget_s' => (int) env('MYMATE_DISCOVERY_PROBE_BUDGET_S', 45),
+        // SSH connect/auth timeout per credential attempt (s) - short so a filtered/closed 22 fails fast.
+        'ssh_probe_timeout_s' => (int) env('MYMATE_DISCOVERY_SSH_TIMEOUT_S', 4),
     ],
 
     // RouterOS binary-API driver. Short connect timeout so a filtered

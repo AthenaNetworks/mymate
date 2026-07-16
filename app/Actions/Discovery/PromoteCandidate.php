@@ -35,20 +35,22 @@ class PromoteCandidate
             $device = Device::where('mgmt_ip', $candidate->ip)->first();
 
             if ($device === null) {
-                // Discovery only queues hosts it positively identified (#7), so a real
-                // poll_method + credential are always present here. Guard defensively:
-                // an unidentified candidate has nothing to poll and must not become a device.
-                if ($candidate->detected_method === null) {
+                // Discovery only queues hosts it matched at least one credential to. A candidate
+                // with no poll method AND no SSH credential was never identified and has nothing
+                // to link, so it must not become a device.
+                if ($candidate->detected_method === null && $candidate->matched_ssh_credential_id === null) {
                     throw new \RuntimeException(
-                        "Cannot promote discovery candidate {$candidate->ip}: it was never identified via SNMP or RouterOS."
+                        "Cannot promote discovery candidate {$candidate->ip}: it was never identified via SNMP, RouterOS or SSH."
                     );
                 }
 
                 $attributes = [
                     'name' => $candidate->sysname ?: $candidate->ip,
                     'mgmt_ip' => $candidate->ip,
-                    'poll_method' => $candidate->detected_method,
+                    // SSH-only match -> a ping-only device we can still back up over SSH.
+                    'poll_method' => $candidate->detected_method ?? \App\Enums\PollMethod::None,
                     'credential_id' => $candidate->matched_credential_id,
+                    'ssh_credential_id' => $candidate->matched_ssh_credential_id,
                 ];
 
                 try {

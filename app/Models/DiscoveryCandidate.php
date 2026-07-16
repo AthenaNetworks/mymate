@@ -21,7 +21,7 @@ class DiscoveryCandidate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ip', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'first_seen', 'last_seen',
+        'ip', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'first_seen', 'last_seen',
     ];
 
     protected $casts = [
@@ -38,5 +38,10 @@ class DiscoveryCandidate extends Model
     public function matchedCredential(): BelongsTo
     {
         return $this->belongsTo(Credential::class, 'matched_credential_id');
+    }
+
+    public function matchedSshCredential(): BelongsTo
+    {
+        return $this->belongsTo(Credential::class, 'matched_ssh_credential_id');
     }
 }

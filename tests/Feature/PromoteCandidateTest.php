@@ -46,6 +46,44 @@ class PromoteCandidateTest extends TestCase
         Queue::assertPushed(PollInterfacesJob::class, fn ($j) => $j->deviceId === $device->id);
     }
 
+    public function test_approving_links_both_the_poll_and_ssh_credentials(): void
+    {
+        Queue::fake();
+        $poll = Credential::factory()->routeros()->create();
+        $ssh = Credential::factory()->create(['type' => 'ssh', 'username' => 'backup']);
+        $candidate = DiscoveryCandidate::factory()->create([
+            'ip' => '10.80.111.6',
+            'detected_method' => PollMethod::RouterOs,
+            'matched_credential_id' => $poll->id,
+            'matched_ssh_credential_id' => $ssh->id,
+            'status' => DiscoveryStatus::New,
+        ]);
+
+        $device = app(PromoteCandidate::class)($candidate);
+
+        $this->assertSame($poll->id, $device->credential_id);
+        $this->assertSame($ssh->id, $device->ssh_credential_id);
+    }
+
+    public function test_an_ssh_only_match_promotes_to_a_ping_only_device_with_backups(): void
+    {
+        Queue::fake();
+        $ssh = Credential::factory()->create(['type' => 'ssh', 'username' => 'backup']);
+        $candidate = DiscoveryCandidate::factory()->create([
+            'ip' => '10.80.111.7',
+            'detected_method' => null, // nothing to poll, but SSH works
+            'matched_credential_id' => null,
+            'matched_ssh_credential_id' => $ssh->id,
+            'status' => DiscoveryStatus::New,
+        ]);
+
+        $device = app(PromoteCandidate::class)($candidate);
+
+        $this->assertSame(PollMethod::None, $device->poll_method);
+        $this->assertNull($device->credential_id);
+        $this->assertSame($ssh->id, $device->ssh_credential_id);
+    }
+
     public function test_approving_an_unidentified_candidate_is_rejected(): void
     {
         // : discovery no longer queues unidentified hosts, and a legacy

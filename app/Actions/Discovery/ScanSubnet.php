@@ -57,7 +57,8 @@ class ScanSubnet
         $now = now();
 
         $new = 0;
-        $skipped = 0; // responders we couldn't identify via SNMP/RouterOS
+        $skipped = 0;   // responders that answered ping but matched no credential at all
+        $deferred = 0;  // new responders left un-probed this run because the time budget ran out
 
         if ($reachable !== []) {
             // Read-only try-pool - secrets decrypted only inside the prober, never logged.
@@ -65,6 +66,12 @@ class ScanSubnet
             // IPs that are already devices (skip) and existing candidates (update, never dup).
             $deviceIps = Device::pluck('mgmt_ip')->flip();
             $existing = DiscoveryCandidate::whereIn('ip', $reachable)->get()->keyBy('ip');
+
+            // Probing tries SNMP + RouterOS + SSH per host, which is slow; cap the wall-clock so
+            // the job can't blow past its queue timeout. Un-probed responders are just retried on
+            // the next scan (found candidates are skipped, so successive sweeps make progress).
+            $budget = (int) config('mymate.discovery.scan_probe_budget_s', 45);
+            $deadline = $budget > 0 ? microtime(true) + $budget : null;
 
             foreach ($reachable as $ip) {
                 if ($deviceIps->has($ip)) {
@@ -74,18 +81,23 @@ class ScanSubnet
                 $candidate = $existing->get($ip);
                 if ($candidate !== null) {
                     // Seen again: bump last_seen. Never re-trial creds, never change status
-                    // (so an ignored candidate stays ignored).
+                    // (so an ignored candidate stays ignored). Cheap - not subject to the budget.
                     $candidate->update(['last_seen' => $now]);
 
                     continue;
                 }
 
+                if ($deadline !== null && microtime(true) >= $deadline) {
+                    $deferred++; // out of time - leave this new host for the next sweep
+                    continue;
+                }
+
                 $probe = $this->prober->probe($ip, $credentials);
 
-                // Only queue hosts we positively identified via SNMP or RouterOS (#7).
-                // A host that answers ping but matches no credential isn't actionable
-                // (there's nothing to poll), so it stays out of the review queue.
-                if (! $probe->identified()) {
+                // Queue any host we linked at least one credential to - a poll credential
+                // (SNMP/RouterOS) and/or an SSH credential for backups. A host that answers
+                // ping but matches nothing isn't actionable, so it stays out of the queue.
+                if (! $probe->matchedAny()) {
                     $skipped++;
 
                     continue;
@@ -95,8 +107,9 @@ class ScanSubnet
                     'ip' => $ip,
                     'status' => DiscoveryStatus::New,
                     'sysname' => $probe->sysname,
-                    'detected_method' => $probe->method,
+                    'detected_method' => $probe->method, // null when only SSH matched (ping-only device)
                     'matched_credential_id' => $probe->credentialId,
+                    'matched_ssh_credential_id' => $probe->sshCredentialId,
                     'first_seen' => $now,
                     'last_seen' => $now,
                 ]);
@@ -112,7 +125,8 @@ class ScanSubnet
             'hosts' => count($hosts),
             'reachable' => count($reachable),
             'new_candidates' => $new,
-            'unidentified_skipped' => $skipped, // pinged but no SNMP/RouterOS match
+            'unidentified_skipped' => $skipped,  // pinged but no credential matched
+            'deferred_to_next_run' => $deferred, // new responders un-probed (time budget) - not silent
         ]);
 
         return $new;

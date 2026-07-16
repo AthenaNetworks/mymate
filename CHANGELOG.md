@@ -14,7 +14,19 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
-- **Remote agent as a `.deb`.** The agent now ships as a Debian package (amd64 / arm64 /
+- **Discovery probes SNMP, RouterOS and SSH per host.** A responding host is now tried
+  against all three credential types in one pass, so both its poll credential (SNMP or
+  RouterOS) and a matching SSH credential (for config backups) are linked when you approve
+  it. A host that only matches SSH becomes a ping-only device with backups configured.
+- **Remote agent as a `.deb`.**
+
+### Fixed
+- **Discovery scans now find every responder.** Two bugs meant hosts that clearly respond
+  (e.g. routers on `.253`/`.254`) were missed: fping was resolved via `PATH`, so a
+  web-request context whose `PATH` omitted `/usr/local/sbin` couldn't find it and every
+  sweep came back empty (now resolved by absolute path); and a `/24` sweep could exceed the
+  scan job's timeout while probing serially, so late addresses were never reached (probing
+  now runs within a time budget and defers the rest to the next sweep instead of timing out). The agent now ships as a Debian package (amd64 / arm64 /
   armhf) that asks for the server URL and agent token during install, writes the config,
   and sets up a hardened systemd service - `sudo apt install ./mymate-agent_<ver>_<arch>.deb`.
   Change it later with `dpkg-reconfigure mymate-agent`. Built and attached to releases by CI.

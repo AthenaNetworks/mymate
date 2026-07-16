@@ -14,13 +14,15 @@ use Illuminate\Support\Collection;
 /**
  * Identifies one responding host by trying the read-only credential pool.
  *
- * Order: SNMP first (connectionless GET - no auth state, no lockout risk), then the
- * RouterOS API (a real login). Returns the first credential that works. The pool is
- * read **read-only**; decrypted secrets live only in this call and are NEVER logged.
+ * A host is probed for its POLL credential (SNMP first - connectionless GET, no auth state,
+ * no lockout risk - then the RouterOS API) AND, independently, for an SSH credential (used for
+ * config backups). Both are returned so promotion can link the poll cred and the backup cred
+ * to the device. The pool is read **read-only**; decrypted secrets live only in this call and
+ * are NEVER logged.
  *
- * Safety (NFR-10): the underlying SnmpClient/RouterOsClient use short, fail-fast
- * timeouts, and RouterOS login attempts are spaced by `attemptDelayMs` to stay
- * lockout-aware when several routeros credentials are tried against one host.
+ * Safety (NFR-10): the underlying clients use short, fail-fast timeouts, and repeated login
+ * attempts (RouterOS, SSH) are spaced by `attemptDelayMs` to stay lockout-aware when several
+ * credentials are tried against one host.
  */
 class HostProber
 {
@@ -35,12 +37,67 @@ class HostProber
      */
     public function probe(string $ip, Collection $credentials): ProbeResult
     {
-        $snmp = $this->probeSnmp($ip, $credentials->where('type', PollMethod::Snmp->value));
-        if ($snmp->identified()) {
-            return $snmp;
+        // Poll credential: SNMP first (connectionless), else the RouterOS API login.
+        $poll = $this->probeSnmp($ip, $credentials->where('type', PollMethod::Snmp->value));
+        if (! $poll->identified()) {
+            $poll = $this->probeRouterOs($ip, $credentials->where('type', PollMethod::RouterOs->value));
         }
 
-        return $this->probeRouterOs($ip, $credentials->where('type', PollMethod::RouterOs->value));
+        // SSH credential (for backups) - tried regardless of the poll result so a device gets
+        // both its poll credential and its backup credential linked in one pass.
+        $sshCredentialId = $this->probeSsh($ip, $credentials->where('type', 'ssh'));
+
+        return $poll->withSsh($sshCredentialId);
+    }
+
+    /**
+     * Find an SSH credential that authenticates on port 22 (key first, then password). Returns
+     * its id, or null if none work. Bounded + spaced like the RouterOS trial so it stays
+     * lockout-aware.
+     *
+     * @param  Collection<int, Credential>  $creds
+     */
+    private function probeSsh(string $ip, Collection $creds): ?int
+    {
+        $timeout = max(1, (int) config('mymate.discovery.ssh_probe_timeout_s', 4));
+        $first = true;
+
+        foreach ($creds as $cred) {
+            if (! $cred->username) {
+                continue;
+            }
+            if (! $first && $this->attemptDelayMs > 0) {
+                usleep($this->attemptDelayMs * 1000);
+            }
+            $first = false;
+
+            try {
+                $ssh = new \phpseclib3\Net\SSH2($ip, 22, $timeout);
+                $ssh->setTimeout($timeout);
+
+                $ok = false;
+                if ($cred->private_key) {
+                    try {
+                        $key = \phpseclib3\Crypt\PublicKeyLoader::load((string) $cred->private_key, (string) ($cred->password ?? ''));
+                        $ok = $ssh->login((string) $cred->username, $key);
+                    } catch (\Throwable) {
+                        $ok = false; // unloadable/mismatched key - fall through to password below
+                    }
+                }
+                if (! $ok && $cred->password) {
+                    $ok = $ssh->login((string) $cred->username, (string) $cred->password);
+                }
+                $ssh->disconnect();
+
+                if ($ok) {
+                    return (int) $cred->id;
+                }
+            } catch (\Throwable) {
+                // Port 22 filtered/closed, connect timeout, or protocol error - try the next cred.
+            }
+        }
+
+        return null;
     }
 
     /** @param  Collection<int, Credential>  $creds */
