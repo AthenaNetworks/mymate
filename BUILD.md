@@ -71,12 +71,20 @@ npm run dev                # Vite dev server for the UI
 php artisan reverb:start   # the WebSocket server
 php artisan horizon        # the queue workers that do the polling
 php artisan mymate:loop    # the loop that dispatches ping/poll work every few seconds
+php artisan mymate:agent-hub --host=127.0.0.1 --port=9091  # only if you use remote agents
 ```
 
+The agent hub is optional - you only need it when testing remote agents (the probe that runs
+inside a management network). Agents connect to `ws(s)://<host>/agent`, which nginx proxies to
+this hub on `127.0.0.1:9091`; the shipped nginx/supervisor configs
+([deploy/nginx/mymate.conf](deploy/nginx/mymate.conf),
+[deploy/supervisor/mymate.conf](deploy/supervisor/mymate.conf)) already wire it up for a
+non-dev install.
+
 Open http://localhost:8000. One thing that trips people up: after you change any PHP, the
-long running processes (Horizon, the loop, Reverb) keep running the old code because they
-booted the framework once and hold it in memory. `artisan serve` and php-fpm reload on their
-own, the others don't. Restart them, or you'll swear a change didn't take.
+long running processes (Horizon, the loop, Reverb, the agent hub) keep running the old code
+because they booted the framework once and hold it in memory. `artisan serve` and php-fpm
+reload on their own, the others don't. Restart them, or you'll swear a change didn't take.
 
 `php artisan mymate:loop --once` runs a single sweep, which is handy for testing. `--discover`
 re-walks interfaces, `--scan` kicks off discovery for any subnet that's due, and `--partitions`
