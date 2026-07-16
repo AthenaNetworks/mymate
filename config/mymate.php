@@ -95,6 +95,13 @@ return [
         ],
     ],
 
+    // Links. When neither end of a link reports an interface speed (e.g. RouterOS returns 0
+    // for ifSpeed/ifHighSpeed over SNMP), fall back to this effective speed so the link still
+    // colours by load instead of staying neutral. A per-link bandwidth override always wins.
+    'links' => [
+        'default_speed_mbps' => (int) env('MYMATE_LINK_DEFAULT_SPEED_MBPS', 1000),
+    ],
+
     // Update check: compare this install's version against the latest GitHub release so
     // the console can flag when a newer version is out. The version comes from
     // MYMATE_VERSION (stamped by the packaged build) or the repo-root VERSION file.

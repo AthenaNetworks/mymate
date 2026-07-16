@@ -44,7 +44,12 @@ class Link extends Model
     // set, else the slowest of the two end interfaces' SNMP speeds. Consumed by
     // LinkResource (map edge) and EvaluateAlerts.
 
-    /** A->B effective speed (Mbps): override, else the slower of the two ends. Null when unknown. */
+    /**
+     * A->B effective speed (Mbps): override, else the slower of the two ends. When neither end
+     * reports a speed (e.g. RouterOS returns 0 for ifSpeed over SNMP) fall back to the configured
+     * default so the link still colours by load rather than staying neutral. Only ever null for
+     * a link with no interface at either end (ping-only), where there's no throughput to scale.
+     */
     public function effAbMbps(): ?int
     {
         if ($this->bw_ab_mbps !== null) {
@@ -56,7 +61,17 @@ class Link extends Model
             fn (?int $s): bool => $s !== null && $s > 0,
         );
 
-        return $speeds === [] ? null : (int) min($speeds);
+        if ($speeds !== []) {
+            return (int) min($speeds);
+        }
+
+        // At least one real interface but no known speed -> assume the default circuit speed.
+        // A ping-only link (no interface either end) has nothing to scale, so stays null.
+        if ($this->aInterface !== null || $this->bInterface !== null) {
+            return (int) config('mymate.links.default_speed_mbps', 1000);
+        }
+
+        return null;
     }
 
     /** B->A effective speed (Mbps): override, else A->B (symmetric fallback). */

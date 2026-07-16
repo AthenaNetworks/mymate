@@ -192,6 +192,24 @@ class LinkApiTest extends TestCase
             ->assertJsonPath('data.eff_ba_mbps', 1000);
     }
 
+    public function test_link_speed_falls_back_to_the_default_when_neither_end_reports_a_speed(): void
+    {
+        // Both ends report no speed (e.g. RouterOS returns 0 for ifSpeed over SNMP) - the link
+        // still gets a capacity (the configured default) so it colours by load, not neutral.
+        $a = Device::factory()->create();
+        $b = Device::factory()->create();
+        $aIf = NetworkInterface::factory()->for($a)->create(['speed_mbps' => null]);
+        $bIf = NetworkInterface::factory()->for($b)->create(['speed_mbps' => 0]);
+
+        $this->postJson('/api/links', [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.eff_ab_mbps', 1000)
+            ->assertJsonPath('data.eff_ba_mbps', 1000);
+    }
+
     public function test_sets_and_reverts_an_asymmetric_link_bandwidth_override(): void
     {
         // A 500dn/50up circuit on the link - independent of the (1000/10000) port speeds.
