@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-16
+
 ### Added
 - **Remote agents now report CPU / memory / temperature.** A device polled through a remote
   agent previously showed no resource metrics; the agent now reads cpu/mem/temp (SNMP by the
@@ -276,7 +278,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/AthenaNetworks/mymate/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/AthenaNetworks/mymate/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AthenaNetworks/mymate/compare/v1.0.0...v1.1.0
