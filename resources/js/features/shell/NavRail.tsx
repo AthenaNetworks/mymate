@@ -1,5 +1,6 @@
 import { MapTrifold, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
 import { useView, setView, useNavOpen, setNavOpen, type View } from '../../lib/shellStore';
+import { useUpdateCheck } from '../settings/api/updateCheck';
 import { MapLegend } from './MapLegend';
 
 const ITEMS: { id: View; label: string; icon: Icon }[] = [
@@ -19,6 +20,9 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
  *  in lock-step. Tapping an item navigates and closes the drawer (a no-op at lg+). */
 function NavContent({ outageCount }: { outageCount: number }) {
     const view = useView();
+    // This install's version, from the update-check endpoint (VERSION file / MYMATE_VERSION).
+    const { data: update } = useUpdateCheck();
+    const version = update?.current ? (update.current === 'dev' ? 'dev' : `v${update.current}`) : '';
 
     return (
         <>
@@ -62,7 +66,7 @@ function NavContent({ outageCount }: { outageCount: number }) {
                 <div className="rounded-xl bg-white/[0.02] p-3 font-mono text-[10px] leading-relaxed text-white/30 ring-1 ring-white/[0.06]">
                     <div>server - my-mate</div>
                     <div>fping 5s - snmp 12s</div>
-                    <div>my-mate v1.0.0</div>
+                    <div>my-mate {version || '...'}</div>
                 </div>
             </div>
         </>
