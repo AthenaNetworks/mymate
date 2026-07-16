@@ -52,7 +52,39 @@ type SNMPTarget struct {
 	DeviceID   int           `json:"device_id"`
 	IP         string        `json:"ip"`
 	Community  string        `json:"community"`
+	SNMP       SNMPAuth      `json:"snmp,omitempty"` // v3 USM params when Version=="3"
 	Interfaces []IfaceTarget `json:"interfaces"`
+	// Metrics OIDs to read for cpu/mem/temp; nil when the device has no metrics profile.
+	Metrics *MetricsTarget `json:"metrics,omitempty"`
+}
+
+// SNMPAuth carries the version + v3 USM parameters. Empty/"2c" version means a plain community
+// GET (Community on the enclosing target). Mirrors the server's SnmpCredential value object.
+type SNMPAuth struct {
+	Version        string `json:"version,omitempty"`  // "1" | "2c" | "3"
+	SecName        string `json:"sec_name,omitempty"` // v3 USM user
+	SecLevel       string `json:"sec_level,omitempty"` // noAuthNoPriv | authNoPriv | authPriv
+	AuthProtocol   string `json:"auth_protocol,omitempty"`
+	AuthPassphrase string `json:"auth_passphrase,omitempty"`
+	PrivProtocol   string `json:"priv_protocol,omitempty"`
+	PrivPassphrase string `json:"priv_passphrase,omitempty"`
+}
+
+// MetricsTarget describes how to read cpu/mem/temp for one device, driven by the server's
+// per-vendor OID profile so vendor differences stay in one place (the server config). The agent
+// executes these generically - it holds no vendor knowledge of its own.
+type MetricsTarget struct {
+	CPUWalk     string   `json:"cpu_walk,omitempty"`  // walk, average numeric values (hrProcessorLoad)
+	CPUOids     []string `json:"cpu_oids,omitempty"`  // else GET each, take the first numeric
+	Mem         string   `json:"mem,omitempty"`       // "hrstorage" | "cisco" | ""
+	MemUsedWalk string   `json:"mem_used_walk,omitempty"` // cisco pools
+	MemFreeWalk string   `json:"mem_free_walk,omitempty"`
+	HrDescr     string   `json:"hr_descr,omitempty"` // hrStorage table columns
+	HrSize      string   `json:"hr_size,omitempty"`
+	HrUsed      string   `json:"hr_used,omitempty"`
+	TempWalk    string   `json:"temp_walk,omitempty"`
+	TempOids    []string `json:"temp_oids,omitempty"`
+	TempDivisor int      `json:"temp_divisor,omitempty"`
 }
 
 type RouterOSTarget struct {
@@ -91,8 +123,9 @@ type ScanCredentials struct {
 }
 
 type SNMPCred struct {
-	CredentialID int    `json:"credential_id"`
-	Community    string `json:"community"`
+	CredentialID int      `json:"credential_id"`
+	Community    string   `json:"community"`
+	SNMP         SNMPAuth `json:"snmp,omitempty"` // v3 USM params when Version=="3"
 }
 
 type RouterOSCred struct {
@@ -140,8 +173,18 @@ type Candidate struct {
 // Shape matches the server's IngestAgentResults / IngestAgentScan.
 
 type ResultPayload struct {
-	Pings      []PingResult `json:"pings"`
-	Throughput []FlowResult `json:"throughput"`
+	Pings      []PingResult    `json:"pings"`
+	Throughput []FlowResult    `json:"throughput"`
+	Metrics    []MetricsResult `json:"metrics,omitempty"`
+}
+
+// MetricsResult is one device's cpu/mem/temp reading. Each field is a pointer so an
+// unread metric marshals as null (not 0) and the server stores it as "not reported".
+type MetricsResult struct {
+	DeviceID   int      `json:"device_id"`
+	CPUPct     *float64 `json:"cpu_pct"`
+	MemUsedPct *float64 `json:"mem_used_pct"`
+	TempC      *float64 `json:"temp_c"`
 }
 
 type PingResult struct {

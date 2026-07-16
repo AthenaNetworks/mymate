@@ -4,6 +4,7 @@ namespace App\Actions\Agent;
 
 use App\Actions\Outages\RecordOutage;
 use App\Enums\DeviceStatus;
+use App\Events\DeviceMetricsUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\Agent;
@@ -42,6 +43,74 @@ class IngestAgentResults
     {
         $this->ingestPings($agent, $payload['pings'] ?? []);
         $this->ingestThroughput($agent, $payload['throughput'] ?? []);
+        $this->ingestMetrics($agent, $payload['metrics'] ?? []);
+    }
+
+    /**
+     * Fold cpu/mem/temp the agent read into the same place central metrics polling writes them:
+     * the device row (map tile fast path), a history sample, and the coalesced
+     * DeviceMetricsUpdated broadcast. Only this agent's devices are touched.
+     *
+     * @param  array<int,array{device_id:int,cpu_pct:?float,mem_used_pct:?float,temp_c:?float}>  $metrics
+     */
+    private function ingestMetrics(Agent $agent, array $metrics): void
+    {
+        if ($metrics === []) {
+            return;
+        }
+        $wanted = collect($metrics)->pluck('device_id')->all();
+        $devices = Device::where('agent_id', $agent->id)->whereIn('id', $wanted)->get()->keyBy('id');
+
+        $now = now();
+        $frames = [];
+        $sampleRows = [];
+
+        foreach ($metrics as $m) {
+            $device = $devices->get($m['device_id'] ?? 0);
+            if ($device === null) {
+                continue; // not this agent's device - ignore
+            }
+            $cpu = self::num($m['cpu_pct'] ?? null);
+            $mem = self::num($m['mem_used_pct'] ?? null);
+            $temp = self::num($m['temp_c'] ?? null);
+            if ($cpu === null && $mem === null && $temp === null) {
+                continue; // nothing readable - don't stamp metrics_at with an empty frame
+            }
+
+            $device->forceFill([
+                'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
+            ])->save();
+
+            $frames[] = [
+                'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
+                // The agent doesn't gather wireless RF; keep the device's current values.
+                'signal_dbm' => $device->signal_dbm, 'snr_db' => $device->snr_db,
+                'ccq_pct' => $device->ccq_pct, 'wireless_clients' => $device->wireless_clients,
+            ];
+            $sampleRows[] = [
+                'device_id' => $device->id, 'ts' => $now,
+                'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
+                'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+            ];
+        }
+
+        if ($sampleRows !== [] && config('mymate.history.enabled', true)) {
+            try {
+                DB::table('device_metric_samples')->insert($sampleRows);
+            } catch (\Throwable $e) {
+                EngineLog::warning('agent: metrics history insert failed', ['error' => $e->getMessage()]);
+            }
+        }
+
+        if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
+            DeviceMetricsUpdated::dispatch($frames);
+        }
+    }
+
+    /** Coerce an incoming metric to a float or null (an agent sends null for an unread metric). */
+    private static function num(mixed $v): ?float
+    {
+        return is_numeric($v) ? (float) $v : null;
     }
 
     /** @param array<int,array{device_id:int,up:bool}> $pings */

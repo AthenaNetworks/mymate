@@ -23,15 +23,25 @@ type Poller struct {
 
 func New() *Poller { return &Poller{state: newState()} }
 
-// Run executes a poll job and returns the results (up/down + throughput).
+// Run executes a poll job and returns the results (up/down + throughput + cpu/mem/temp).
 func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload {
 	flows := p.runSNMP(job.SNMP)
+	var metrics []proto.MetricsResult
+	for _, t := range job.SNMP {
+		if m := p.pollSNMPMetrics(t); m != nil {
+			metrics = append(metrics, *m)
+		}
+	}
 	for _, t := range job.RouterOS {
 		flows = append(flows, p.pollRouterOS(t)...)
+		if m := p.pollRouterOSMetrics(t); m != nil {
+			metrics = append(metrics, *m)
+		}
 	}
 	return proto.ResultPayload{
 		Pings:      p.runPings(ctx, job.Ping),
 		Throughput: flows,
+		Metrics:    metrics,
 	}
 }
 

@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Remote agents now report CPU / memory / temperature.** A device polled through a remote
+  agent previously showed no resource metrics; the agent now reads cpu/mem/temp (SNMP by the
+  same per-vendor OID profile the central poller uses, or the RouterOS API) and reports them
+  back, so agent-monitored devices get the same tiles and history as centrally-polled ones.
+- **Remote agents support SNMPv3.** The agent now authenticates with the full v3 USM parameter
+  set (user, auth + privacy protocols/passphrases) for both polling and discovery, not just a
+  v1/v2c community - matching the central poller.
 - **Internet/upstream card shows latency, not load.** An internet device now displays its
   ping latency (and a packet-loss badge) instead of a load/cpu/mem tile, coloured by a
   per-device quality band you set in the device editor - green at or below the "good"
@@ -38,6 +45,12 @@ of commit subjects.
   role icons (router, switch, AP, dish, server, firewall, camera, NVR, and more) and tint
   it any colour - or leave it on Auto to keep the vendor/type icon. The chosen icon now
   shows identically on the map node and in the inspector header.
+
+### Changed
+- **Links with no known speed default to 1 Gbps.** When neither end of a link reports an
+  interface speed (e.g. RouterOS returns 0 for ifSpeed over SNMP), the link now assumes a 1G
+  circuit so it still colours by load instead of staying neutral grey. A per-link bandwidth
+  override always wins, and ping-only links (no interface either end) stay neutral.
 
 ### Fixed
 - **MikroTik product photos show again (model parsed from modern sysDescr).** Newer RouterOS

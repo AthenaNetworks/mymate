@@ -8,6 +8,8 @@ use App\Models\Agent;
 use App\Models\Credential;
 use App\Models\Device;
 use App\Models\Subnet;
+use App\Services\Polling\DeviceMetricProfiles;
+use App\Services\Snmp\SnmpCredential;
 use Illuminate\Support\Facades\Redis;
 
 /**
@@ -26,6 +28,8 @@ class DispatchAgentJobs
 {
     /** Redis pub/sub channel the hub listens on. Payload: {agent_id, poll, scan}. */
     public const CHANNEL = 'mymate:agent-dispatch';
+
+    public function __construct(private DeviceMetricProfiles $profiles) {}
 
     /** @return int number of agents dispatched to */
     public function __invoke(): int
@@ -71,10 +75,12 @@ class DispatchAgentJobs
                     'device_id' => $d->id,
                     'ip' => $d->mgmt_ip,
                     'community' => (string) $d->credential->snmp_community,
+                    'snmp' => self::snmpAuth(SnmpCredential::fromCredential($d->credential)),
                     'interfaces' => $d->interfaces->map(fn ($i) => [
                         'interface_id' => $i->id,
                         'if_index' => $i->if_index,
                     ])->all(),
+                    'metrics' => $this->metricsTarget($d),
                 ];
             } elseif ($d->poll_method === PollMethod::RouterOs && $d->credential?->type === 'routeros') {
                 $routeros[] = [
@@ -128,6 +134,72 @@ class DispatchAgentJobs
     }
 
     /**
+     * The v3 USM parameters (or empty for v1/v2c) the agent needs to authenticate. Mirrors the
+     * central SnmpCredential value object so an agent-polled device authenticates identically.
+     *
+     * @return array<string,string>
+     */
+    /** True when an SNMP credential can actually authenticate (community, or full v3 USM). */
+    private static function snmpCredUsable(Credential $c): bool
+    {
+        return SnmpCredential::fromCredential($c)->isUsable();
+    }
+
+    private static function snmpAuth(SnmpCredential $cred): array
+    {
+        if ($cred->version !== '3') {
+            return ['version' => $cred->version];
+        }
+
+        return [
+            'version' => '3',
+            'sec_name' => $cred->secName,
+            'sec_level' => $cred->secLevel,
+            'auth_protocol' => $cred->authProtocol,
+            'auth_passphrase' => $cred->authPassphrase,
+            'priv_protocol' => $cred->privProtocol,
+            'priv_passphrase' => $cred->privPassphrase,
+        ];
+    }
+
+    /**
+     * The cpu/mem/temp OID profile the agent should read for this device - the same profile the
+     * central SnmpDeviceMetricsDriver uses, plus the shared hrStorage columns. Null when the
+     * device resolves to no usable metrics profile.
+     *
+     * @return array<string,mixed>|null
+     */
+    private function metricsTarget(Device $device): ?array
+    {
+        $p = $this->profiles->for($device);
+        $hr = config('mymate.device_metrics.hrstorage', []);
+
+        $target = array_filter([
+            'cpu_walk' => $p['cpu_walk'] ?? null,
+            'cpu_oids' => $p['cpu_oids'] ?? null,
+            'mem' => $p['mem'] ?? null,
+            'mem_used_walk' => $p['mem_used_walk'] ?? null,
+            'mem_free_walk' => $p['mem_free_walk'] ?? null,
+            'temp_walk' => $p['temp_walk'] ?? null,
+            'temp_oids' => $p['temp_oids'] ?? null,
+            'temp_divisor' => $p['temp_divisor'] ?? null,
+        ], static fn ($v) => $v !== null && $v !== []);
+
+        if (($p['mem'] ?? null) === 'hrstorage') {
+            $target['hr_descr'] = $hr['descr'] ?? null;
+            $target['hr_size'] = $hr['size'] ?? null;
+            $target['hr_used'] = $hr['used'] ?? null;
+        }
+
+        // Nothing to read for cpu/mem/temp -> no metrics target (still ping + throughput).
+        $hasCpu = isset($target['cpu_walk']) || isset($target['cpu_oids']);
+        $hasMem = isset($target['mem']);
+        $hasTemp = isset($target['temp_walk']) || isset($target['temp_oids']);
+
+        return $hasCpu || $hasMem || $hasTemp ? $target : null;
+    }
+
+    /**
      * The decrypted credential pool the agent tries against discovery responders. Same pool
      * the central HostProber uses; secrets travel over the TLS tunnel (inherent to discovery).
      *
@@ -138,8 +210,12 @@ class DispatchAgentJobs
         $creds = Credential::all();
 
         return [
-            'snmp' => $creds->where('type', 'snmp')->filter(fn ($c) => (string) $c->snmp_community !== '')
-                ->map(fn ($c) => ['credential_id' => $c->id, 'community' => (string) $c->snmp_community])
+            'snmp' => $creds->where('type', 'snmp')->filter(fn ($c) => self::snmpCredUsable($c))
+                ->map(fn ($c) => [
+                    'credential_id' => $c->id,
+                    'community' => (string) $c->snmp_community,
+                    'snmp' => self::snmpAuth(SnmpCredential::fromCredential($c)),
+                ])
                 ->values()->all(),
             'routeros' => $creds->where('type', 'routeros')->filter(fn ($c) => (string) $c->username !== '')
                 ->map(fn ($c) => [

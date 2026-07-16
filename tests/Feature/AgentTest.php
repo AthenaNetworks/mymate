@@ -101,6 +101,53 @@ class AgentTest extends TestCase
         );
     }
 
+    public function test_agent_job_carries_snmpv3_auth_and_a_metrics_profile(): void
+    {
+        $agent = Agent::factory()->create();
+        $cred = \App\Models\Credential::factory()->create([
+            'type' => 'snmp', 'snmp_version' => '3', 'snmp_sec_name' => 'monitor',
+            'snmp_sec_level' => 'authPriv', 'snmp_auth_protocol' => 'SHA', 'snmp_auth_passphrase' => 'authpass12',
+            'snmp_priv_protocol' => 'AES', 'snmp_priv_passphrase' => 'privpass12',
+        ]);
+        $device = Device::factory()->create([
+            'monitored' => true, 'poll_method' => PollMethod::Snmp, 'agent_id' => $agent->id,
+            'credential_id' => $cred->id, 'vendor' => 'MikroTik',
+        ]);
+
+        $job = app(\App\Actions\Agent\DispatchAgentJobs::class)->buildJob($agent->id);
+        $snmp = collect($job['poll']['snmp'])->firstWhere('device_id', $device->id);
+
+        $this->assertSame('3', $snmp['snmp']['version']);
+        $this->assertSame('monitor', $snmp['snmp']['sec_name']);
+        $this->assertSame('authpass12', $snmp['snmp']['auth_passphrase']);
+        // MikroTik profile -> hrProcessorLoad cpu walk + hrStorage memory columns.
+        $this->assertSame('.1.3.6.1.2.1.25.3.3.1.2', $snmp['metrics']['cpu_walk']);
+        $this->assertSame('hrstorage', $snmp['metrics']['mem']);
+        $this->assertArrayHasKey('hr_descr', $snmp['metrics']);
+    }
+
+    public function test_ingests_agent_reported_cpu_mem_temp_and_broadcasts(): void
+    {
+        \Illuminate\Support\Facades\Event::fake([\App\Events\DeviceMetricsUpdated::class]);
+        $agent = Agent::factory()->create();
+        $device = Device::factory()->create(['agent_id' => $agent->id]);
+        $other = Device::factory()->create(['agent_id' => null]); // not this agent's - must be ignored
+
+        app(\App\Actions\Agent\IngestAgentResults::class)($agent, ['metrics' => [
+            ['device_id' => $device->id, 'cpu_pct' => 42.0, 'mem_used_pct' => 71.5, 'temp_c' => 48.0],
+            ['device_id' => $other->id, 'cpu_pct' => 99.0, 'mem_used_pct' => 99.0, 'temp_c' => 99.0],
+        ]]);
+
+        $device->refresh();
+        $this->assertSame(42.0, $device->cpu_pct);
+        $this->assertSame(71.5, $device->mem_used_pct);
+        $this->assertSame(48.0, $device->temp_c);
+        $this->assertNotNull($device->metrics_at);
+        $this->assertNull($other->fresh()->cpu_pct); // cross-agent data rejected
+        $this->assertDatabaseHas('device_metric_samples', ['device_id' => $device->id, 'cpu_pct' => 42.0]);
+        \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\DeviceMetricsUpdated::class);
+    }
+
     public function test_deleting_an_agent_reverts_its_devices_and_subnets_to_central(): void
     {
         $agent = Agent::factory()->create();

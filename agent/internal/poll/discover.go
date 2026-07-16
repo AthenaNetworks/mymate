@@ -122,7 +122,7 @@ func (p *Poller) scanSubnet(ctx context.Context, subnetID int, cidr string, cred
 func probeHost(ip string, creds proto.ScanCredentials) proto.Candidate {
 	c := proto.Candidate{IP: ip}
 	for _, sc := range creds.SNMP {
-		if name, ok := snmpSysName(ip, sc.Community); ok {
+		if name, ok := snmpSysName(ip, sc.Community, sc.SNMP); ok {
 			c.Sysname, c.Method, c.CredentialID = name, "snmp", sc.CredentialID
 			return c
 		}
@@ -136,11 +136,13 @@ func probeHost(ip string, creds proto.ScanCredentials) proto.Candidate {
 	return c
 }
 
-func snmpSysName(ip, community string) (string, bool) {
-	g := &gosnmp.GoSNMP{Target: ip, Port: 161, Community: community, Version: gosnmp.Version2c, Timeout: time.Second, Retries: 0}
-	if g.Connect() != nil {
+func snmpSysName(ip, community string, auth proto.SNMPAuth) (string, bool) {
+	g, err := dialSNMP(ip, community, auth)
+	if err != nil {
 		return "", false
 	}
+	g.Timeout = time.Second
+	g.Retries = 0
 	defer g.Conn.Close()
 	res, err := g.Get([]string{oidSysName})
 	if err != nil || len(res.Variables) == 0 || res.Variables[0].Type == gosnmp.NoSuchObject {

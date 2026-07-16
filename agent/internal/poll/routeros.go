@@ -66,3 +66,61 @@ func parseFloat(s string) float64 {
 	f, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	return f
 }
+
+// pollRouterOSMetrics reads cpu / memory / temperature over the RouterOS API - the same
+// /system/resource (cpu-load + free/total memory) and best-effort /system/health the central
+// RouterOsDeviceMetricsDriver uses. Returns nil when nothing is readable.
+func (p *Poller) pollRouterOSMetrics(t proto.RouterOSTarget) *proto.MetricsResult {
+	port := t.APIPort
+	if port == 0 {
+		port = 8728
+	}
+	c, err := routeros.DialTimeout(fmt.Sprintf("%s:%d", t.IP, port), t.Username, t.Password, 3*time.Second)
+	if err != nil {
+		return nil
+	}
+	defer c.Close()
+
+	var cpu, mem, temp *float64
+	if reply, err := c.Run("/system/resource/print"); err == nil && len(reply.Re) > 0 {
+		r := reply.Re[0].Map
+		if v, ok := r["cpu-load"]; ok && v != "" {
+			f := parseFloat(v)
+			cpu = clampPct(&f)
+		}
+		total, free := parseFloat(r["total-memory"]), parseFloat(r["free-memory"])
+		if total > 0 {
+			f := (total - free) / total * 100
+			mem = clampPct(&f)
+		}
+	}
+	// /system/health is unavailable on some boards - never let it fail the read.
+	if reply, err := c.Run("/system/health/print"); err == nil {
+		max, found := 0.0, false
+		for _, re := range reply.Re {
+			for _, key := range []string{"cpu-temperature", "temperature", "board-temperature"} {
+				if v, ok := re.Map[key]; ok && v != "" {
+					if f := parseFloat(v); f > 0 && (!found || f > max) {
+						max, found = f, true
+					}
+				}
+			}
+			// RouterOS 7: one row per sensor, {name: "...temperature", value: "42"}.
+			if strings.Contains(strings.ToLower(re.Map["name"]), "temperature") {
+				if v, ok := re.Map["value"]; ok && v != "" {
+					if f := parseFloat(v); f > 0 && (!found || f > max) {
+						max, found = f, true
+					}
+				}
+			}
+		}
+		if found {
+			temp = &max
+		}
+	}
+
+	if cpu == nil && mem == nil && temp == nil {
+		return nil
+	}
+	return &proto.MetricsResult{DeviceID: t.DeviceID, CPUPct: cpu, MemUsedPct: mem, TempC: temp}
+}
