@@ -93,7 +93,14 @@ class IngestAgentScan
             $new++;
         }
 
-        $subnet->update(['last_scanned_at' => $now]);
+        // Results are in: the sweep is done - clear the live scan state + progress counters.
+        $subnet->update([
+            'last_scanned_at' => $now,
+            'scanning_since' => null,
+            'scan_total' => null,
+            'scan_swept' => null,
+            'scan_found' => null,
+        ]);
 
         EngineLog::info('agent: subnet scanned', [
             'subnet_id' => $subnet->id,

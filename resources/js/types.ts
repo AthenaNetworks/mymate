@@ -436,6 +436,10 @@ export interface Subnet {
     scan_interval_s: number;
     last_scanned_at: string | null;
     scanning: boolean; // a sweep is running right now (user-triggered or scheduled)
+    // Live sweep progress streamed by a remote agent; null when not scanning / central sweeps.
+    scan_total: number | null;
+    scan_swept: number | null;
+    scan_found: number | null;
     agent_id: number | null; // scanned by a remote agent when set, else centrally
 }
 

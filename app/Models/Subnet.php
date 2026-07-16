@@ -18,7 +18,7 @@ class Subnet extends Model
     /** @use HasFactory<SubnetFactory> */
     use HasFactory;
 
-    protected $fillable = ['cidr', 'label', 'enabled', 'scan_interval_s', 'last_scanned_at', 'scanning_since', 'agent_id'];
+    protected $fillable = ['cidr', 'label', 'enabled', 'scan_interval_s', 'last_scanned_at', 'scanning_since', 'scan_total', 'scan_swept', 'scan_found', 'agent_id'];
 
     protected $casts = [
         'enabled' => 'boolean',

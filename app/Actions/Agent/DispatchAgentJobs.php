@@ -95,10 +95,25 @@ class DispatchAgentJobs
         // central loop uses (never scanned, or last scan older than scan_interval_s).
         // last_scanned_at is stamped when the agent's scan result is ingested.
         $now = now();
-        $subnets = Subnet::where('agent_id', $agentId)->where('enabled', true)->get()
-            ->filter(fn (Subnet $s): bool => $s->last_scanned_at === null
-                || $s->last_scanned_at->copy()->addSeconds(max(1, $s->scan_interval_s))->lessThanOrEqualTo($now))
-            ->map(fn (Subnet $s) => ['subnet_id' => $s->id, 'cidr' => $s->cidr])->values()->all();
+        $due = Subnet::where('agent_id', $agentId)->where('enabled', true)->get()
+            ->filter(function (Subnet $s) use ($now): bool {
+                // Skip a subnet whose sweep is already in flight (claimed below, or the agent is
+                // reporting progress) so the loop can't stack overlapping scans of the same range.
+                if ($s->scanning_since !== null && $s->scanning_since->diffInSeconds($now) < 300) {
+                    return false;
+                }
+
+                return $s->last_scanned_at === null
+                    || $s->last_scanned_at->copy()->addSeconds(max(1, $s->scan_interval_s))->lessThanOrEqualTo($now);
+            });
+
+        // Claim them: mark scanning now so the next tick skips them until the agent's result
+        // clears it (or it goes stale after 300s if the agent never reports back).
+        if ($due->isNotEmpty()) {
+            Subnet::whereIn('id', $due->pluck('id'))->update(['scanning_since' => $now]);
+        }
+
+        $subnets = $due->map(fn (Subnet $s) => ['subnet_id' => $s->id, 'cidr' => $s->cidr])->values()->all();
 
         return [
             'agent_id' => $agentId,

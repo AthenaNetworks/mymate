@@ -7,6 +7,7 @@ use App\Actions\Agent\IngestAgentResults;
 use App\Actions\Agent\IngestAgentScan;
 use App\Enums\AgentStatus;
 use App\Models\Agent;
+use App\Models\Subnet;
 use App\Support\EngineLog;
 use Clue\React\Redis\Factory as RedisFactory;
 use GuzzleHttp\Psr7\HttpFactory;
@@ -184,6 +185,22 @@ class AgentHubCommand extends Command
                     } catch (\Throwable $e) {
                         EngineLog::warning('agent: scan ingest failed', ['id' => $agentId, 'error' => $e->getMessage()]);
                     }
+                }
+                Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
+                break;
+
+            // Live scan feedback: a sweep started / is progressing. Scoped to the agent's own
+            // subnets so one agent can't touch another's. The `discovery` ingest clears these.
+            case 'scan_start':
+            case 'scan_progress':
+                $sid = (int) ($msg['subnet_id'] ?? 0);
+                if ($sid > 0) {
+                    Subnet::where('id', $sid)->where('agent_id', $agentId)->update([
+                        'scanning_since' => now(),
+                        'scan_total' => $msg['total'] ?? null,
+                        'scan_swept' => (int) ($msg['swept'] ?? 0),
+                        'scan_found' => (int) ($msg['found'] ?? 0),
+                    ]);
                 }
                 Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
                 break;

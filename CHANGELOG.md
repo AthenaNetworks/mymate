@@ -24,6 +24,10 @@ of commit subjects.
 - **Live scan-progress on the discovery page.** A sweep in progress now shows a banner with
   an animated progress bar and the subnet(s) being scanned - for scheduled scans too, not
   just ones you kicked off - so it's obvious discovery is working while devices trickle in.
+- **Remote-agent scans stream live progress.** The agent now reports a sweep as it runs
+  (hosts pinged so far / total, and responders identified so far) instead of only at the end,
+  so the discovery page shows a real progress bar and a live "found" count for agent scans -
+  and the loop no longer stacks overlapping sweeps of the same subnet.
 - **Remote agent as a `.deb`.**
 
 ### Fixed

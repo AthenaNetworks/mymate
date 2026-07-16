@@ -18,6 +18,12 @@ export function DiscoveryView() {
 
     const active = (subnets ?? []).filter((s) => s.scanning || s.id in scanning);
     const anyScanning = active.length > 0;
+    // Aggregate live progress across scanning subnets that report it (agent sweeps do).
+    const withCounts = active.filter((s) => s.scan_total && s.scan_total > 0);
+    const total = withCounts.reduce((n, s) => n + (s.scan_total ?? 0), 0);
+    const swept = withCounts.reduce((n, s) => n + (s.scan_swept ?? 0), 0);
+    const found = withCounts.reduce((n, s) => n + (s.scan_found ?? 0), 0);
+    const pct = total > 0 ? Math.min(100, Math.round((swept / total) * 100)) : null;
 
     return (
         <div className="h-full overflow-y-auto p-6 lg:p-8">
@@ -42,13 +48,25 @@ export function DiscoveryView() {
                             <span className="truncate font-mono text-[11px] text-emerald-300/70">
                                 {active.map((s) => s.cidr).join('  ·  ')}
                             </span>
+                            {pct !== null && (
+                                <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums text-emerald-200/80">
+                                    {swept}/{total} hosts · {found} found
+                                </span>
+                            )}
                         </div>
-                        {/* Indeterminate bar - the sweep reports no %; the motion is the signal. */}
-                        <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/15">
-                            <span className="animate-scanbar bg-gradient-to-r from-emerald-400/0 via-emerald-400 to-emerald-400/0" />
-                        </div>
+                        {pct !== null ? (
+                            /* Determinate bar - the agent streams swept/total live. */
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/15">
+                                <div className="h-full rounded-full bg-emerald-400 transition-[width] duration-500 ease-out" style={{ width: `${pct}%` }} />
+                            </div>
+                        ) : (
+                            /* Indeterminate bar - a central sweep reports no %; the motion is the signal. */
+                            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/15">
+                                <span className="animate-scanbar bg-gradient-to-r from-emerald-400/0 via-emerald-400 to-emerald-400/0" />
+                            </div>
+                        )}
                         <p className="mt-2 text-[11px] text-emerald-200/60">
-                            Pinging each host, then trying SNMP, RouterOS and SSH - matches appear in the review queue as they're found.
+                            Pinging each host, then trying credentials against responders - matches appear in the review queue as they're found.
                         </p>
                     </div>
                 )}

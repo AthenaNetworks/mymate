@@ -23,6 +23,10 @@ class SubnetResource extends JsonResource
             // couldn't clear the flag) doesn't leave it "scanning" forever - well past any real
             // sweep, which is bounded by the probe budget + a 300s overlap lock.
             'scanning' => $this->scanning_since !== null && $this->scanning_since->diffInSeconds(now()) < 300,
+            // Live sweep progress (agent scans stream it); null when not scanning / no counts yet.
+            'scan_total' => $this->scan_total,
+            'scan_swept' => $this->scan_swept,
+            'scan_found' => $this->scan_found,
         ];
     }
 }

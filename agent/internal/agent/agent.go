@@ -126,7 +126,15 @@ func handle(ctx context.Context, poller *poll.Poller, send chan<- []byte, msg pr
 			return
 		}
 		go func() {
-			result := poller.Scan(ctx, job)
+			// Stream live scan feedback (scan_start / scan_progress) as it runs; drop a progress
+			// tick if the send buffer is momentarily full rather than stalling the sweep.
+			emit := func(v any) {
+				select {
+				case send <- mustJSON(v):
+				default:
+				}
+			}
+			result := poller.Scan(ctx, job, emit)
 			select {
 			case send <- mustJSON(proto.Result{Type: "discovery", Payload: mustJSON(result)}):
 			case <-ctx.Done():

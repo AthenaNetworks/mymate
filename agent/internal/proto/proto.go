@@ -102,6 +102,23 @@ type RouterOSCred struct {
 	APIPort      int    `json:"api_port"`
 }
 
+// ScanStart (agent -> server, type "scan_start"): a subnet sweep has begun. Lets the server
+// light up the "scanning" state + progress bar live, instead of only learning at the end.
+type ScanStart struct {
+	Type     string `json:"type"` // "scan_start"
+	SubnetID int    `json:"subnet_id"`
+	Total    int    `json:"total"` // usable hosts to sweep
+}
+
+// ScanProgress (agent -> server, type "scan_progress"): live counters during a subnet sweep.
+type ScanProgress struct {
+	Type     string `json:"type"` // "scan_progress"
+	SubnetID int    `json:"subnet_id"`
+	Swept    int    `json:"swept"` // hosts pinged so far
+	Total    int    `json:"total"`
+	Found    int    `json:"found"` // responders identified so far
+}
+
 // ScanResult (agent -> server, type "discovery"): what the scan found per subnet.
 type ScanResult struct {
 	Subnets []SubnetCandidates `json:"subnets"`

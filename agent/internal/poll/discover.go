@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AthenaNetworks/mymate/agent/internal/proto"
@@ -22,7 +23,13 @@ const (
 // Scan walks the agent's subnets and finds whatever's out there. For each one: expand the
 // CIDR, ping sweep to see who answers, then try the credential pool against the responders
 // (snmp first, then a routeros login). We only ever send credential IDs back, not the secrets.
-func (p *Poller) Scan(ctx context.Context, job proto.ScanJob) proto.ScanResult {
+//
+// emit streams live feedback to the server (scan_start + periodic scan_progress) so the UI
+// shows the sweep advancing instead of only learning when it's done; nil disables it.
+func (p *Poller) Scan(ctx context.Context, job proto.ScanJob, emit func(any)) proto.ScanResult {
+	if emit == nil {
+		emit = func(any) {}
+	}
 	var res proto.ScanResult
 	for _, sn := range job.Subnets {
 		if ctx.Err() != nil {
@@ -30,17 +37,36 @@ func (p *Poller) Scan(ctx context.Context, job proto.ScanJob) proto.ScanResult {
 		}
 		res.Subnets = append(res.Subnets, proto.SubnetCandidates{
 			SubnetID:   sn.SubnetID,
-			Candidates: p.scanSubnet(ctx, sn.CIDR, job.Credentials),
+			Candidates: p.scanSubnet(ctx, sn.SubnetID, sn.CIDR, job.Credentials, emit),
 		})
 	}
 	return res
 }
 
-func (p *Poller) scanSubnet(ctx context.Context, cidr string, creds proto.ScanCredentials) []proto.Candidate {
+func (p *Poller) scanSubnet(ctx context.Context, subnetID int, cidr string, creds proto.ScanCredentials, emit func(any)) []proto.Candidate {
 	hosts := expandCIDR(cidr, maxScanHosts)
 	if len(hosts) == 0 {
 		return nil
 	}
+	total := len(hosts)
+	emit(proto.ScanStart{Type: "scan_start", SubnetID: subnetID, Total: total})
+
+	// Live counters + a ticker that streams them to the server so the progress bar moves.
+	var swept, found int64
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(400 * time.Millisecond)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				emit(proto.ScanProgress{Type: "scan_progress", SubnetID: subnetID, Total: total,
+					Swept: int(atomic.LoadInt64(&swept)), Found: int(atomic.LoadInt64(&found))})
+			}
+		}
+	}()
 
 	// 1. ping sweep, concurrently. collect whoever answers.
 	reachable := make([]string, 0)
@@ -61,6 +87,7 @@ func (p *Poller) scanSubnet(ctx context.Context, cidr string, creds proto.ScanCr
 				reachable = append(reachable, ip)
 				mu.Unlock()
 			}
+			atomic.AddInt64(&swept, 1)
 		}(ip)
 	}
 	wg.Wait()
@@ -76,9 +103,16 @@ func (p *Poller) scanSubnet(ctx context.Context, cidr string, creds proto.ScanCr
 			defer pwg.Done()
 			defer func() { <-psem }()
 			cands[i] = probeHost(ip, creds)
+			if cands[i].Method != "" {
+				atomic.AddInt64(&found, 1)
+			}
 		}(i, ip)
 	}
 	pwg.Wait()
+
+	close(stop)
+	emit(proto.ScanProgress{Type: "scan_progress", SubnetID: subnetID, Total: total,
+		Swept: total, Found: int(atomic.LoadInt64(&found))})
 	return cands
 }
 
