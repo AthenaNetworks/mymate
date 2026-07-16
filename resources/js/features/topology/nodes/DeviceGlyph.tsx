@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Globe, WifiHigh, Broadcast, HardDrives, ShareNetwork, StackSimple, Cube, type Icon } from '@phosphor-icons/react';
 import type { DeviceType } from '../../../types';
+import { deviceIcon } from '../../../components/deviceIcons';
 
 /**
  * Which drawn family icon represents a device. The coarse `device_type` is refined by MikroTik
@@ -66,16 +67,27 @@ export function DeviceGlyph({
     vendor,
     model,
     type,
+    icon = null,
+    iconColor = null,
     className = 'h-5 w-5',
 }: {
     deviceId: number;
     vendor: string | null;
     model: string | null;
     type: DeviceType;
+    icon?: string | null; // operator override glyph key (deviceIcons); null = auto
+    iconColor?: string | null; // hex; tints the custom / family icon
     className?: string;
 }) {
     const [loaded, setLoaded] = useState(false);
     const [failed, setFailed] = useState(false);
+
+    // An explicit operator-chosen icon wins over the auto photo/monogram/family glyph.
+    const Custom = deviceIcon(icon);
+    if (Custom) {
+        return <Custom weight="duotone" className={className} style={iconColor ? { color: iconColor } : undefined} />;
+    }
+
     const isMikrotik = (vendor ?? '').toLowerCase().includes('mikrotik');
     // Only chase a product photo for a real model name. Devices whose model never resolved past
     // a raw board id (e.g. "0x0002") can't map to a MikroTik product page, so don't 404-loop on
@@ -106,7 +118,7 @@ export function DeviceGlyph({
                         {mark.short}
                     </span>
                 ) : (
-                    <Fallback weight="duotone" className={className} />
+                    <Fallback weight="duotone" className={className} style={iconColor ? { color: iconColor } : undefined} />
                 )
             )}
         </>

@@ -10,6 +10,8 @@ export type DeviceNodeData = {
     mgmt_ip: string;
     status: DeviceStatus;
     device_type: DeviceType;
+    icon: string | null; // operator glyph override
+    icon_color: string | null;
     vendor: string | null;
     model: string | null;
     util: number | null; // device's busiest interface utilisation % (live) - null when speed unknown
@@ -133,7 +135,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
                         className={`grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg ring-1 ${meta.tint}`}
                         title={[d.vendor, d.model].filter(Boolean).join(' ') || meta.abbr}
                     >
-                        <DeviceGlyph deviceId={Number(id)} vendor={d.vendor} model={d.model} type={d.device_type} className="h-5 w-5" />
+                        <DeviceGlyph deviceId={Number(id)} vendor={d.vendor} model={d.model} type={d.device_type} icon={d.icon} iconColor={d.icon_color} className="h-5 w-5" />
                     </span>
                     <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-white/90">{d.label}</div>

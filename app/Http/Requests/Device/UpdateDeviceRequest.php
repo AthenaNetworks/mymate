@@ -29,6 +29,9 @@ class UpdateDeviceRequest extends FormRequest
             'map_x' => ['sometimes', 'numeric'],
             'map_y' => ['sometimes', 'numeric'],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
+            // Icon override: a named glyph key + a hex colour (both nullable = auto).
+            'icon' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'icon_color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'vendor' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model' => ['sometimes', 'nullable', 'string', 'max:255'],
             'parent_device_id' => [

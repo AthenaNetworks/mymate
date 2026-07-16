@@ -36,6 +36,7 @@ import { InterfaceChart } from './InterfaceChart';
 import { linkColor } from '../lib/linkColor';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
+import { DeviceGlyph } from '../nodes/DeviceGlyph';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
 import { relativeTime } from '../../../lib/relativeTime';
 import { formatMbps, formatRate } from '../../../lib/formatRate';
@@ -426,7 +427,8 @@ function ClassificationPicker({ device }: { device: Device }) {
                 title="Change device classification"
                 className="group relative grid h-9 w-9 place-items-center rounded-md ring-1 ring-white/10 transition hover:ring-white/25"
             >
-                <DeviceTypeBadge type={device.device_type} className="h-9 w-9" />
+                {/* Same glyph as the map node so a device looks identical in both places. */}
+                <DeviceGlyph deviceId={device.id} vendor={device.vendor} model={device.model} type={device.device_type} icon={device.icon} iconColor={device.icon_color} className="h-6 w-6" />
                 <CaretDown
                     weight="bold"
                     className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#0d0d11] text-white/40 group-hover:text-white/70"
@@ -599,7 +601,7 @@ export function DeviceInspector() {
                         <ClassificationPicker device={device} />
                     ) : (
                         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md ring-1 ring-white/10">
-                            <DeviceTypeBadge type={device.device_type} className="h-9 w-9" />
+                            <DeviceGlyph deviceId={device.id} vendor={device.vendor} model={device.model} type={device.device_type} icon={device.icon} iconColor={device.icon_color} className="h-6 w-6" />
                         </span>
                     )}
                     <div className="min-w-0">

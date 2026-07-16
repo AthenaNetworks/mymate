@@ -6,6 +6,8 @@ import type { Device, DeviceType, PollMethod } from '../../../types';
 type UpdateDeviceInput = {
     id: number;
     device_type?: DeviceType;
+    icon?: string | null;
+    icon_color?: string | null;
     name?: string;
     mgmt_ip?: string;
     monitored?: boolean;

@@ -39,6 +39,8 @@ export interface Device {
     agent_id: number | null;
     // NOC-console metadata.
     device_type: DeviceType;
+    icon: string | null; // operator glyph override (deviceIcons key); null = auto
+    icon_color: string | null; // hex; tints the glyph
     parent_device_id: number | null;
     parent_name: string | null;
     vendor: string | null;

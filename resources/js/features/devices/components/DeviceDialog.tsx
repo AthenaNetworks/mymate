@@ -7,6 +7,7 @@ import { useAgents } from '../../settings/api/agents';
 import { useCredentials } from '../../settings/api/credentials';
 import { useIsAdmin } from '../../auth/api/auth';
 import { Toggle } from '../../../components/Toggle';
+import { DEVICE_ICONS, DEVICE_ICON_KEYS, ICON_COLORS } from '../../../components/deviceIcons';
 import type { Device, DeviceType, PollMethod } from '../../../types';
 
 const DEVICE_TYPES: { value: DeviceType; label: string }[] = [
@@ -56,6 +57,8 @@ export function DeviceDialog({
     const [agentId, setAgentId] = useState<string>(device?.agent_id != null ? String(device.agent_id) : '');
     const [credentialId, setCredentialId] = useState<string>(device?.credential_id != null ? String(device.credential_id) : '');
     const [monitored, setMonitored] = useState<boolean>(device?.monitored ?? true);
+    const [icon, setIcon] = useState<string | null>(device?.icon ?? null);
+    const [iconColor, setIconColor] = useState<string | null>(device?.icon_color ?? null);
 
     const busy = create.isPending || update.isPending;
     const isError = create.isError || update.isError;
@@ -93,7 +96,7 @@ export function DeviceDialog({
             );
         } else if (device) {
             update.mutate(
-                { id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, monitored },
+                { id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor },
                 { onSuccess: onClose },
             );
         }
@@ -164,6 +167,64 @@ export function DeviceDialog({
                         <div className="flex items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/10">
                             <span className="text-sm text-white/75">Monitoring {monitored ? 'on' : 'paused'}</span>
                             <Toggle checked={monitored} onChange={setMonitored} label="Monitoring" />
+                        </div>
+                    )}
+
+                    {mode === 'edit' && (
+                        <div className="space-y-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+                            <span className="block text-xs font-medium text-white/55">Icon (map + sidebar)</span>
+                            <div className="grid grid-cols-8 gap-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setIcon(null)}
+                                    title="Auto - product photo, vendor mark, or device type"
+                                    className={`grid h-8 place-items-center rounded-lg text-[9px] font-semibold ring-1 transition ${icon === null ? 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' : 'text-white/50 ring-white/10 hover:bg-white/5'}`}
+                                >
+                                    Auto
+                                </button>
+                                {DEVICE_ICON_KEYS.map((key) => {
+                                    const I = DEVICE_ICONS[key];
+                                    return (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            onClick={() => setIcon(key)}
+                                            title={key}
+                                            className={`grid h-8 place-items-center rounded-lg ring-1 transition ${icon === key ? 'bg-emerald-500/20 ring-emerald-400/40' : 'ring-white/10 hover:bg-white/5'}`}
+                                        >
+                                            <I weight="duotone" className="h-4 w-4" style={{ color: iconColor ?? undefined }} />
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <span className="block text-xs font-medium text-white/55">Colour</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setIconColor(null)}
+                                    title="Default colour"
+                                    className={`grid h-6 w-6 place-items-center rounded-full bg-white/5 text-[9px] text-white/50 ring-1 ${iconColor === null ? 'ring-white/60' : 'ring-white/15'}`}
+                                >
+                                    A
+                                </button>
+                                {ICON_COLORS.map((c) => (
+                                    <button
+                                        key={c}
+                                        type="button"
+                                        onClick={() => setIconColor(c)}
+                                        title={c}
+                                        className={`h-6 w-6 rounded-full ring-2 transition ${iconColor === c ? 'ring-white' : 'ring-transparent hover:ring-white/30'}`}
+                                        style={{ background: c }}
+                                    />
+                                ))}
+                                <input
+                                    type="color"
+                                    value={iconColor ?? '#34d399'}
+                                    onChange={(e) => setIconColor(e.target.value)}
+                                    title="Custom colour"
+                                    className="h-6 w-6 cursor-pointer rounded-full border-0 bg-transparent p-0 [color-scheme:dark]"
+                                />
+                            </div>
                         </div>
                     )}
 

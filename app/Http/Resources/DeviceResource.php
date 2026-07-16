@@ -24,6 +24,8 @@ class DeviceResource extends JsonResource
             'agent_id' => $this->agent_id,
             // NOC-console metadata.
             'device_type' => $this->device_type?->value ?? 'unknown',
+            'icon' => $this->icon,
+            'icon_color' => $this->icon_color,
             'parent_device_id' => $this->parent_device_id,
             'parent_name' => $this->parent?->name,
             'vendor' => $this->vendor,

@@ -271,6 +271,8 @@ export function MapCanvas() {
                 mgmt_ip: d.mgmt_ip,
                 status: d.status,
                 device_type: d.device_type,
+                icon: d.icon,
+                icon_color: d.icon_color,
                 vendor: d.vendor,
                 model: d.model,
                 util: deviceUtilRef.current[d.id] ?? null,
@@ -368,7 +370,7 @@ export function MapCanvas() {
                 if (n.type !== 'device') return n;
                 const d = byId.get(Number(n.id));
                 return d
-                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c } }
+                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c } }
                     : n;
             }),
         );
