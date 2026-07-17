@@ -77,18 +77,23 @@ export const WELCOME = {
     badge: 'Live interactive demo',
     title: 'Network monitoring, the modern way.',
     body:
-        'My Mate is a live network monitor - a modern replacement for MikroTik\'s "The Dude". It maps your whole network, pings every device for up/down, polls interface throughput over SNMP or the RouterOS API, and colours each link green->red by utilisation in real time - with alerting, history, auto-discovery and multi-site maps.',
+        'My Mate is a live network monitor - a modern, open-source replacement for MikroTik\'s "The Dude". It maps your whole network, pings every device for up/down, and polls interface throughput plus device health (CPU, memory, temperature, wireless) over SNMP or the RouterOS API - colouring each link green->red by utilisation in real time, with alerting, history, config backups, RouterOS upgrades, auto-discovery and multi-site maps.',
     demoNote:
-        'You\'re looking at the real console, running on 100% synthetic data. Pan the map, click a device or link, open the charts, or try wallboard mode.',
+        'You\'re looking at the real console, running on 100% synthetic data. Pan the map, click a device or link, open the charts, watch CPU and memory move, or try wallboard mode.',
     cta: 'Explore the demo',
 };
 
 export const FEATURES: { title: string; body: string }[] = [
-    { title: 'On-prem or SaaS - your choice', body: 'Run it on-premise, inside your network with direct access to your management LAN. Or use our cloud SaaS - a lightweight agent at each site connects out over a secure tunnel, so your management network is never exposed to the internet. Same product either way.' },
-    { title: 'Live topology map', body: 'Interface-to-interface links on a React-Flow canvas, laid out automatically and coloured green->red by utilisation in real time.' },
-    { title: 'Up/down + throughput', body: 'Fast fping up/down plus SNMP or RouterOS API throughput - status and load update live over WebSockets.' },
-    { title: 'Auto-discovery', body: 'Scan a subnet, probe responders against your credential pool, and promote candidates to monitored devices in a click.' },
+    { title: 'Live topology map', body: 'Interface-to-interface links on a React-Flow canvas, laid out automatically and coloured green->red by utilisation in real time - tag links by medium (fibre, ethernet, wireless) to read your plant at a glance.' },
+    { title: 'Overview maps & maps-of-maps', body: 'Build a top-level view out of your other maps: drop a map on as a node, link sites together by hand, and drill straight in with a click - no device required.' },
+    { title: 'Device health, live', body: 'CPU, memory, temperature and wireless RF (signal, SNR, CCQ, client count) over SNMP or the RouterOS API - shown on every node and graphed over time.' },
+    { title: 'Up/down + throughput', body: 'Fast fping up/down plus SNMP or RouterOS API throughput - status and load update live over WebSockets, with per-device latency and packet-loss tracking.' },
+    { title: 'Auto-discovery', body: 'Scan a subnet, probe each responder against your SNMP, RouterOS and SSH credentials in one pass, and promote candidates to monitored devices in a click.' },
+    { title: 'Config backups', body: 'Versioned device config backups over SSH, stored in git - see exactly what changed and diff any two versions.' },
+    { title: 'RouterOS upgrades', body: 'Upgrade a whole fleet in dependency order - furthest device first, so you never cut off the boxes behind it - with live per-device status.' },
     { title: 'Alerting that isn\'t noisy', body: 'Device-down, sustained high-utilisation, and upgrade-failed policies with dependency-aware suppression, recovery alerts, and Slack/Teams/email/webhook delivery.' },
+    { title: 'On-prem or SaaS, with site agents', body: 'Run it in your network with direct access to your management LAN, or let us host it - a lightweight agent at each site polls locally (SNMP v1/v2c/v3 or RouterOS) and streams back over a secure outbound tunnel, so your management network is never exposed.' },
+    { title: 'Custom icons & product photos', body: 'Devices show real vendor product photos (auto-fetched for MikroTik) or a role icon you pick and colour - so the map looks like your rack, not a sea of boxes.' },
     { title: 'Import from The Dude', body: 'Upload a MikroTik dude.db and bring your devices, links, maps and history straight across - merge or start fresh.' },
     { title: 'Wallboard & dashboard', body: 'A chrome-free TV mode and an auto-paging device dashboard that lights up outages - built for the NOC big screen.' },
 ];
