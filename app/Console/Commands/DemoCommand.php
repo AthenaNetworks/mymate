@@ -7,6 +7,7 @@ use App\Actions\History\ManageHistoryPartitions;
 use App\Actions\Outages\RecordOutage;
 use App\Enums\AlertCondition;
 use App\Enums\DeviceStatus;
+use App\Events\DeviceMetricsUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\AlertPolicy;
@@ -175,10 +176,27 @@ class DemoCommand extends Command
         $frames = [];
         $ifaceUpdates = [];
         $sampleRows = [];
+        $metricFrames = [];   // cpu/mem/temp broadcast
+        $metricSamples = [];  // cpu/mem/temp history
 
         foreach ($devices as $device) {
             $down = $device->status === DeviceStatus::Down;
             $ifaceFrames = [];
+
+            // Synthesise cpu/mem/temp for an up device (a down one reports nothing - leave its
+            // last values, like a real poll). Smooth oscillation keeps the tiles + graphs alive.
+            if (! $down) {
+                [$cpu, $mem, $temp] = $this->synthMetrics($device->id, $t);
+                $device->forceFill(['cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now])->save();
+                $metricFrames[] = [
+                    'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
+                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                ];
+                $metricSamples[] = [
+                    'device_id' => $device->id, 'ts' => $now, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
+                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                ];
+            }
 
             foreach ($device->interfaces as $if) {
                 if ($down) {
@@ -221,9 +239,13 @@ class DemoCommand extends Command
 
         $this->persistInterfaces($ifaceUpdates);
         $this->recordHistory($sampleRows);
+        $this->recordMetricHistory($metricSamples);
 
         if ($frames !== []) {
             InterfaceUtilUpdated::dispatch($frames);
+        }
+        if ($metricFrames !== []) {
+            DeviceMetricsUpdated::dispatch($metricFrames);
         }
 
         // Raise/resolve alerts for the current down devices (populates the Alerts view).
@@ -244,6 +266,42 @@ class DemoCommand extends Command
         };
 
         return [$mk(1), $mk(7)];
+    }
+
+    /**
+     * Synthesise cpu% / mem% / temp(C) for a device - smooth per-device oscillation (each metric
+     * has its own baseline, amplitude, period and phase seeded off the device id) so the tiles and
+     * history graphs look organic and each device differs.
+     *
+     * @return array{0: float, 1: float, 2: float}
+     */
+    private function synthMetrics(int $devId, float $t): array
+    {
+        $wave = function (int $salt, float $lo, float $hi) use ($devId, $t): float {
+            $mid = ($lo + $hi) / 2;
+            $amp = ($hi - $lo) / 2;
+            $period = 40 + ((($devId + $salt) * 2246822519) % 80);    // 40-120s
+            $phase = ((($devId + $salt) * 3266489917) % 628) / 100.0;  // 0-6.28
+            $v = $mid + $amp * sin($t / $period + $phase) + mt_rand(-150, 150) / 100;
+
+            return round(max($lo, min($hi, $v)), 1);
+        };
+
+        // cpu quieter with occasional spikes, mem steadier and higher, temp warm.
+        return [$wave(1, 4, 55), $wave(9, 35, 82), $wave(17, 34, 62)];
+    }
+
+    /** @param list<array<string,mixed>> $rows */
+    private function recordMetricHistory(array $rows): void
+    {
+        if ($rows === []) {
+            return;
+        }
+        try {
+            DB::table('device_metric_samples')->insert($rows);
+        } catch (\Throwable) {
+            // best-effort - a missing partition must never break a tick
+        }
     }
 
     /** Small per-tick chance to flap one device up<->down for liveliness. */
