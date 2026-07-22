@@ -36,12 +36,14 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const [deviceType, setDeviceType] = useState<DeviceType>(device.device_type);
     const [credentialId, setCredentialId] = useState<string>(device.credential_id != null ? String(device.credential_id) : '');
     const [sshCredentialId, setSshCredentialId] = useState<string>(device.ssh_credential_id != null ? String(device.ssh_credential_id) : '');
+    const [routerosCredentialId, setRouterosCredentialId] = useState<string>(device.routeros_credential_id != null ? String(device.routeros_credential_id) : '');
     const [parentId, setParentId] = useState<string>(device.parent_device_id != null ? String(device.parent_device_id) : '');
     const [monitored, setMonitored] = useState<boolean>(device.monitored);
 
     const needsCredential = pollMethod !== 'none';
     const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
     const sshCreds = (credentials ?? []).filter((c) => c.type === 'ssh');
+    const routerosCreds = (credentials ?? []).filter((c) => c.type === 'routeros');
     const parentOptions = (devices ?? []).filter((d) => d.id !== device.id); // a device can't be its own parent
 
     function changePollMethod(m: PollMethod) {
@@ -65,6 +67,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                 monitored,
                 credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
                 ssh_credential_id: sshCredentialId === '' ? null : Number(sshCredentialId),
+                routeros_credential_id: routerosCredentialId === '' ? null : Number(routerosCredentialId),
                 parent_device_id: parentId === '' ? null : Number(parentId),
             },
             {
@@ -152,6 +155,22 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                             ) : (
                                 <p className="px-1 text-xs text-white/40">No SSH credentials yet - add one (type "SSH") under Settings.</p>
                             )}
+                        </label>
+
+                        {/* Optional RouterOS-API credential for reads SNMP can't do (OSPF neighbours). */}
+                        <label className="space-y-1 block">
+                            <span className={label}>RouterOS API credential (for OSPF)</span>
+                            {routerosCreds.length > 0 ? (
+                                <select value={routerosCredentialId} onChange={(e) => setRouterosCredentialId(e.target.value)} className={field}>
+                                    <option value="">None</option>
+                                    {routerosCreds.map((c) => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <p className="px-1 text-xs text-white/40">No RouterOS credentials yet - add one (type "RouterOS") under Settings.</p>
+                            )}
+                            <p className="px-1 text-[11px] text-white/35">Reads OSPF neighbours over the API on an SNMP-polled MikroTik (RouterOS doesn't expose OSPF over SNMP).</p>
                         </label>
 
                         <label className="space-y-1 block">

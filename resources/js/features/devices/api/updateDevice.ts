@@ -15,6 +15,7 @@ type UpdateDeviceInput = {
     poll_method?: PollMethod;
     credential_id?: number | null;
     ssh_credential_id?: number | null;
+    routeros_credential_id?: number | null;
     agent_id?: number | null;
     latency_good_ms?: number | null;
     latency_bad_ms?: number | null;

@@ -73,14 +73,7 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
             return null; // OSPF package not present / command unavailable
         }
 
-        $full = 0;
-        foreach ($rows as $row) {
-            if (str_contains(strtolower((string) ($row['state'] ?? '')), 'full')) {
-                $full++;
-            }
-        }
-
-        return $full;
+        return \App\Actions\Polling\ReadOspfNeighbors::countFull($rows);
     }
 
     /**

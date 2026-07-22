@@ -23,6 +23,7 @@ class StoreDeviceRequest extends FormRequest
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
+            'routeros_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['nullable', 'numeric'],
             'map_y' => ['nullable', 'numeric'],

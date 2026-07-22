@@ -25,6 +25,7 @@ class UpdateDeviceRequest extends FormRequest
             'monitored' => ['sometimes', 'boolean'],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
+            'routeros_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['sometimes', 'numeric'],
             'map_y' => ['sometimes', 'numeric'],

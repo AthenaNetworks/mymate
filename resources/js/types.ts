@@ -36,6 +36,7 @@ export interface Device {
     map_y: number;
     credential_id: number | null;
     ssh_credential_id: number | null; // dedicated SSH cred for backups (separate from poll cred)
+    routeros_credential_id: number | null; // optional RouterOS-API cred for OSPF reads on SNMP devices
     agent_id: number | null;
     // NOC-console metadata.
     device_type: DeviceType;

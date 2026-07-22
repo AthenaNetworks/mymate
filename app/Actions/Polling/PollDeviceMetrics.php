@@ -18,7 +18,10 @@ use Illuminate\Support\Facades\DB;
  */
 class PollDeviceMetrics
 {
-    public function __construct(private DeviceMetricsDriverFactory $drivers) {}
+    public function __construct(
+        private DeviceMetricsDriverFactory $drivers,
+        private ReadOspfNeighbors $ospf,
+    ) {}
 
     /** @param  list<int>  $deviceIds */
     public function __invoke(array $deviceIds): int
@@ -29,7 +32,7 @@ class PollDeviceMetrics
 
         $startedAt = microtime(true);
         $now = now()->format('Y-m-d H:i:s');
-        $devices = Device::with('credential')->whereIn('id', $deviceIds)->get();
+        $devices = Device::with(['credential', 'routerosCredential'])->whereIn('id', $deviceIds)->get();
 
         $frames = [];      // for the live broadcast
         $sampleRows = [];  // for history
@@ -54,7 +57,15 @@ class PollDeviceMetrics
                 continue;
             }
 
-            if ($metrics->isEmpty()) {
+            // OSPF: the RouterOS driver fills this itself; for an SNMP-polled router with a
+            // separate RouterOS-API credential attached, read it over the API here (SNMP can't
+            // expose OSPF at all).
+            $ospf = $metrics->ospfNeighbors;
+            if ($ospf === null && $device->routerosCredential !== null) {
+                $ospf = ($this->ospf)($device->mgmt_ip, $device->routerosCredential);
+            }
+
+            if ($metrics->isEmpty() && $ospf === null) {
                 continue; // nothing readable - don't stamp metrics_at or write fake zeroes
             }
 
@@ -69,7 +80,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
-                'ospf_neighbors' => $metrics->ospfNeighbors,
+                'ospf_neighbors' => $ospf,
                 'metrics_at' => now(),
             ])->save();
 
@@ -82,7 +93,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
-                'ospf_neighbors' => $metrics->ospfNeighbors,
+                'ospf_neighbors' => $ospf,
             ];
             $sampleRows[] = [
                 'device_id' => $device->id,
@@ -94,7 +105,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
-                'ospf_neighbors' => $metrics->ospfNeighbors,
+                'ospf_neighbors' => $ospf,
             ];
         }
 

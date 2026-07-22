@@ -77,6 +77,39 @@ class PollDeviceMetricsTest extends TestCase
             && $e->devices[0]['cpu_pct'] === 12.0);
     }
 
+    public function test_reads_ospf_over_the_routeros_api_for_an_snmp_device_with_a_routeros_credential(): void
+    {
+        $this->bindFakeDriver();
+        // Fake the RouterOS-API OSPF read so no real connection is made.
+        $this->app->instance(\App\Actions\Polling\ReadOspfNeighbors::class, new class extends \App\Actions\Polling\ReadOspfNeighbors
+        {
+            public function __construct() {}
+
+            public function __invoke(string $host, \App\Models\Credential $cred): ?int
+            {
+                return 4;
+            }
+        });
+
+        $cred = \App\Models\Credential::factory()->create(['type' => 'routeros', 'username' => 'admin']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'name' => 'rtr', 'routeros_credential_id' => $cred->id]);
+
+        app(PollDeviceMetrics::class)([$device->id]);
+
+        $this->assertSame(4, $device->fresh()->ospf_neighbors); // OSPF over the API alongside SNMP cpu/mem
+        $this->assertSame(12.0, $device->fresh()->cpu_pct);     // cpu still came from SNMP
+    }
+
+    public function test_no_ospf_read_without_a_routeros_credential(): void
+    {
+        $this->bindFakeDriver();
+        $device = $this->device('plain');
+
+        app(PollDeviceMetrics::class)([$device->id]);
+
+        $this->assertNull($device->fresh()->ospf_neighbors);
+    }
+
     public function test_one_failing_device_does_not_sink_the_batch(): void
     {
         Event::fake([DeviceMetricsUpdated::class]);

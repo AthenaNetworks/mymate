@@ -19,7 +19,7 @@ class Device extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'agent_id',
+        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'map_x', 'map_y',
         'device_type', 'icon', 'icon_color', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
@@ -83,6 +83,12 @@ class Device extends Model
     public function sshCredential(): BelongsTo
     {
         return $this->belongsTo(Credential::class, 'ssh_credential_id');
+    }
+
+    /** Optional RouterOS-API credential for reads SNMP can't do (OSPF neighbours), or null. */
+    public function routerosCredential(): BelongsTo
+    {
+        return $this->belongsTo(Credential::class, 'routeros_credential_id');
     }
 
     /** The remote agent that polls this device, or null when polled centrally. */
