@@ -13,6 +13,9 @@ return [
         // matters because php-fpm (web requests) often runs with a PATH that omits
         // /usr/local/sbin, where the from-source fping is installed.
         'fping' => env('MYMATE_FPING_PATH'),
+        // Source address to ping FROM (fping -S). Empty = the OS default route. Set this to a
+        // WAN/VRF-bound local address to test reachability along a specific path (GitHub #11).
+        'source' => env('MYMATE_PING_SOURCE', ''),
         'interval' => (int) env('MYMATE_PING_INTERVAL', 5),
         'timeout_ms' => (int) env('MYMATE_PING_TIMEOUT_MS', 500),
         'retries' => (int) env('MYMATE_PING_RETRIES', 1),

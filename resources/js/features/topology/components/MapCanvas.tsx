@@ -26,6 +26,7 @@ import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddChildMapDialog } from './AddChildMapDialog';
 import { MapLinkEditor } from './MapLinkEditor';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
+import { MapBreadcrumb } from '../../maps/components/MapBreadcrumb';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
@@ -670,6 +671,7 @@ export function MapCanvas() {
                 here since neither knew the other\'s width. */}
             <div className="absolute inset-x-4 top-4 z-10 flex flex-wrap items-start gap-2">
                 <div className="flex flex-wrap items-center gap-2">
+                    <MapBreadcrumb />
                     <MapSwitcher />
                     <span className="pointer-events-none hidden rounded-full bg-[#0d0d11]/80 px-3 py-1.5 font-mono text-[11px] tabular-nums text-white/50 ring-1 ring-white/10 backdrop-blur-xl sm:inline-block">
                         {mapDevices.length} nodes - {intraLinks.length} links

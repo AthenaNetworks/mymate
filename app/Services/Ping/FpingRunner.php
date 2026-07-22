@@ -19,6 +19,7 @@ class FpingRunner implements Pinger
         private int $processTimeout = 30,
         private int $count = 1,
         private int $periodMs = 300,
+        private ?string $source = null, // optional source address (fping -S) to ping FROM
     ) {}
 
     public function reachable(array $ips): array
@@ -61,20 +62,35 @@ class FpingRunner implements Pinger
         return 'fping'; // last resort - relies on PATH
     }
 
-    /** Run one fping sweep over the given IPs and return its raw JSON-Lines stdout. */
-    private function run(array $ips): string
+    /**
+     * The fping argument vector for a sweep. Extracted so it can be asserted without spawning
+     * fping. --json emits JSON Lines (NDJSON); it requires a count/loop mode, so -c N sends N
+     * pings per host. -p spaces multi-probe sweeps out so they stay snappy.
+     *
+     * @return list<string>
+     */
+    private function commandArgs(): array
     {
-        // --json emits JSON Lines (NDJSON); it requires a count/loop mode, so -c N sends N
-        // pings per host. -p spaces multi-probe sweeps out so they stay snappy. Each host
-        // gets a {"summary": {...}} line (rcv/loss) and one {"resp": {...}} line per reply.
         $args = [self::binary(), '--json', '-c', (string) max(1, $this->count)];
         if ($this->count > 1) {
             $args[] = '-p';
             $args[] = (string) max(1, $this->periodMs);
         }
-        $args = array_merge($args, ['-r', (string) $this->retries, '-t', (string) $this->timeoutMs, '-f', '-']);
+        $args = array_merge($args, ['-r', (string) $this->retries, '-t', (string) $this->timeoutMs]);
+        // -S sets the source address to ping FROM (e.g. a WAN/VRF interface, to test that a
+        // customer path can reach the target). Only added when configured.
+        if ($this->source !== null && $this->source !== '') {
+            $args[] = '-S';
+            $args[] = $this->source;
+        }
 
-        $process = new Process($args, input: implode("\n", $ips)."\n");
+        return array_merge($args, ['-f', '-']);
+    }
+
+    /** Run one fping sweep over the given IPs and return its raw JSON-Lines stdout. */
+    private function run(array $ips): string
+    {
+        $process = new Process($this->commandArgs(), input: implode("\n", $ips)."\n");
         $process->setTimeout($this->processTimeout);
         $process->run();
 

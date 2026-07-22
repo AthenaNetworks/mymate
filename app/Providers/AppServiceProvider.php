@@ -28,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
             retries: (int) config('mymate.ping.retries', 1),
             count: (int) config('mymate.ping.count', 3),
             periodMs: (int) config('mymate.ping.period_ms', 300),
+            source: (string) config('mymate.ping.source', '') ?: null,
         ));
 
         $this->app->bind(SnmpClient::class, fn () => new PhpSnmpClient(
