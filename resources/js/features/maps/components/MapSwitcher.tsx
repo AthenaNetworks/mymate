@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { CaretDown, MapTrifold, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
-import { useMaps, useSaveMap, useDeleteMap } from '../api/maps';
+import { useEffect, useRef, useState } from 'react';
+import { CaretDown, DownloadSimple, MapTrifold, PencilSimple, Plus, Trash, UploadSimple } from '@phosphor-icons/react';
+import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
@@ -27,6 +27,9 @@ export function MapSwitcher() {
     const activeId = useActiveMapId();
     const saveMap = useSaveMap();
     const delMap = useDeleteMap();
+    const exportMap = useExportMap();
+    const importMap = useImportMap();
+    const fileRef = useRef<HTMLInputElement>(null);
     const [open, setOpen] = useState(false);
     const [dialog, setDialog] = useState<MapDialog | null>(null);
 
@@ -130,9 +133,45 @@ export function MapSwitcher() {
                             ))}
                             </div>
                             {isAdmin && (
-                                <button onClick={() => openDialog({ mode: 'create' })} className="mt-1 flex w-full shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
-                                    <Plus weight="bold" className="h-3.5 w-3.5" /> New map
-                                </button>
+                                <div className="mt-1 shrink-0 border-t border-white/5 pt-1">
+                                    <button onClick={() => openDialog({ mode: 'create' })} className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
+                                        <Plus weight="bold" className="h-3.5 w-3.5" /> New map
+                                    </button>
+                                    <button
+                                        disabled={!active || exportMap.isPending}
+                                        onClick={() => active && exportMap.mutate({ mapId: active.id, name: active.name })}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                    >
+                                        <DownloadSimple weight="bold" className="h-3.5 w-3.5" /> Export this map
+                                    </button>
+                                    <button
+                                        disabled={importMap.isPending}
+                                        onClick={() => fileRef.current?.click()}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                    >
+                                        <UploadSimple weight="bold" className="h-3.5 w-3.5" /> Import a map
+                                    </button>
+                                    <input
+                                        ref={fileRef}
+                                        type="file"
+                                        accept="application/json,.json"
+                                        className="hidden"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            e.target.value = ''; // allow re-picking the same file
+                                            if (!file) return;
+                                            try {
+                                                const payload = JSON.parse(await file.text());
+                                                const map = await importMap.mutateAsync(payload);
+                                                setActiveMap(map.id);
+                                                setOpen(false);
+                                                pushToast({ title: `Imported "${map.name}"`, tone: 'info' });
+                                            } catch {
+                                                pushToast({ title: "Couldn't import that file", detail: 'Expected a map export JSON.', tone: 'down' });
+                                            }
+                                        }}
+                                    />
+                                </div>
                             )}
                         </div>
                     </>

@@ -145,6 +145,8 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
     // Child-map nodes on an overview map + manual device-less links between them (GitHub #9).
+    Route::get('maps/{map}/export', [MapController::class, 'export'])->name('maps.export');
+    Route::post('maps/import', [MapController::class, 'import'])->name('maps.import');
     Route::post('maps/{map}/child-maps', [MapController::class, 'addChildMap'])->name('maps.children.add');
     Route::patch('maps/{map}/child-maps/{child}/position', [MapController::class, 'saveChildPosition'])->name('maps.children.position');
     Route::delete('maps/{map}/child-maps/{child}', [MapController::class, 'removeChildMap'])->name('maps.children.remove');

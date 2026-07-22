@@ -287,6 +287,32 @@ class MapController extends Controller
         return response()->noContent();
     }
 
+    /** Export this map's layout to a portable, secret-free JSON snapshot (GitHub #11). */
+    public function export(Map $map, \App\Actions\Maps\ExportMap $export): JsonResponse
+    {
+        return response()->json($export($map))
+            ->header('Content-Disposition', 'attachment; filename="map-'.$map->id.'.json"');
+    }
+
+    /** Rebuild a map from an exported snapshot. Devices are matched by mgmt_ip or created. */
+    public function import(Request $request, \App\Actions\Maps\ImportMap $import): JsonResponse
+    {
+        $data = $request->validate([
+            'version' => ['nullable', 'integer'],
+            'map' => ['required', 'array'],
+            'map.name' => ['required', 'string', 'max:255'],
+            'devices' => ['nullable', 'array'],
+            'links' => ['nullable', 'array'],
+            'notes' => ['nullable', 'array'],
+            'child_maps' => ['nullable', 'array'],
+            'map_links' => ['nullable', 'array'],
+        ]);
+
+        $map = $import($data);
+
+        return response()->json(['data' => ['id' => $map->id, 'name' => $map->name]], Response::HTTP_CREATED);
+    }
+
     /** Add a free-text note to this map. */
     public function storeMapNote(Request $request, Map $map): JsonResponse
     {

@@ -183,6 +183,36 @@ export function useDeleteMapLink() {
     });
 }
 
+// --- Export / import a map layout (GitHub #11) ----------------------------
+
+/** Fetch a map's export JSON and trigger a browser download. */
+export function useExportMap() {
+    return useMutation({
+        mutationFn: async ({ mapId, name }: { mapId: number; name: string }): Promise<void> => {
+            const { data } = await apiClient.get(`/maps/${mapId}/export`);
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${name.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase() || 'map'}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        },
+    });
+}
+
+/** Import a previously-exported map layout; returns the new map's id. */
+export function useImportMap() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (payload: unknown): Promise<{ id: number; name: string }> => {
+            const { data } = await apiClient.post<{ data: { id: number; name: string } }>('/maps/import', payload);
+            return data.data;
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: mapKeys.all }),
+    });
+}
+
 // --- Free-text map notes (GitHub #11) -------------------------------------
 
 /** Add a free-text note to a map. */
