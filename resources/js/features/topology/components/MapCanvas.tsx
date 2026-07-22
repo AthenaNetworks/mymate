@@ -13,11 +13,12 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, Note, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { ChildMapNode } from '../nodes/ChildMapNode';
+import { MapNoteNode } from '../nodes/MapNoteNode';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
 import { MapLinkEdge } from '../edges/MapLinkEdge';
 import { LinkBinderDialog, type PendingLink } from './LinkBinderDialog';
@@ -28,7 +29,7 @@ import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink, useRemoveChildMap } from '../../maps/api/maps';
+import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
@@ -40,13 +41,17 @@ import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '../../../types';
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
-const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode };
+const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode, note: MapNoteNode };
 const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge };
 
 // Child-map nodes are keyed with this prefix so they never collide with device ids.
 const CHILD_PREFIX = 'childmap:';
 const childNodeId = (mapId: number) => `${CHILD_PREFIX}${mapId}`;
 const childMapId = (nodeId: string) => Number(nodeId.slice(CHILD_PREFIX.length));
+// Note nodes get their own prefix too.
+const NOTE_PREFIX = 'note:';
+const noteNodeId = (id: number) => `${NOTE_PREFIX}${id}`;
+const noteId = (nodeId: string) => Number(nodeId.slice(NOTE_PREFIX.length));
 
 const miniColor: Record<DeviceStatus, string> = {
     up: '#34d399',
@@ -152,6 +157,9 @@ export function MapCanvas() {
     const removeChildMap = useRemoveChildMap();
     const createMapLink = useCreateMapLink();
     const deleteMapLink = useDeleteMapLink();
+    const createMapNote = useCreateMapNote();
+    const updateMapNote = useUpdateMapNote();
+    const deleteMapNote = useDeleteMapNote();
     const deleteLink = useDeleteLink();
     const addToMap = useAddDeviceToMap();
     const { fitView, screenToFlowPosition } = useReactFlow();
@@ -194,6 +202,7 @@ export function MapCanvas() {
     // Child-map nodes placed on this canvas + the manual links between them (GitHub #9).
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
+    const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]); // free-text annotations (GitHub #11)
 
     // Live throughput -> util map (folded by useMapChannel from InterfaceUtilUpdated).
     const handleUtil = useCallback((payload: InterfaceUtilUpdatedPayload) => {
@@ -264,6 +273,10 @@ export function MapCanvas() {
     posByIdRef.current = posById;
     const childMapsRef = useRef(childMaps);
     childMapsRef.current = childMaps;
+    const mapNotesRef = useRef(mapNotes);
+    mapNotesRef.current = mapNotes;
+    const activeMapIdRef = useRef(activeMapId);
+    activeMapIdRef.current = activeMapId;
 
     // A stable signature of *which* nodes are on the map and *where* - NOT their live data.
     // The full node rebuild keys off this so a metrics/status update (every ~30s) patches data
@@ -280,8 +293,10 @@ export function MapCanvas() {
             '#' +
             interMapLinks.map((il) => `${il.id}@${il.portal_x ?? ''},${il.portal_y ?? ''}`).join('|') +
             '#' +
-            childMaps.map((c) => `${c.id}@${Math.round(c.node_x ?? 0)},${Math.round(c.node_y ?? 0)}`).join('|'),
-        [mapDevices, posById, interMapLinks, childMaps],
+            childMaps.map((c) => `${c.id}@${Math.round(c.node_x ?? 0)},${Math.round(c.node_y ?? 0)}`).join('|') +
+            '#' +
+            mapNotes.map((n) => `${n.id}@${Math.round(n.x)},${Math.round(n.y)}:${n.color ?? ''}:${n.text}`).join('|'),
+        [mapDevices, posById, interMapLinks, childMaps, mapNotes],
     );
 
     // Map devices -> nodes, positioned per-map; plus a portal node per inter-map link. Rebuilds
@@ -344,7 +359,20 @@ export function MapCanvas() {
             draggable: isAdmin,
             selectable: true,
         }));
-        setNodes([...deviceNodes, ...portalNodes, ...childNodes]);
+        // Free-text notes / labels (GitHub #11).
+        const noteNodes: Node[] = mapNotesRef.current.map((n) => ({
+            id: noteNodeId(n.id),
+            type: 'note',
+            position: { x: n.x, y: n.y },
+            data: {
+                noteId: n.id, text: n.text, color: n.color, editable: isAdmin,
+                onSave: isAdmin ? (text: string) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, text }); } : undefined,
+                onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapNote.mutate({ mapId: m, noteId: n.id }); } : undefined,
+            },
+            draggable: isAdmin,
+            selectable: true,
+        }));
+        setNodes([...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes]);
     }, [membershipKey, setNodes, isAdmin]);
 
     // Intra-map links -> util edges; inter-map links -> dashed portal edges. Seed util.
@@ -553,6 +581,10 @@ export function MapCanvas() {
                         saveChildPosition.mutate({ mapId: activeMapId, childMapId: childMapId(node.id), x: node.position.x, y: node.position.y });
                         return;
                     }
+                    if (node.type === 'note') {
+                        updateMapNote.mutate({ mapId: activeMapId, noteId: noteId(node.id), x: node.position.x, y: node.position.y });
+                        return;
+                    }
                     if (node.type !== 'device') return;
                     savePosition.mutate({ mapId: activeMapId, deviceId: Number(node.id), x: node.position.x, y: node.position.y });
                 }}
@@ -686,6 +718,18 @@ export function MapCanvas() {
                                 <TreeStructure weight="light" className="h-4 w-4 text-indigo-300" />
                                 <span className="hidden md:inline">Add map</span>
                             </button>
+                            <button
+                                onClick={() => {
+                                    if (activeMapId === null) return;
+                                    const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                                    createMapNote.mutate({ mapId: activeMapId, text: 'New note', x: pos.x, y: pos.y });
+                                }}
+                                title="Add a free-text note / label to this map"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <Note weight="light" className="h-4 w-4 text-amber-300" />
+                                <span className="hidden md:inline">Add note</span>
+                            </button>
                         </div>
                     )}
                     {isAdmin && (
@@ -794,7 +838,7 @@ export function MapCanvas() {
                 Details
             </button>
 
-            {!isLoading && mapDevices.length === 0 && childMaps.length === 0 && (
+            {!isLoading && mapDevices.length === 0 && childMaps.length === 0 && mapNotes.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 grid place-items-center">
                     <div className="max-w-xs text-center">
                         <p className="text-sm font-medium text-white/70">Nothing on this map yet</p>

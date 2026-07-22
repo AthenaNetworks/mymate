@@ -125,6 +125,42 @@ class OverviewMapTest extends TestCase
             ->assertJsonValidationErrors('media_type');
     }
 
+    public function test_add_edit_move_and_delete_a_map_note(): void
+    {
+        $map = Map::create(['name' => 'Site']);
+
+        $id = $this->postJson("/api/maps/{$map->id}/notes", ['text' => 'Fibre ring', 'x' => 20, 'y' => 30])
+            ->assertCreated()
+            ->assertJsonPath('data.text', 'Fibre ring')
+            ->json('data.id');
+
+        $this->getJson("/api/maps/{$map->id}")->assertOk()->assertJsonPath('data.map_notes.0.id', $id);
+
+        $this->patchJson("/api/maps/{$map->id}/notes/{$id}", ['text' => 'Fibre ring - 10G', 'color' => '#22d3ee', 'x' => 99, 'y' => 88])
+            ->assertOk()
+            ->assertJsonPath('data.text', 'Fibre ring - 10G')
+            ->assertJsonPath('data.color', '#22d3ee');
+        $this->assertDatabaseHas('map_notes', ['id' => $id, 'x' => 99, 'y' => 88]);
+
+        $this->deleteJson("/api/maps/{$map->id}/notes/{$id}")->assertNoContent();
+        $this->assertDatabaseMissing('map_notes', ['id' => $id]);
+    }
+
+    public function test_a_note_requires_text_and_rejects_a_bad_colour(): void
+    {
+        $map = Map::create(['name' => 'Site']);
+        $this->postJson("/api/maps/{$map->id}/notes", ['text' => ''])->assertJsonValidationErrors('text');
+        $this->postJson("/api/maps/{$map->id}/notes", ['text' => 'ok', 'color' => 'blue'])->assertJsonValidationErrors('color');
+    }
+
+    public function test_deleting_a_map_removes_its_notes(): void
+    {
+        $map = Map::create(['name' => 'Site']);
+        $note = \App\Models\MapNote::create(['map_id' => $map->id, 'text' => 'x']);
+        $map->delete();
+        $this->assertDatabaseMissing('map_notes', ['id' => $note->id]);
+    }
+
     public function test_deleting_the_canvas_map_removes_its_manual_links(): void
     {
         $canvas = Map::create(['name' => 'Core']);

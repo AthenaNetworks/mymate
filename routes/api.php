@@ -151,6 +151,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::post('maps/{map}/map-links', [MapController::class, 'storeMapLink'])->name('maps.maplinks.store');
     Route::patch('maps/{map}/map-links/{mapLink}', [MapController::class, 'updateMapLink'])->name('maps.maplinks.update');
     Route::delete('maps/{map}/map-links/{mapLink}', [MapController::class, 'destroyMapLink'])->name('maps.maplinks.destroy');
+    Route::post('maps/{map}/notes', [MapController::class, 'storeMapNote'])->name('maps.notes.store');
+    Route::patch('maps/{map}/notes/{mapNote}', [MapController::class, 'updateMapNote'])->name('maps.notes.update');
+    Route::delete('maps/{map}/notes/{mapNote}', [MapController::class, 'destroyMapNote'])->name('maps.notes.destroy');
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');

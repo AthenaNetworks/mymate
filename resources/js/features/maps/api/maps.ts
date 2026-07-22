@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { LinkMediaType, MapDetail, MapLink, NetworkMap } from '../../../types';
+import type { LinkMediaType, MapDetail, MapLink, MapNote, NetworkMap } from '../../../types';
 
 export const mapKeys = {
     all: ['maps'] as const,
@@ -178,6 +178,46 @@ export function useDeleteMapLink() {
     return useMutation({
         mutationFn: async ({ mapId, mapLinkId }: { mapId: number; mapLinkId: number }): Promise<void> => {
             await apiClient.delete(`/maps/${mapId}/map-links/${mapLinkId}`);
+        },
+        onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
+    });
+}
+
+// --- Free-text map notes (GitHub #11) -------------------------------------
+
+/** Add a free-text note to a map. */
+export function useCreateMapNote() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, text, x, y }: { mapId: number; text: string; x?: number; y?: number }): Promise<MapNote> => {
+            const { data } = await apiClient.post<{ data: MapNote }>(`/maps/${mapId}/notes`, { text, x, y });
+            return data.data;
+        },
+        onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
+    });
+}
+
+/** Update a note's text / position / colour. Position saves aren't invalidated (already moved). */
+export function useUpdateMapNote() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, noteId, text, x, y, color }: { mapId: number; noteId: number; text?: string; x?: number; y?: number; color?: string | null }): Promise<MapNote> => {
+            const { data } = await apiClient.patch<{ data: MapNote }>(`/maps/${mapId}/notes/${noteId}`, { text, x, y, color });
+            return data.data;
+        },
+        onSuccess: (_d, { mapId, text, color }) => {
+            // Only refetch on a content change; a drag-only save leaves the cache alone.
+            if (text !== undefined || color !== undefined) qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
+        },
+    });
+}
+
+/** Delete a note. */
+export function useDeleteMapNote() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, noteId }: { mapId: number; noteId: number }): Promise<void> => {
+            await apiClient.delete(`/maps/${mapId}/notes/${noteId}`);
         },
         onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
     });

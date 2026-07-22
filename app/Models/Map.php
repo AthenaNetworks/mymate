@@ -49,6 +49,12 @@ class Map extends Model
         return $this->hasMany(MapLink::class);
     }
 
+    /** Free-text notes / labels placed on this map. */
+    public function mapNotes(): HasMany
+    {
+        return $this->hasMany(MapNote::class);
+    }
+
     public function devices(): BelongsToMany
     {
         return $this->belongsToMany(Device::class, 'device_map_positions')->withPivot('x', 'y');

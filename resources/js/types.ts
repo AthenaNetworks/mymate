@@ -287,6 +287,16 @@ export interface MapLink {
     label: string | null;
 }
 
+// A free-text note / label placed on a map.
+export interface MapNote {
+    id: number;
+    map_id: number;
+    text: string;
+    x: number;
+    y: number;
+    color: string | null;
+}
+
 export interface MapDetail {
     id: number;
     name: string;
@@ -295,6 +305,7 @@ export interface MapDetail {
     inter_map_links: InterMapLink[];
     child_maps: ChildMapNode[];
     map_links: MapLink[];
+    map_notes: MapNote[];
 }
 
 // Alerting.

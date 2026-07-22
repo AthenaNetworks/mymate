@@ -13,6 +13,7 @@ use App\Models\Link;
 use App\Models\Map;
 use App\Models\MapLink;
 use App\Models\MapLinkPosition;
+use App\Models\MapNote;
 use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -126,6 +127,7 @@ class MapController extends Controller
                 'device_count' => $c->positions_count,
             ])->all();
         $mapLinks = MapLinkResource::collection($map->mapLinks()->get())->resolve();
+        $mapNotes = $map->mapNotes()->get(['id', 'map_id', 'text', 'x', 'y', 'color'])->all();
 
         return response()->json([
             'data' => [
@@ -138,6 +140,7 @@ class MapController extends Controller
                 'inter_map_links' => $interMap,
                 'child_maps' => $childMaps,
                 'map_links' => $mapLinks,
+                'map_notes' => $mapNotes,
             ],
         ]);
     }
@@ -280,6 +283,47 @@ class MapController extends Controller
     {
         abort_unless($mapLink->map_id === $map->id, Response::HTTP_NOT_FOUND);
         $mapLink->delete();
+
+        return response()->noContent();
+    }
+
+    /** Add a free-text note to this map. */
+    public function storeMapNote(Request $request, Map $map): JsonResponse
+    {
+        $data = $request->validate([
+            'text' => ['required', 'string', 'max:500'],
+            'x' => ['nullable', 'numeric'],
+            'y' => ['nullable', 'numeric'],
+            'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+
+        $note = $map->mapNotes()->create([
+            'text' => $data['text'], 'x' => $data['x'] ?? 0, 'y' => $data['y'] ?? 0, 'color' => $data['color'] ?? null,
+        ]);
+
+        return response()->json(['data' => $note->only('id', 'map_id', 'text', 'x', 'y', 'color')], Response::HTTP_CREATED);
+    }
+
+    /** Update a note's text / position / colour. */
+    public function updateMapNote(Request $request, Map $map, MapNote $mapNote): JsonResponse
+    {
+        abort_unless($mapNote->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $data = $request->validate([
+            'text' => ['sometimes', 'required', 'string', 'max:500'],
+            'x' => ['sometimes', 'numeric'],
+            'y' => ['sometimes', 'numeric'],
+            'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ]);
+        $mapNote->update($data);
+
+        return response()->json(['data' => $mapNote->only('id', 'map_id', 'text', 'x', 'y', 'color')]);
+    }
+
+    /** Delete a note. */
+    public function destroyMapNote(Map $map, MapNote $mapNote): Response
+    {
+        abort_unless($mapNote->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $mapNote->delete();
 
         return response()->noContent();
     }
