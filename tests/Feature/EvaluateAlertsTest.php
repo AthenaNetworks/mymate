@@ -446,6 +446,33 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
     }
 
+    public function test_low_throughput_fires_below_the_floor_and_resolves_above_it(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::LowThroughput, ['threshold' => 1]); // 1 Mbps floor
+        $link = $this->linkAtBps(200_000); // 0.2 Mbps -> below the floor
+
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::where('status', 'firing')->where('dedupe_key', "link:{$link->id}")->count());
+
+        $link->aInterface->update(['bps_out' => 5_000_000]); // 5 Mbps -> back above the floor
+        app(EvaluateAlerts::class)();
+        $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
+    }
+
+    public function test_low_throughput_ignores_a_link_with_a_down_end(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::LowThroughput, ['threshold' => 1]);
+        $link = $this->linkAtBps(0); // idle, would be "low"...
+        $link->aDevice->update(['status' => \App\Enums\DeviceStatus::Down]); // ...but its end is down
+
+        app(EvaluateAlerts::class)();
+
+        // Device-down covers a down device; low-throughput must not double-alert on it.
+        $this->assertSame(0, AlertEvent::where('dedupe_key', "link:{$link->id}")->count());
+    }
+
     public function test_sustained_high_util_waits_for_the_duration_before_firing(): void
     {
         Http::fake();

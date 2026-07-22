@@ -17,7 +17,7 @@ import { pushToast } from '../../../lib/toast';
 import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'upgrade_failed', 'backup_failed', 'high_metric'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'upgrade_failed', 'backup_failed', 'high_metric'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -42,6 +42,7 @@ const iconBtn = 'rounded-md p-1 text-white/40 transition-colors hover:bg-white/5
 const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'device_down', label: 'Device down / recovered' },
     { value: 'high_util', label: 'Sustained high utilisation' },
+    { value: 'low_throughput', label: 'Low link throughput' },
     { value: 'high_metric', label: 'High device metric (CPU / memory / temperature)' },
     { value: 'upgrade_failed', label: 'Upgrade failed' },
     { value: 'backup_failed', label: 'Config backup failed' },
@@ -156,6 +157,24 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                     </label>
                     <p className="px-1 text-[11px] text-white/35">
                         Evaluated per link, against its effective speed (override or slowest end).
+                    </p>
+                </>
+            )}
+            {form.condition === 'low_throughput' && (
+                <>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>Throughput floor (Mbps)</span>
+                        <input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={form.params?.threshold ?? 1}
+                            onChange={(e) => set('params', { ...form.params, threshold: Number(e.target.value) })}
+                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                        />
+                    </label>
+                    <p className="px-1 text-[11px] text-white/35">
+                        Fires when a link's busiest direction drops below this floor while both ends are up - for a circuit that should always carry traffic. Scope it to those links.
                     </p>
                 </>
             )}

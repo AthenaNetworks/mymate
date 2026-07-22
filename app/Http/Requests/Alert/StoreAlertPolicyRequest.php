@@ -23,7 +23,7 @@ class StoreAlertPolicyRequest extends FormRequest
             'params' => ['nullable', 'array'],
             // Threshold: % (util / cpu / mem / loss), °C (temp) or ms (latency). One wide
             // ceiling covers them all - an out-of-range value for a given metric just never fires.
-            'params.threshold' => ['nullable', 'numeric', 'min:1', 'max:10000'],
+            'params.threshold' => ['nullable', 'numeric', 'min:0', 'max:10000'],
             // Which device metric high_metric watches.
             'params.metric' => ['nullable', Rule::in(['cpu', 'mem', 'temp', 'latency', 'loss'])],
             // Sustained-duration gate (high_util / high_metric / device_down), in minutes. 0 = instant.

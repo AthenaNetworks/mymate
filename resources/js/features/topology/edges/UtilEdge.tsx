@@ -18,11 +18,18 @@ export type UtilEdgeData = {
     util: number | null; // higher of in/out across both bound interfaces
     mbps: number | null; // derived load on the busier end (util% x speed)
     down: boolean; // either endpoint device is down
+    effAb?: number | null; // link effective speed (Mbps) - shown as the port/link capacity
     mediaType?: LinkMediaType | null; // physical medium - dash pattern only (load keeps the colour)
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
     emphasized?: boolean; // touches the selected device - bring it forward
     dimmed?: boolean; // a device is selected but this link isn't its - push it back
 };
+
+/** Compact link capacity ("1G", "10G", "100M"); null when unknown. */
+function speedLabel(mbps: number | null | undefined): string | null {
+    if (mbps == null || mbps <= 0) return null;
+    return mbps >= 1000 ? `${+(mbps / 1000).toFixed(mbps % 1000 === 0 ? 0 : 1)}G` : `${mbps}M`;
+}
 
 function label(d: UtilEdgeData): string {
     if (d.down) return 'down';
@@ -30,7 +37,10 @@ function label(d: UtilEdgeData): string {
     // Percentage only when a speed is known (util computable); otherwise show the rate
     // alone - never a % or load colour for a speedless link (spec).
     const pct = d.util !== null ? `${d.util.toFixed(d.util < 10 ? 1 : 0)}%` : null;
-    return [rate, pct].filter(Boolean).join(' ') || '-';
+    // Show the link capacity next to the load ("730M/1G 42%") so the port speed is visible.
+    const cap = speedLabel(d.effAb);
+    const load = cap && rate ? `${rate}/${cap}` : rate || (cap ? `-/${cap}` : null);
+    return [load, pct].filter(Boolean).join(' ') || '-';
 }
 
 export function UtilEdge({

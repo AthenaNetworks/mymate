@@ -301,6 +301,7 @@ export interface MapDetail {
 export type AlertConditionType =
     | 'device_down'
     | 'high_util'
+    | 'low_throughput'
     | 'upgrade_failed'
     | 'new_discovery'
     | 'backup_failed'

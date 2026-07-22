@@ -151,6 +151,7 @@ class EvaluateAlerts
             // Dependency suppression is on by default - opt out per policy.
             AlertCondition::DeviceDown => $this->downDevices((bool) ($policy->params['suppress_dependent'] ?? true), $scope),
             AlertCondition::HighUtil => $this->highUtil((float) ($policy->params['threshold'] ?? 90), $scope),
+            AlertCondition::LowThroughput => $this->lowThroughput((float) ($policy->params['threshold'] ?? 1), $scope),
             AlertCondition::UpgradeFailed => $this->failedUpgrades($scope),
             // Discovery candidates aren't devices yet -> device-scope doesn't apply; always fleet-wide.
             AlertCondition::NewDiscovery => $this->newCandidates(),
@@ -278,6 +279,75 @@ class EvaluateAlerts
         }
 
         return $out;
+    }
+
+    /**
+     * Links whose live throughput has fallen below a floor (Mbps) - e.g. a customer circuit
+     * that should always carry traffic going quiet. Skips a link with a down end (device-down
+     * covers that, and a dead link is 0 by definition) and one with no measurement yet (can't
+     * judge). The busiest direction is what's compared, so a link is only "low" when BOTH
+     * directions are below the floor.
+     *
+     * @param  array<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function lowThroughput(float $thresholdMbps, ?array $scope): array
+    {
+        $out = [];
+        $inScope = $scope === null ? null : array_flip($scope);
+        $floorBps = $thresholdMbps * 1_000_000;
+        $links = Link::with(['aInterface', 'bInterface', 'aDevice:id,name,status', 'bDevice:id,name,status'])->get();
+        foreach ($links as $l) {
+            if ($inScope !== null && ! isset($inScope[$l->a_device_id]) && ! isset($inScope[$l->b_device_id])) {
+                continue;
+            }
+            if ($l->aDevice?->status === DeviceStatus::Down || $l->bDevice?->status === DeviceStatus::Down) {
+                continue; // a down end can't be judged for "low" traffic
+            }
+            $bps = $this->linkBps($l);
+            if ($bps === null || $bps >= $floorBps) {
+                continue; // no reading, or above the floor
+            }
+            $a = $l->aDevice?->name ?? "device {$l->a_device_id}";
+            $b = $l->bDevice?->name ?? "device {$l->b_device_id}";
+            $out["link:{$l->id}"] = 'Low throughput '.$this->fmtBps($bps).' (below '.$this->fmtBps($floorBps).") on link {$a} <-> {$b}.";
+        }
+
+        return $out;
+    }
+
+    /** Busiest measured throughput (bps) across a link's two ends; null when neither reported. */
+    private function linkBps(Link $l): ?int
+    {
+        $vals = [];
+        foreach ([$l->aInterface, $l->bInterface] as $if) {
+            if ($if === null) {
+                continue;
+            }
+            foreach ([$if->bps_in, $if->bps_out] as $b) {
+                if ($b !== null) {
+                    $vals[] = (int) $b;
+                }
+            }
+        }
+
+        return $vals === [] ? null : max($vals);
+    }
+
+    /** "6.1G" / "730M" / "12k" / "0" - compact bits-per-second for an alert message. */
+    private function fmtBps(float $bps): string
+    {
+        if ($bps >= 1e9) {
+            return round($bps / 1e9, 1).'G';
+        }
+        if ($bps >= 1e6) {
+            return round($bps / 1e6, $bps < 1e7 ? 1 : 0).'M';
+        }
+        if ($bps >= 1e3) {
+            return round($bps / 1e3).'k';
+        }
+
+        return (string) (int) $bps;
     }
 
     /**
