@@ -248,6 +248,7 @@ export interface NetworkMap {
     is_default: boolean;
     position: number;
     device_count: number;
+    leaflet_enabled: boolean;
 }
 
 export interface MapPosition {
@@ -314,6 +315,7 @@ export interface MapDetail {
     id: number;
     name: string;
     parent_map_id: number | null;
+    leaflet_enabled: boolean;
     positions: MapPosition[];
     inter_map_links: InterMapLink[];
     child_maps: ChildMapNode[];

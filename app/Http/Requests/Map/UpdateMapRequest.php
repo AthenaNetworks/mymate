@@ -18,6 +18,7 @@ class UpdateMapRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'parent_map_id' => ['nullable', 'integer', 'exists:maps,id'],
+            'leaflet_enabled' => ['sometimes', 'boolean'],
             'position' => ['nullable', 'integer'],
         ];
     }

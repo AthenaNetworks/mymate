@@ -18,6 +18,7 @@ class MapResource extends JsonResource
             // Position when this map is placed as a node on its parent map (null = not placed).
             'node_x' => $this->node_x,
             'node_y' => $this->node_y,
+            'leaflet_enabled' => (bool) $this->leaflet_enabled,
             'device_count' => $this->positions_count ?? $this->whenCounted('positions'),
         ];
     }

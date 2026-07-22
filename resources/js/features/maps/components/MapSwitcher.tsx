@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretDown, DownloadSimple, MapTrifold, PencilSimple, Plus, Trash, UploadSimple } from '@phosphor-icons/react';
+import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
@@ -136,6 +136,14 @@ export function MapSwitcher() {
                                 <div className="mt-1 shrink-0 border-t border-white/5 pt-1">
                                     <button onClick={() => openDialog({ mode: 'create' })} className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-emerald-300 transition-colors hover:bg-white/5">
                                         <Plus weight="bold" className="h-3.5 w-3.5" /> New map
+                                    </button>
+                                    <button
+                                        disabled={!active || saveMap.isPending}
+                                        onClick={() => active && saveMap.mutate({ id: active.id, name: active.name, leaflet_enabled: !active.leaflet_enabled })}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                    >
+                                        <GlobeHemisphereWest weight="bold" className={`h-3.5 w-3.5 ${active?.leaflet_enabled ? 'text-emerald-300' : 'text-white/40'}`} />
+                                        Geographic mode {active?.leaflet_enabled ? 'on' : 'off'}
                                     </button>
                                     <button
                                         disabled={!active || exportMap.isPending}

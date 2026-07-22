@@ -1,11 +1,10 @@
 import { useEffect } from 'react';
-import { ReactFlowProvider } from '@xyflow/react';
 import { ArrowsIn } from '@phosphor-icons/react';
 import { setWallboard, useView, useWallboard } from '../../lib/shellStore';
 import { TopBar } from './TopBar';
 import { NavRail } from './NavRail';
 import { UpdateNotice } from './UpdateNotice';
-import { MapCanvas } from '../topology/components/MapCanvas';
+import { MapArea } from '../geo/components/MapArea';
 import { DeviceInspector } from '../topology/components/DeviceInspector';
 import { GeoView } from '../geo/components/GeoView';
 import { DashboardView } from '../dashboard/components/DashboardView';
@@ -59,11 +58,7 @@ export function AppShell() {
 
     const mainView = (
         <main className="relative min-w-0 flex-1">
-            {view === 'map' && (
-                <ReactFlowProvider>
-                    <MapCanvas />
-                </ReactFlowProvider>
-            )}
+            {view === 'map' && <MapArea />}
             {view === 'geo' && <GeoView />}
             {view === 'dashboard' && <DashboardView />}
             {view === 'devices' && <DevicesView />}

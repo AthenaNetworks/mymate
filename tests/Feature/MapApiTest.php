@@ -41,6 +41,18 @@ class MapApiTest extends TestCase
         $this->assertDatabaseMissing('maps', ['id' => $town]);
     }
 
+    public function test_toggles_and_reports_geographic_mode(): void
+    {
+        $this->actingAsUser();
+        $id = $this->postJson('/api/maps', ['name' => 'Sites'])->assertCreated()->json('data.id');
+
+        $this->putJson("/api/maps/{$id}", ['name' => 'Sites', 'leaflet_enabled' => true])
+            ->assertOk()->assertJsonPath('data.leaflet_enabled', true);
+
+        $this->getJson("/api/maps/{$id}")->assertOk()->assertJsonPath('data.leaflet_enabled', true);
+        $this->assertDatabaseHas('maps', ['id' => $id, 'leaflet_enabled' => true]);
+    }
+
     public function test_default_map_cannot_be_deleted(): void
     {
         $this->actingAsUser();

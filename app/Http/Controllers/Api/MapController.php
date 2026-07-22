@@ -134,6 +134,7 @@ class MapController extends Controller
                 'id' => $map->id,
                 'name' => $map->name,
                 'parent_map_id' => $map->parent_map_id,
+                'leaflet_enabled' => (bool) $map->leaflet_enabled,
                 'positions' => $positions->map(fn ($p) => [
                     'device_id' => $p->device_id, 'x' => $p->x, 'y' => $p->y,
                 ])->all(),

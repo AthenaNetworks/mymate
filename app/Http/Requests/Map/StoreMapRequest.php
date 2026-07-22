@@ -17,6 +17,7 @@ class StoreMapRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'parent_map_id' => ['nullable', 'integer', 'exists:maps,id'],
+            'leaflet_enabled' => ['sometimes', 'boolean'],
             'position' => ['nullable', 'integer'],
         ];
     }

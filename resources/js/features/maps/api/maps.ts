@@ -32,6 +32,7 @@ export interface MapInput {
     id?: number;
     name: string;
     parent_map_id?: number | null;
+    leaflet_enabled?: boolean;
 }
 
 export function useSaveMap() {

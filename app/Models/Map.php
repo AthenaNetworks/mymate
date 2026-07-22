@@ -18,13 +18,14 @@ class Map extends Model
     /** @use HasFactory<MapFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y'];
+    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y', 'leaflet_enabled'];
 
     protected $casts = [
         'is_default' => 'boolean',
         'position' => 'integer',
         'node_x' => 'float',
         'node_y' => 'float',
+        'leaflet_enabled' => 'boolean',
     ];
 
     public function parent(): BelongsTo
