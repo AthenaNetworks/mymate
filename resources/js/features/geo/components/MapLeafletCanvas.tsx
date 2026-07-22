@@ -50,6 +50,7 @@ export function MapLeafletCanvas() {
     const mapRef = useRef<L.Map | null>(null);
     const markerLayer = useRef<L.LayerGroup | null>(null);
     const lineLayer = useRef<L.LayerGroup | null>(null);
+    const draggingRef = useRef(false); // don't rebuild the layers mid-drag
     const [openStack, setOpenStack] = useState<string | null>(null);
 
     // This map's placed devices.
@@ -80,21 +81,31 @@ export function MapLeafletCanvas() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [config?.enabled]);
 
-    // Fit to this map's devices whenever the set changes.
-    const lastFitKey = useRef('');
+    // Fit to this map's devices ONCE when the map first loads (or you switch maps) - never on a
+    // drag or a status tick, so moving a pin doesn't yank the view back out.
+    const lastFitMapId = useRef<number | null>(null);
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || placed.length === 0) return;
-        const key = placed.map((d) => `${d.id}:${d.latitude},${d.longitude}`).join('|');
-        if (key === lastFitKey.current) return;
-        lastFitKey.current = key;
+        if (!map || activeMapId == null || placed.length === 0 || lastFitMapId.current === activeMapId) return;
+        lastFitMapId.current = activeMapId;
         map.fitBounds(L.latLngBounds(placed.map((d) => [d.latitude as number, d.longitude as number])), { padding: [60, 60], maxZoom: 15 });
-    }, [placed]);
+    }, [placed, activeMapId]);
 
-    // Rebuild markers + lines on any data / open-stack change.
+    // Only rebuild the marker/line layers when something visible changes (positions, status,
+    // stack open/close) - not on every unrelated query update, and never mid-drag.
+    const sig = useMemo(() => {
+        const dp = placed.map((d) => `${d.id}:${d.latitude}:${d.longitude}:${d.status}`).join('|');
+        const lp = intraLinks.map((l) => {
+            const down = byId.get(l.a_device_id)?.status === 'down' || byId.get(l.b_device_id)?.status === 'down';
+            return `${l.id}:${down ? 'd' : 'u'}`;
+        }).join('|');
+        return `${dp}#${lp}#${openStack ?? ''}`;
+    }, [placed, intraLinks, byId, openStack]);
+
+    // Rebuild markers + lines when the signature changes (see above).
     useEffect(() => {
         const map = mapRef.current;
-        if (!map || !markerLayer.current || !lineLayer.current) return;
+        if (!map || !markerLayer.current || !lineLayer.current || draggingRef.current) return;
         markerLayer.current.clearLayers();
         lineLayer.current.clearLayers();
 
@@ -155,11 +166,12 @@ export function MapLeafletCanvas() {
             const m = L.marker([lat, lng], { icon: L.divIcon({ className: '', html: dotHtml(STATUS_COLOR[d.status] ?? STATUS_COLOR.unknown), iconSize: [14, 14], iconAnchor: [7, 7] }), draggable: isAdmin, title: d.name });
             m.bindTooltip(d.name, { direction: 'top', offset: [0, -8] });
             m.on('click', (e) => { L.DomEvent.stopPropagation(e); selectDevice(d.id); });
-            m.on('dragend', () => { const p = m.getLatLng(); save(d.id, p.lat, p.lng); setOpenStack(null); });
+            m.on('dragstart', () => { draggingRef.current = true; });
+            m.on('dragend', () => { draggingRef.current = false; const p = m.getLatLng(); save(d.id, p.lat, p.lng); setOpenStack(null); });
             m.addTo(markerLayer.current!);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [placed, intraLinks, byId, openStack, isAdmin]);
+    }, [sig, isAdmin]);
 
     if (config && !config.enabled) {
         return (

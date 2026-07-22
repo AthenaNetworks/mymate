@@ -5,6 +5,7 @@ import { useUpdateDevice } from '../api/updateDevice';
 import { Toggle } from '../../../components/Toggle';
 import { useCredentials } from '../../settings/api/credentials';
 import { useDevices } from '../api/getDevices';
+import { useGeocode, useMapConfig } from '../../geo/api/geo';
 import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceType, PollMethod } from '../../../types';
 
@@ -39,6 +40,11 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const [routerosCredentialId, setRouterosCredentialId] = useState<string>(device.routeros_credential_id != null ? String(device.routeros_credential_id) : '');
     const [parentId, setParentId] = useState<string>(device.parent_device_id != null ? String(device.parent_device_id) : '');
     const [monitored, setMonitored] = useState<boolean>(device.monitored);
+    const [lat, setLat] = useState<string>(device.latitude != null ? String(device.latitude) : '');
+    const [lng, setLng] = useState<string>(device.longitude != null ? String(device.longitude) : '');
+    const [address, setAddress] = useState('');
+    const geocode = useGeocode();
+    const { data: mapCfg } = useMapConfig();
 
     const needsCredential = pollMethod !== 'none';
     const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
@@ -69,6 +75,8 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                 ssh_credential_id: sshCredentialId === '' ? null : Number(sshCredentialId),
                 routeros_credential_id: routerosCredentialId === '' ? null : Number(routerosCredentialId),
                 parent_device_id: parentId === '' ? null : Number(parentId),
+                latitude: lat.trim() === '' ? null : Number(lat),
+                longitude: lng.trim() === '' ? null : Number(lng),
             },
             {
                 onSuccess: () => { pushToast({ title: 'Device saved', tone: 'up' }); onClose(); },
@@ -190,6 +198,46 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                                 <span className="block text-[11px] text-white/40">{monitored ? 'Polling throughput + metrics' : 'Paused - not polled'}</span>
                             </span>
                             <Toggle checked={monitored} onChange={setMonitored} label="Monitoring" />
+                        </div>
+
+                        {/* Geographic position for the geo overlay. */}
+                        <div className="space-y-2 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+                            <div className="flex items-center justify-between">
+                                <span className={label}>Location (lat, lng)</span>
+                                {device.geo_source && <span className="text-[10px] text-white/35">from {device.geo_source}</span>}
+                            </div>
+                            <div className="flex gap-2">
+                                <input value={lat} onChange={(e) => setLat(e.target.value)} placeholder="Latitude" inputMode="decimal" className={field} />
+                                <input value={lng} onChange={(e) => setLng(e.target.value)} placeholder="Longitude" inputMode="decimal" className={field} />
+                            </div>
+                            {mapCfg?.geocoder_enabled && (
+                                <div className="flex gap-2">
+                                    <input
+                                        value={address}
+                                        onChange={(e) => setAddress(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+                                        placeholder="Or find by address"
+                                        className={field}
+                                    />
+                                    <button
+                                        type="button"
+                                        disabled={address.trim() === '' || geocode.isPending}
+                                        onClick={async () => {
+                                            const hit = await geocode.mutateAsync(address.trim());
+                                            if (hit) { setLat(String(hit.lat)); setLng(String(hit.lng)); }
+                                            else pushToast({ title: 'No match for that address', tone: 'down' });
+                                        }}
+                                        className="shrink-0 rounded-xl bg-white/[0.06] px-3 text-sm text-white/80 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-40"
+                                    >
+                                        {geocode.isPending ? '...' : 'Find'}
+                                    </button>
+                                </div>
+                            )}
+                            {(lat.trim() !== '' || lng.trim() !== '') && (
+                                <button type="button" onClick={() => { setLat(''); setLng(''); }} className="text-[11px] text-white/45 hover:text-white/80">
+                                    Clear location
+                                </button>
+                            )}
                         </div>
 
                         <div className="flex items-center justify-end gap-2.5 pt-1">
