@@ -25,7 +25,7 @@ class Device extends Model
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
         'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at',
-        'signal_dbm', 'snr_db', 'ccq_pct', 'wireless_clients',
+        'signal_dbm', 'snr_db', 'ccq_pct', 'wireless_clients', 'ospf_neighbors',
         'rtt_ms', 'loss_pct', 'ping_at', 'latency_good_ms', 'latency_bad_ms',
         'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
     ];
@@ -50,6 +50,7 @@ class Device extends Model
         'snr_db' => 'float',
         'ccq_pct' => 'float',
         'wireless_clients' => 'integer',
+        'ospf_neighbors' => 'integer',
         'rtt_ms' => 'float',
         'loss_pct' => 'float',
         'ping_at' => 'datetime',

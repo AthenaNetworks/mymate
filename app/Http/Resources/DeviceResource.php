@@ -57,6 +57,7 @@ class DeviceResource extends JsonResource
             'snr_db' => $this->snr_db,
             'ccq_pct' => $this->ccq_pct,
             'wireless_clients' => $this->wireless_clients,
+            'ospf_neighbors' => $this->ospf_neighbors,
             'rtt_ms' => $this->rtt_ms,
             'loss_pct' => $this->loss_pct,
             'ping_at' => $this->ping_at,

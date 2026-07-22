@@ -71,6 +71,7 @@ export interface Device {
     snr_db: number | null;
     ccq_pct: number | null;
     wireless_clients: number | null;
+    ospf_neighbors: number | null;
     rtt_ms: number | null;
     loss_pct: number | null;
     ping_at: string | null;
@@ -460,6 +461,7 @@ export interface DeviceMetricsFrame {
     snr_db: number | null;
     ccq_pct: number | null;
     wireless_clients: number | null;
+    ospf_neighbors: number | null;
 }
 
 export interface DeviceMetricsUpdatedPayload {
@@ -489,6 +491,7 @@ export interface DeviceMetricSample {
     snr_db: number | null;
     ccq_pct: number | null;
     wireless_clients: number | null;
+    ospf_neighbors: number | null;
 }
 
 export interface DevicePingSample {

@@ -18,6 +18,7 @@ class DeviceMetrics
         public readonly ?float $snrDb = null,
         public readonly ?float $ccqPct = null,
         public readonly ?int $wirelessClients = null,
+        public readonly ?int $ospfNeighbors = null,
     ) {}
 
     /** True when nothing was read - the poller skips these so history has no fake zeroes. */
@@ -29,7 +30,8 @@ class DeviceMetrics
             && $this->signalDbm === null
             && $this->snrDb === null
             && $this->ccqPct === null
-            && $this->wirelessClients === null;
+            && $this->wirelessClients === null
+            && $this->ospfNeighbors === null;
     }
 
     /** Clamp a percentage into 0-100, or null. */

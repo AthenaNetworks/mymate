@@ -69,6 +69,7 @@ export function DeviceResources({ device }: { device: Device }) {
         { key: 'snr', label: 'SNR', color: '#2dd4bf', current: device.snr_db, series: seriesOf(metrics, 'snr_db'), format: (v: number) => `${Math.round(v)} dB` },
         { key: 'ccq', label: 'CCQ', color: '#22d3ee', current: device.ccq_pct, series: seriesOf(metrics, 'ccq_pct'), format: pct },
         { key: 'clients', label: 'Clients', color: '#c084fc', current: device.wireless_clients, series: seriesOf(metrics, 'wireless_clients'), format: (v: number) => `${Math.round(v)}` },
+        { key: 'ospf', label: 'OSPF neighbours', color: '#818cf8', current: device.ospf_neighbors, series: seriesOf(metrics, 'ospf_neighbors'), format: (v: number) => `${Math.round(v)} full` },
     ].filter((r) => r.current !== null || r.series.length > 0);
 
     if (rows.length === 0 && sensors.length === 0) {

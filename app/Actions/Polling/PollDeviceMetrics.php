@@ -69,6 +69,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
+                'ospf_neighbors' => $metrics->ospfNeighbors,
                 'metrics_at' => now(),
             ])->save();
 
@@ -81,6 +82,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
+                'ospf_neighbors' => $metrics->ospfNeighbors,
             ];
             $sampleRows[] = [
                 'device_id' => $device->id,
@@ -92,6 +94,7 @@ class PollDeviceMetrics
                 'snr_db' => $metrics->snrDb,
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
+                'ospf_neighbors' => $metrics->ospfNeighbors,
             ];
         }
 

@@ -31,7 +31,8 @@ class GetDeviceMetricSamples
                        avg(signal_dbm)       AS signal_dbm,
                        avg(snr_db)           AS snr_db,
                        avg(ccq_pct)          AS ccq_pct,
-                       avg(wireless_clients) AS wireless_clients
+                       avg(wireless_clients) AS wireless_clients,
+                       avg(ospf_neighbors)   AS ospf_neighbors
                 FROM device_metric_samples
                 WHERE device_id = ? AND ts >= ?::timestamp AND ts < ?::timestamp
                 GROUP BY bucket
@@ -49,6 +50,7 @@ class GetDeviceMetricSamples
             'snr_db' => self::num($r->snr_db, 1),
             'ccq_pct' => self::num($r->ccq_pct, 1),
             'wireless_clients' => self::num($r->wireless_clients, 0),
+            'ospf_neighbors' => self::num($r->ospf_neighbors, 0),
         ], $rows);
     }
 

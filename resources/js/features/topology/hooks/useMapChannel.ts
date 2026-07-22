@@ -70,6 +70,7 @@ export function useMapChannel(
                                   snr_db: f.snr_db,
                                   ccq_pct: f.ccq_pct,
                                   wireless_clients: f.wireless_clients,
+                                  ospf_neighbors: f.ospf_neighbors,
                               }
                             : d;
                     }) ?? prev,
