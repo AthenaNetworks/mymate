@@ -297,6 +297,13 @@ export interface MapNote {
     color: string | null;
 }
 
+// Aggregated count of real device links crossing between two child maps on an overview.
+export interface ChildDeviceLink {
+    a_map_id: number;
+    b_map_id: number;
+    count: number;
+}
+
 export interface MapDetail {
     id: number;
     name: string;
@@ -304,6 +311,7 @@ export interface MapDetail {
     positions: MapPosition[];
     inter_map_links: InterMapLink[];
     child_maps: ChildMapNode[];
+    child_device_links: ChildDeviceLink[];
     map_links: MapLink[];
     map_notes: MapNote[];
 }

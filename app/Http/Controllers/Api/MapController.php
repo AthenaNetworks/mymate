@@ -139,10 +139,58 @@ class MapController extends Controller
                 ])->all(),
                 'inter_map_links' => $interMap,
                 'child_maps' => $childMaps,
+                'child_device_links' => $this->childDeviceLinks($map),
                 'map_links' => $mapLinks,
                 'map_notes' => $mapNotes,
             ],
         ]);
+    }
+
+    /**
+     * Real device links that cross between the child maps placed on this canvas (GitHub #9),
+     * aggregated to one entry per child pair with a count - so an overview can toggle on the
+     * actual wiring between its sub-maps without a tangle of overlapping edges.
+     *
+     * @return list<array{a_map_id:int, b_map_id:int, count:int}>
+     */
+    private function childDeviceLinks(Map $map): array
+    {
+        $childIds = $map->children()->pluck('id');
+        if ($childIds->count() < 2) {
+            return []; // need at least two sub-maps to have a link between them
+        }
+
+        // device_id -> the child maps it sits on (a device can be on several).
+        $childOfDevice = [];
+        foreach (DeviceMapPosition::whereIn('map_id', $childIds)->get(['device_id', 'map_id']) as $pos) {
+            $childOfDevice[$pos->device_id][] = $pos->map_id;
+        }
+        $deviceIds = array_keys($childOfDevice);
+        if ($deviceIds === []) {
+            return [];
+        }
+
+        $counts = []; // "min:max" child pair -> link count
+        $links = Link::whereIn('a_device_id', $deviceIds)->whereIn('b_device_id', $deviceIds)->get(['a_device_id', 'b_device_id']);
+        foreach ($links as $l) {
+            foreach ($childOfDevice[$l->a_device_id] ?? [] as $ca) {
+                foreach ($childOfDevice[$l->b_device_id] ?? [] as $cb) {
+                    if ($ca === $cb) {
+                        continue; // both ends on the same sub-map - drawn inside it, not here
+                    }
+                    $key = $ca < $cb ? "{$ca}:{$cb}" : "{$cb}:{$ca}";
+                    $counts[$key] = ($counts[$key] ?? 0) + 1;
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($counts as $key => $count) {
+            [$a, $b] = explode(':', $key);
+            $out[] = ['a_map_id' => (int) $a, 'b_map_id' => (int) $b, 'count' => $count];
+        }
+
+        return $out;
     }
 
     /** Save a device's position on this map. */

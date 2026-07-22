@@ -21,6 +21,7 @@ import { ChildMapNode } from '../nodes/ChildMapNode';
 import { MapNoteNode } from '../nodes/MapNoteNode';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
 import { MapLinkEdge } from '../edges/MapLinkEdge';
+import { ChildLinkEdge } from '../edges/ChildLinkEdge';
 import { LinkBinderDialog, type PendingLink } from './LinkBinderDialog';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddChildMapDialog } from './AddChildMapDialog';
@@ -43,7 +44,7 @@ import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload, Link } from '..
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
 const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode, note: MapNoteNode };
-const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge };
+const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge, childLink: ChildLinkEdge };
 
 // Child-map nodes are keyed with this prefix so they never collide with device ids.
 const CHILD_PREFIX = 'childmap:';
@@ -179,6 +180,7 @@ export function MapCanvas() {
     const [deleteMapLinkId, setDeleteMapLinkId] = useState<number | null>(null);
     const [editMapLinkId, setEditMapLinkId] = useState<number | null>(null);
     const [detachChildId, setDetachChildId] = useState<number | null>(null); // remove a child-map node from this canvas
+    const [showChildLinks, setShowChildLinks] = useState(true); // toggle the aggregated device links between child maps (GitHub #9)
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
     const [pendingLayout, setPendingLayout] = useState<LayoutKind | null>(null); // awaiting confirm before it overwrites positions
@@ -204,6 +206,7 @@ export function MapCanvas() {
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
     const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]); // free-text annotations (GitHub #11)
+    const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]); // real device links crossing child maps (GitHub #9)
 
     // Live throughput -> util map (folded by useMapChannel from InterfaceUtilUpdated).
     const handleUtil = useCallback((payload: InterfaceUtilUpdatedPayload) => {
@@ -407,7 +410,20 @@ export function MapCanvas() {
             type: 'mapLink',
             data: { mediaType: ml.media_type, label: ml.label, onRemove: isAdmin ? () => setDeleteMapLinkId(ml.id) : undefined },
         }));
-        setEdges([...utilEdges, ...interEdges, ...mapLinkEdges]);
+        // Aggregated real device links crossing between child maps (GitHub #9) - one per pair,
+        // toggleable so an overview can show its actual wiring without a tangle.
+        const childLinkEdges: Edge[] = showChildLinks
+            ? childDeviceLinks.map((cl) => ({
+                id: `childlink:${cl.a_map_id}-${cl.b_map_id}`,
+                source: childNodeId(cl.a_map_id),
+                target: childNodeId(cl.b_map_id),
+                type: 'childLink',
+                selectable: false,
+                deletable: false,
+                data: { count: cl.count },
+            }))
+            : [];
+        setEdges([...utilEdges, ...interEdges, ...mapLinkEdges, ...childLinkEdges]);
 
         setUtil((prev) => {
             const base: UtilMap = {};
@@ -428,7 +444,7 @@ export function MapCanvas() {
             }
             return { ...base, ...prev };
         });
-    }, [intraLinks, interMapLinks, mapLinks, setEdges, requestDelete, isAdmin]);
+    }, [intraLinks, interMapLinks, mapLinks, childDeviceLinks, showChildLinks, setEdges, requestDelete, isAdmin]);
 
     // Recolour util edges in place when live util or device status changes.
     useEffect(() => {
@@ -676,6 +692,20 @@ export function MapCanvas() {
                     <span className="pointer-events-none hidden rounded-full bg-[#0d0d11]/80 px-3 py-1.5 font-mono text-[11px] tabular-nums text-white/50 ring-1 ring-white/10 backdrop-blur-xl sm:inline-block">
                         {mapDevices.length} nodes - {intraLinks.length} links
                     </span>
+                    {childDeviceLinks.length > 0 && (
+                        <button
+                            onClick={() => setShowChildLinks((v) => !v)}
+                            title="Show the real device links that cross between the maps on this overview"
+                            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 backdrop-blur-xl transition-colors ${
+                                showChildLinks
+                                    ? 'bg-white/10 text-emerald-300 ring-white/15'
+                                    : 'bg-[#0d0d11]/80 text-white/55 ring-white/10 hover:text-white/85'
+                            }`}
+                        >
+                            <LineSegment weight="bold" className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Cross-map links</span>
+                        </button>
+                    )}
                     <MapSearch devices={mapDevices} onSelect={focusDevice} />
                 </div>
                 {/* ml-auto keeps this cluster right-aligned whether it shares the first line

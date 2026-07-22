@@ -161,6 +161,30 @@ class OverviewMapTest extends TestCase
         $this->assertDatabaseMissing('map_notes', ['id' => $note->id]);
     }
 
+    public function test_overview_reports_aggregated_device_links_between_child_maps(): void
+    {
+        $canvas = \App\Models\Map::create(['name' => 'Core']);
+        $north = \App\Models\Map::create(['name' => 'North', 'parent_map_id' => $canvas->id]);
+        $south = \App\Models\Map::create(['name' => 'South', 'parent_map_id' => $canvas->id]);
+
+        // Two devices on North, one on South. Two real links cross North<->South; one link is
+        // internal to North (must not count).
+        $n1 = \App\Models\Device::factory()->create();
+        $n2 = \App\Models\Device::factory()->create();
+        $s1 = \App\Models\Device::factory()->create();
+        \App\Models\DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n1->id, 'x' => 0, 'y' => 0]);
+        \App\Models\DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n2->id, 'x' => 0, 'y' => 0]);
+        \App\Models\DeviceMapPosition::create(['map_id' => $south->id, 'device_id' => $s1->id, 'x' => 0, 'y' => 0]);
+        \App\Models\Link::create(['a_device_id' => $n1->id, 'b_device_id' => $s1->id]); // crosses
+        \App\Models\Link::create(['a_device_id' => $n2->id, 'b_device_id' => $s1->id]); // crosses
+        \App\Models\Link::create(['a_device_id' => $n1->id, 'b_device_id' => $n2->id]); // internal to North
+
+        $this->getJson("/api/maps/{$canvas->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.child_device_links')
+            ->assertJsonPath('data.child_device_links.0.count', 2);
+    }
+
     public function test_deleting_the_canvas_map_removes_its_manual_links(): void
     {
         $canvas = Map::create(['name' => 'Core']);
