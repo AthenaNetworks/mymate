@@ -88,7 +88,15 @@ export function MapLeafletCanvas() {
         const map = mapRef.current;
         if (!map || activeMapId == null || placed.length === 0 || lastFitMapId.current === activeMapId) return;
         lastFitMapId.current = activeMapId;
-        map.fitBounds(L.latLngBounds(placed.map((d) => [d.latitude as number, d.longitude as number])), { padding: [60, 60], maxZoom: 15 });
+        const bounds = L.latLngBounds(placed.map((d) => [d.latitude as number, d.longitude as number]));
+        // All at one point (a single device or a stack) -> fitBounds can't pick a zoom, so centre
+        // at a sensible street zoom. Otherwise fit, allowing a close zoom-in (maxZoom 18) so two
+        // nearby devices don't sit in a 10km view.
+        if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+            map.setView(bounds.getCenter(), 16);
+        } else {
+            map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+        }
     }, [placed, activeMapId]);
 
     // Only rebuild the marker/line layers when something visible changes (positions, status,
