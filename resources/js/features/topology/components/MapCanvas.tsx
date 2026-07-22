@@ -87,6 +87,8 @@ type EdgeMeta = {
     bDev: number;
     effAb: number | null; // A->B effective speed (Mbps) - util_ab denominator
     effBa: number | null; // B->A effective speed (Mbps) - util_ba denominator
+    aCost: number | null; // OSPF cost out of each end's interface (directional)
+    bCost: number | null;
 };
 // Per-interface live signal: raw bps (the link util is derived from these) + per-port util%.
 type UtilMap = Record<number, { in: number | null; out: number | null; bin: number | null; bout: number | null }>;
@@ -98,6 +100,8 @@ const metaOf = (l: Link): EdgeMeta => ({
     bDev: l.b_device_id,
     effAb: l.eff_ab_mbps,
     effBa: l.eff_ba_mbps,
+    aCost: l.a_interface?.ospf_cost ?? null,
+    bCost: l.b_interface?.ospf_cost ?? null,
 });
 
 const linkUtil = (l: Link): UtilMap => {

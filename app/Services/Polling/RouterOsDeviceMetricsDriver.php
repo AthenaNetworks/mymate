@@ -52,28 +52,13 @@ class RouterOsDeviceMetricsDriver implements DeviceMetricsDriver
                 snrDb: $wl['snr'],
                 ccqPct: DeviceMetrics::clampPct($wl['ccq']),
                 wirelessClients: $wl['clients'],
-                ospfNeighbors: $this->ospfFullNeighbors($conn),
+                // OSPF (neighbours + interface costs) is read separately in PollDeviceMetrics via
+                // ReadOspf, so it works the same for a routeros-polled device and an snmp-polled
+                // one with a routeros credential attached.
             );
         } finally {
             $conn->close();
         }
-    }
-
-    /**
-     * Count OSPF neighbours in the "Full" state (a fully-formed adjacency). The standard
-     * OSPF-MIB isn't exposed over SNMP on RouterOS, so this is the only way to read it.
-     * Best-effort - a router without OSPF (or on a build where the path differs) just returns
-     * null, never an error. RouterOS 6 and 7 both label a full adjacency "Full".
-     */
-    private function ospfFullNeighbors(\App\Services\RouterOs\RouterOsConnection $conn): ?int
-    {
-        try {
-            $rows = $conn->query('/routing/ospf/neighbor/print');
-        } catch (\Throwable) {
-            return null; // OSPF package not present / command unavailable
-        }
-
-        return \App\Actions\Polling\ReadOspfNeighbors::countFull($rows);
     }
 
     /**

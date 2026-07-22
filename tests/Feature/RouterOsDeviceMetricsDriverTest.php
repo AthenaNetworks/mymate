@@ -37,36 +37,6 @@ class RouterOsDeviceMetricsDriverTest extends TestCase
         $this->assertSame(48.0, $m->tempC);
     }
 
-    public function test_counts_ospf_neighbours_in_the_full_state(): void
-    {
-        $client = new FakeRouterOsClient(replies: [
-            '/system/resource/print' => [['cpu-load' => '5', 'total-memory' => '100', 'free-memory' => '50']],
-            // 3 neighbours: 2 full adjacencies, 1 still building.
-            '/routing/ospf/neighbor/print' => [
-                ['state' => 'Full'],
-                ['state' => 'Full'],
-                ['state' => '2-Way'],
-            ],
-        ]);
-
-        $m = (new RouterOsDeviceMetricsDriver($client))->sample($this->device());
-
-        $this->assertSame(2, $m->ospfNeighbors);
-    }
-
-    public function test_ospf_neighbours_is_null_when_the_router_runs_no_ospf(): void
-    {
-        // The command returns nothing (or isn't available) - leave the metric null, never 0-forced.
-        $client = new FakeRouterOsClient(replies: [
-            '/system/resource/print' => [['cpu-load' => '5', 'total-memory' => '100', 'free-memory' => '50']],
-            '/routing/ospf/neighbor/print' => [],
-        ]);
-
-        $m = (new RouterOsDeviceMetricsDriver($client))->sample($this->device());
-
-        $this->assertSame(0, $m->ospfNeighbors); // empty table -> zero full neighbours
-    }
-
     public function test_reads_routeros6_style_single_row_temperature(): void
     {
         $client = new FakeRouterOsClient(replies: [

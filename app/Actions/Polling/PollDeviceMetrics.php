@@ -2,6 +2,7 @@
 
 namespace App\Actions\Polling;
 
+use App\Enums\PollMethod;
 use App\Events\DeviceMetricsUpdated;
 use App\Models\Device;
 use App\Services\Polling\DeviceMetricsDriverFactory;
@@ -20,7 +21,7 @@ class PollDeviceMetrics
 {
     public function __construct(
         private DeviceMetricsDriverFactory $drivers,
-        private ReadOspfNeighbors $ospf,
+        private ReadOspf $ospf,
     ) {}
 
     /** @param  list<int>  $deviceIds */
@@ -57,12 +58,17 @@ class PollDeviceMetrics
                 continue;
             }
 
-            // OSPF: the RouterOS driver fills this itself; for an SNMP-polled router with a
-            // separate RouterOS-API credential attached, read it over the API here (SNMP can't
-            // expose OSPF at all).
-            $ospf = $metrics->ospfNeighbors;
-            if ($ospf === null && $device->routerosCredential !== null) {
-                $ospf = ($this->ospf)($device->mgmt_ip, $device->routerosCredential);
+            // OSPF (neighbours + per-interface cost) over the RouterOS API - SNMP can't expose
+            // it at all. Use the device's own credential when it's routeros-polled, else the
+            // optional RouterOS-API credential attached for exactly this.
+            $ospf = null;
+            $rosCred = $device->poll_method === PollMethod::RouterOs && $device->credential?->type === 'routeros'
+                ? $device->credential
+                : $device->routerosCredential;
+            if ($rosCred !== null) {
+                $read = ($this->ospf)($device->mgmt_ip, $rosCred);
+                $ospf = $read['neighbors'];
+                $this->writeOspfCosts($device, $read['costs']);
             }
 
             if ($metrics->isEmpty() && $ospf === null) {
@@ -120,6 +126,19 @@ class PollDeviceMetrics
         ]);
 
         return count($frames);
+    }
+
+    /**
+     * Write each OSPF interface's cost onto the matching interface row (by name). Interfaces
+     * not in the map (no OSPF) are left untouched; a device with OSPF but no cost map is a no-op.
+     *
+     * @param  array<string, int>  $costs
+     */
+    private function writeOspfCosts(Device $device, array $costs): void
+    {
+        foreach ($costs as $name => $cost) {
+            DB::table('interfaces')->where('device_id', $device->id)->where('name', $name)->update(['ospf_cost' => $cost]);
+        }
     }
 
     /**

@@ -81,23 +81,25 @@ class PollDeviceMetricsTest extends TestCase
     {
         $this->bindFakeDriver();
         // Fake the RouterOS-API OSPF read so no real connection is made.
-        $this->app->instance(\App\Actions\Polling\ReadOspfNeighbors::class, new class extends \App\Actions\Polling\ReadOspfNeighbors
+        $this->app->instance(\App\Actions\Polling\ReadOspf::class, new class extends \App\Actions\Polling\ReadOspf
         {
             public function __construct() {}
 
-            public function __invoke(string $host, \App\Models\Credential $cred): ?int
+            public function __invoke(string $host, \App\Models\Credential $cred): array
             {
-                return 4;
+                return ['neighbors' => 4, 'costs' => ['ether1' => 10]];
             }
         });
 
         $cred = \App\Models\Credential::factory()->create(['type' => 'routeros', 'username' => 'admin']);
         $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'name' => 'rtr', 'routeros_credential_id' => $cred->id]);
+        $port = \App\Models\NetworkInterface::factory()->for($device)->create(['name' => 'ether1']);
 
         app(PollDeviceMetrics::class)([$device->id]);
 
         $this->assertSame(4, $device->fresh()->ospf_neighbors); // OSPF over the API alongside SNMP cpu/mem
         $this->assertSame(12.0, $device->fresh()->cpu_pct);     // cpu still came from SNMP
+        $this->assertSame(10, $port->fresh()->ospf_cost);       // interface cost written by name
     }
 
     public function test_no_ospf_read_without_a_routeros_credential(): void

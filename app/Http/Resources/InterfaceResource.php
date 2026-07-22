@@ -18,6 +18,7 @@ class InterfaceResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'speed_mbps' => $this->speed_mbps, // read-only from SNMP
+            'ospf_cost' => $this->ospf_cost, // OSPF outbound metric (RouterOS API), null if not OSPF
             'util_in' => $this->util_in,
             'util_out' => $this->util_out,
             'bps_in' => $this->bps_in,

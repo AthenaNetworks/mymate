@@ -161,6 +161,7 @@ export interface NetworkInterface {
     name: string;
     description: string | null;
     speed_mbps: number | null; // physical port capacity, read-only from SNMP
+    ospf_cost: number | null; // OSPF outbound metric (RouterOS API), null if not OSPF
     util_in: number | null; // per-port utilisation % (vs speed_mbps) - inspector only
     util_out: number | null;
     bps_in: number | null; // latest raw throughput (bits/sec) - the live signal link util derives from

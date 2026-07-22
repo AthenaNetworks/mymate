@@ -19,6 +19,8 @@ export type UtilEdgeData = {
     mbps: number | null; // derived load on the busier end (util% x speed)
     down: boolean; // either endpoint device is down
     effAb?: number | null; // link effective speed (Mbps) - shown as the port/link capacity
+    aCost?: number | null; // OSPF cost out of each end (directional); shown near that end
+    bCost?: number | null;
     mediaType?: LinkMediaType | null; // physical medium - dash pattern only (load keeps the colour)
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
     emphasized?: boolean; // touches the selected device - bring it forward
@@ -167,6 +169,26 @@ export function UtilEdge({
                     )}
                 </div>
             </EdgeLabelRenderer>
+            {/* OSPF cost per end (directional) - a small badge tucked near each endpoint. */}
+            {!d.dimmed && (d.aCost != null || d.bCost != null) && (
+                <EdgeLabelRenderer>
+                    {d.aCost != null && <CostBadge x={sx + (tx - sx) * 0.22} y={sy + (ty - sy) * 0.22} cost={d.aCost} />}
+                    {d.bCost != null && <CostBadge x={sx + (tx - sx) * 0.78} y={sy + (ty - sy) * 0.78} cost={d.bCost} />}
+                </EdgeLabelRenderer>
+            )}
         </>
+    );
+}
+
+/** A tiny OSPF-cost chip positioned near one end of a link. */
+function CostBadge({ x, y, cost }: { x: number; y: number; cost: number }) {
+    return (
+        <div
+            style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
+            className="pointer-events-none absolute rounded bg-indigo-500/20 px-1 text-[9px] font-semibold tabular-nums text-indigo-200 ring-1 ring-indigo-400/25"
+            title={`OSPF cost ${cost}`}
+        >
+            {cost}
+        </div>
     );
 }
