@@ -88,6 +88,21 @@ class SnmpThroughputDriverTest extends TestCase
         $this->assertIsFloat($samples[1]->ts);
     }
 
+    public function test_sample_reads_oper_status_up_down_and_leaves_unknown_null(): void
+    {
+        $snmp = new FakeSnmpClient;
+        $snmp->walks[$this->oids['if_hc_in_octets']] = [1 => '111', 2 => '333', 3 => '555'];
+        $snmp->walks[$this->oids['if_hc_out_octets']] = [1 => '222', 2 => '444', 3 => '666'];
+        // ifOperStatus: 1=up, 2=down; ifIndex 3 not reported.
+        $snmp->walks[$this->oids['if_oper_status']] = [1 => '1', 2 => '2'];
+
+        $samples = (new SnmpThroughputDriver($snmp))->sample($this->snmpDevice());
+
+        $this->assertTrue($samples[1]->operUp);
+        $this->assertFalse($samples[2]->operUp);
+        $this->assertNull($samples[3]->operUp);
+    }
+
     public function test_sample_skips_interfaces_missing_one_direction(): void
     {
         $snmp = new FakeSnmpClient;

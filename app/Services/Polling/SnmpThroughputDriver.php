@@ -62,6 +62,11 @@ class SnmpThroughputDriver implements ThroughputDriver
 
         $in = $this->snmp->walk($host, $community, $oids['if_hc_in_octets']);
         $out = $this->snmp->walk($host, $community, $oids['if_hc_out_octets']);
+        // ifOperStatus (best-effort): 1=up, everything else (down/testing/dormant/...) is "not up".
+        // An OID a device doesn't answer just leaves oper null (unknown) for that port.
+        $oper = isset($oids['if_oper_status'])
+            ? $this->snmp->walk($host, $community, $oids['if_oper_status'])
+            : [];
         $ts = microtime(true);
 
         $samples = [];
@@ -70,7 +75,8 @@ class SnmpThroughputDriver implements ThroughputDriver
                 continue; // need both directions to be useful.
             }
 
-            $samples[(int) $index] = InterfaceSample::counters((int) $inOctets, (int) $out[$index], $ts);
+            $operUp = isset($oper[$index]) && is_numeric($oper[$index]) ? ((int) $oper[$index] === 1) : null;
+            $samples[(int) $index] = InterfaceSample::counters((int) $inOctets, (int) $out[$index], $ts, $operUp);
         }
 
         return $samples;

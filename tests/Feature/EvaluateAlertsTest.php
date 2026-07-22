@@ -460,6 +460,46 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
     }
 
+    public function test_interface_down_fires_for_a_down_port_on_an_up_device_and_resolves(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::InterfaceDown);
+        $device = Device::factory()->create(['status' => \App\Enums\DeviceStatus::Up]);
+        $port = NetworkInterface::factory()->for($device)->create(['name' => 'ether5', 'oper_status' => 'down']);
+
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::where('status', 'firing')->where('dedupe_key', "device:{$device->id}:iface:{$port->id}")->count());
+
+        $port->update(['oper_status' => 'up']); // port comes back
+        app(EvaluateAlerts::class)();
+        $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
+    }
+
+    public function test_interface_down_ignores_ports_on_a_down_device(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::InterfaceDown);
+        $device = Device::factory()->create(['status' => \App\Enums\DeviceStatus::Down]);
+        NetworkInterface::factory()->for($device)->create(['oper_status' => 'down']);
+
+        app(EvaluateAlerts::class)();
+
+        // The whole device is down - device-down covers it, no per-port storm.
+        $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
+    }
+
+    public function test_interface_down_never_fires_for_an_unpolled_port(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::InterfaceDown);
+        $device = Device::factory()->create(['status' => \App\Enums\DeviceStatus::Up]);
+        NetworkInterface::factory()->for($device)->create(['oper_status' => null]); // never polled
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
+    }
+
     public function test_low_throughput_ignores_a_link_with_a_down_end(): void
     {
         Http::fake();

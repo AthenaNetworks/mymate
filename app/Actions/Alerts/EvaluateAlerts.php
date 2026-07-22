@@ -12,6 +12,7 @@ use App\Models\AlertPolicy;
 use App\Models\Device;
 use App\Models\DiscoveryCandidate;
 use App\Models\Link;
+use App\Models\NetworkInterface;
 use App\Support\DeviceScope;
 use App\Support\MaintenanceGuard;
 
@@ -152,6 +153,7 @@ class EvaluateAlerts
             AlertCondition::DeviceDown => $this->downDevices((bool) ($policy->params['suppress_dependent'] ?? true), $scope),
             AlertCondition::HighUtil => $this->highUtil((float) ($policy->params['threshold'] ?? 90), $scope),
             AlertCondition::LowThroughput => $this->lowThroughput((float) ($policy->params['threshold'] ?? 1), $scope),
+            AlertCondition::InterfaceDown => $this->interfacesDown($scope),
             AlertCondition::UpgradeFailed => $this->failedUpgrades($scope),
             // Discovery candidates aren't devices yet -> device-scope doesn't apply; always fleet-wide.
             AlertCondition::NewDiscovery => $this->newCandidates(),
@@ -311,6 +313,42 @@ class EvaluateAlerts
             $a = $l->aDevice?->name ?? "device {$l->a_device_id}";
             $b = $l->bDevice?->name ?? "device {$l->b_device_id}";
             $out["link:{$l->id}"] = 'Low throughput '.$this->fmtBps($bps).' (below '.$this->fmtBps($floorBps).") on link {$a} <-> {$b}.";
+        }
+
+        return $out;
+    }
+
+    /**
+     * Interfaces that are operationally down while their device is up - a customer/edge port
+     * dropping even though the box (and its uplink) stay reachable. Device-down is handled
+     * separately, so a down device's ports are skipped (its ports are moot, and it avoids an
+     * alert storm). Only ports the poller marked 'down' fire; a null (unknown/not polled) port
+     * never does. Keyed `device:{id}:iface:{id}` so maintenance windows suppress it.
+     *
+     * @param  array<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function interfacesDown(?array $scope): array
+    {
+        $out = [];
+        $inScope = $scope === null ? null : array_flip($scope);
+
+        // Only ports on UP devices - a down device is the device-down policy's job.
+        $upDeviceIds = Device::where('status', DeviceStatus::Up)->pluck('name', 'id');
+        if ($upDeviceIds->isEmpty()) {
+            return $out;
+        }
+
+        $ifaces = NetworkInterface::where('oper_status', 'down')
+            ->whereIn('device_id', $upDeviceIds->keys())
+            ->get(['id', 'device_id', 'name']);
+
+        foreach ($ifaces as $if) {
+            if ($inScope !== null && ! isset($inScope[$if->device_id])) {
+                continue;
+            }
+            $dev = $upDeviceIds->get($if->device_id) ?? "device {$if->device_id}";
+            $out["device:{$if->device_id}:iface:{$if->id}"] = "Interface {$if->name} is down on {$dev}.";
         }
 
         return $out;

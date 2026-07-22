@@ -84,6 +84,8 @@ return [
             'if_high_speed' => '.1.3.6.1.2.1.31.1.1.1.15',
             'if_hc_in_octets' => '.1.3.6.1.2.1.31.1.1.1.6',
             'if_hc_out_octets' => '.1.3.6.1.2.1.31.1.1.1.10',
+            'if_oper_status' => '.1.3.6.1.2.1.2.2.1.8', // ifOperStatus (1=up) - per-port up/down
+
             // system group - used by discovery to identify a responder and
             // by CaptureDeviceFacts for vendor/uptime/type.
             'sys_name' => '.1.3.6.1.2.1.1.5.0',

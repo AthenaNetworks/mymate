@@ -313,6 +313,7 @@ export type AlertConditionType =
     | 'device_down'
     | 'high_util'
     | 'low_throughput'
+    | 'interface_down'
     | 'upgrade_failed'
     | 'new_discovery'
     | 'backup_failed'

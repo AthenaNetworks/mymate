@@ -16,7 +16,7 @@ class NetworkInterface extends Model
     protected $table = 'interfaces';
 
     protected $fillable = [
-        'device_id', 'if_index', 'name', 'description', 'speed_mbps',
+        'device_id', 'if_index', 'name', 'description', 'speed_mbps', 'oper_status',
         'last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out',
     ];
 

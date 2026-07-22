@@ -21,16 +21,17 @@ final readonly class InterfaceSample
         public ?float $ts,
         public ?float $inBps,
         public ?float $outBps,
+        public ?bool $operUp = null, // ifOperStatus: true=up, false=down, null=not reported
     ) {}
 
-    public static function counters(int $inOctets, int $outOctets, float $ts): self
+    public static function counters(int $inOctets, int $outOctets, float $ts, ?bool $operUp = null): self
     {
-        return new self($inOctets, $outOctets, $ts, null, null);
+        return new self($inOctets, $outOctets, $ts, null, null, $operUp);
     }
 
-    public static function rates(float $inBps, float $outBps): self
+    public static function rates(float $inBps, float $outBps, ?bool $operUp = null): self
     {
-        return new self(null, null, null, $inBps, $outBps);
+        return new self(null, null, null, $inBps, $outBps, $operUp);
     }
 
     public function isDirectRate(): bool

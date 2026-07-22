@@ -17,7 +17,7 @@ import { pushToast } from '../../../lib/toast';
 import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'upgrade_failed', 'backup_failed', 'high_metric'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -43,6 +43,7 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'device_down', label: 'Device down / recovered' },
     { value: 'high_util', label: 'Sustained high utilisation' },
     { value: 'low_throughput', label: 'Low link throughput' },
+    { value: 'interface_down', label: 'Interface / port down' },
     { value: 'high_metric', label: 'High device metric (CPU / memory / temperature)' },
     { value: 'upgrade_failed', label: 'Upgrade failed' },
     { value: 'backup_failed', label: 'Config backup failed' },
@@ -177,6 +178,11 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         Fires when a link's busiest direction drops below this floor while both ends are up - for a circuit that should always carry traffic. Scope it to those links.
                     </p>
                 </>
+            )}
+            {form.condition === 'interface_down' && (
+                <p className="px-1 text-[11px] text-white/35">
+                    Fires per port when an interface goes operationally down while its device stays up (eg a customer port drops but the uplink is fine). Read over SNMP; scope it to the devices you care about.
+                </p>
             )}
             {form.condition === 'high_metric' && (
                 <>

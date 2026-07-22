@@ -85,6 +85,8 @@ class PollDeviceInterfaces
                 // `interface_samples.bps_*` are double precision, so history keeps the float.)
                 'bps_in' => $bpsIn === null ? null : (int) round($bpsIn),
                 'bps_out' => $bpsOut === null ? null : (int) round($bpsOut),
+                // Per-port up/down from ifOperStatus; null when the driver didn't report it.
+                'oper_status' => $sample->operUp === null ? null : ($sample->operUp ? 'up' : 'down'),
                 'updated_at' => $now,
             ];
 

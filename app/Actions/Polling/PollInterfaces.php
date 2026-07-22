@@ -89,7 +89,7 @@ class PollInterfaces
             NetworkInterface::upsert(
                 $rows,
                 ['device_id', 'if_index'],
-                ['last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out', 'updated_at'],
+                ['last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out', 'oper_status', 'updated_at'],
             );
         }
 
