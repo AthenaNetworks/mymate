@@ -28,6 +28,8 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
         id: initial?.id,
         name: initial?.name ?? '',
         oid: initial?.oid ?? '',
+        mode: initial?.mode ?? 'get',
+        agg: initial?.agg ?? 'sum',
         unit: initial?.unit ?? '',
         divisor: initial?.divisor ?? 1,
         scope: initial?.scope ?? { type: 'all' },
@@ -49,6 +51,21 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
         <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
             <input className={field} placeholder="Name (e.g. WAN in-errors)" value={form.name} onChange={(e) => set('name', e.target.value)} />
             <input className={`${field} font-mono`} placeholder="OID (e.g. 1.3.6.1.2.1.2.2.1.14.1)" value={form.oid} onChange={(e) => set('oid', e.target.value)} />
+            <div className="flex gap-2">
+                <select className={field} value={form.mode ?? 'get'} onChange={(e) => set('mode', e.target.value as SensorInput['mode'])}>
+                    <option value="get">Read a single value (GET)</option>
+                    <option value="walk">Walk a table + reduce</option>
+                </select>
+                {form.mode === 'walk' && (
+                    <select className={`${field} shrink-0`} value={form.agg ?? 'sum'} onChange={(e) => set('agg', e.target.value as SensorInput['agg'])}>
+                        <option value="sum">Sum</option>
+                        <option value="avg">Average</option>
+                        <option value="max">Max</option>
+                        <option value="min">Min</option>
+                        <option value="count">Count rows</option>
+                    </select>
+                )}
+            </div>
             <div className="flex gap-2">
                 <input className={field} placeholder="Unit (e.g. errs, V, °C)" value={form.unit ?? ''} onChange={(e) => set('unit', e.target.value)} />
                 <label className="flex shrink-0 items-center gap-2 text-sm text-white/60">

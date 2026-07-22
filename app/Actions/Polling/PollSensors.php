@@ -51,12 +51,13 @@ class PollSensors
                 }
 
                 try {
-                    $res = $this->snmp->get($device->mgmt_ip, $community, [$sensor->oid]);
+                    $raw = $sensor->mode === 'walk'
+                        ? self::aggregate($this->snmp->walk($device->mgmt_ip, $community, $sensor->oid), (string) ($sensor->agg ?: 'sum'))
+                        : self::firstNumeric($this->snmp->get($device->mgmt_ip, $community, [$sensor->oid]));
                 } catch (\Throwable) {
                     continue; // unreachable / unsupported OID - just skip this reading
                 }
 
-                $raw = self::firstNumeric($res);
                 if ($raw === null) {
                     continue;
                 }
@@ -89,5 +90,35 @@ class PollSensors
         }
 
         return null;
+    }
+
+    /**
+     * Reduce a table walk to one value. `count` counts every returned row (numeric or not);
+     * the rest operate on the numeric values only. An empty walk -> null (no reading).
+     *
+     * @param  array<int|string, string>  $res
+     */
+    private static function aggregate(array $res, string $agg): ?float
+    {
+        if ($agg === 'count') {
+            return $res === [] ? null : (float) count($res);
+        }
+
+        $nums = [];
+        foreach ($res as $value) {
+            if (preg_match('/-?\d+(\.\d+)?/', (string) $value, $m) === 1) {
+                $nums[] = (float) $m[0];
+            }
+        }
+        if ($nums === []) {
+            return null;
+        }
+
+        return match ($agg) {
+            'avg' => array_sum($nums) / count($nums),
+            'max' => max($nums),
+            'min' => min($nums),
+            default => array_sum($nums), // sum
+        };
     }
 }

@@ -6,6 +6,8 @@ export interface SensorInput {
     id?: number;
     name: string;
     oid: string;
+    mode?: import('../../../types').SensorMode;
+    agg?: import('../../../types').SensorAgg;
     unit?: string | null;
     divisor?: number;
     scope?: AlertScope;

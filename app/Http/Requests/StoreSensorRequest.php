@@ -20,8 +20,11 @@ class StoreSensorRequest extends FormRequest
 
         return [
             'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:255'],
-            // A numeric SNMP OID, optionally dotted-leading. We only GET scalar OIDs.
+            // A numeric SNMP OID, optionally dotted-leading. GET reads it as a scalar; walk
+            // reads it as a table base and reduces the rows by `agg`.
             'oid' => [$creating ? 'required' : 'sometimes', 'string', 'regex:/^\.?\d+(\.\d+)*$/'],
+            'mode' => ['sometimes', Rule::in(\App\Models\Sensor::MODES)],
+            'agg' => ['nullable', 'required_if:mode,walk', Rule::in(\App\Models\Sensor::AGGS)],
             'unit' => ['nullable', 'string', 'max:16'],
             'divisor' => ['nullable', 'numeric', 'not_in:0'],
             'enabled' => ['sometimes', 'boolean'],

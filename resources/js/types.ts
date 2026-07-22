@@ -330,10 +330,15 @@ export interface AlertScope {
 }
 
 /** A custom SNMP sensor definition (user-defined OID polled on the in-scope devices). */
+export type SensorMode = 'get' | 'walk';
+export type SensorAgg = 'sum' | 'avg' | 'max' | 'min' | 'count';
+
 export interface Sensor {
     id: number;
     name: string;
     oid: string;
+    mode: SensorMode;
+    agg: SensorAgg | null;
     unit: string | null;
     divisor: number;
     scope: AlertScope;

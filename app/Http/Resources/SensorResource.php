@@ -15,6 +15,8 @@ class SensorResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'oid' => $this->oid,
+            'mode' => $this->mode,
+            'agg' => $this->agg,
             'unit' => $this->unit,
             'divisor' => $this->divisor,
             'scope' => $this->scope ?? ['type' => 'all'],

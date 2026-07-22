@@ -35,6 +35,35 @@ class PollSensorsTest extends TestCase
         $this->assertDatabaseHas('sensor_samples', ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => 42]);
     }
 
+    public function test_walk_mode_sums_a_table(): void
+    {
+        $snmp = new \Tests\Support\FakeSnmpClient;
+        $snmp->walks['.1.3.6.1.2.1.2.2.1.14'] = [1 => '10', 2 => '25', 3 => '5']; // 3 ports of in-errors
+        $this->app->instance(SnmpClient::class, $snmp);
+        $cred = Credential::factory()->create(['snmp_community' => 'public']);
+        $device = Device::factory()->create(['credential_id' => $cred->id]);
+        $sensor = Sensor::factory()->create(['oid' => '.1.3.6.1.2.1.2.2.1.14', 'mode' => 'walk', 'agg' => 'sum', 'divisor' => 1]);
+
+        app(PollSensors::class)([$device->id]);
+
+        $this->assertDatabaseHas('sensor_readings', ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => 40]);
+    }
+
+    public function test_walk_mode_counts_rows(): void
+    {
+        $snmp = new \Tests\Support\FakeSnmpClient;
+        // e.g. an OSPF neighbour table - count how many entries there are.
+        $snmp->walks['.1.3.6.1.2.1.14.10.1.6'] = ['a' => '8', 'b' => '8', 'c' => '8'];
+        $this->app->instance(SnmpClient::class, $snmp);
+        $cred = Credential::factory()->create(['snmp_community' => 'public']);
+        $device = Device::factory()->create(['credential_id' => $cred->id]);
+        $sensor = Sensor::factory()->create(['oid' => '.1.3.6.1.2.1.14.10.1.6', 'mode' => 'walk', 'agg' => 'count', 'divisor' => 1]);
+
+        app(PollSensors::class)([$device->id]);
+
+        $this->assertDatabaseHas('sensor_readings', ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => 3]);
+    }
+
     public function test_only_polls_devices_in_the_sensor_scope(): void
     {
         $this->fakeSnmp(['public' => ['.1.3.6' => '5']]);

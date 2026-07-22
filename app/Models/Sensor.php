@@ -16,7 +16,13 @@ class Sensor extends Model
     /** @use HasFactory<SensorFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'oid', 'unit', 'divisor', 'scope', 'enabled'];
+    /** How the OID is read: a scalar GET, or a table walk reduced by `agg`. */
+    public const MODES = ['get', 'walk'];
+
+    /** How a table walk is reduced to a single value. */
+    public const AGGS = ['sum', 'avg', 'max', 'min', 'count'];
+
+    protected $fillable = ['name', 'oid', 'mode', 'agg', 'unit', 'divisor', 'scope', 'enabled'];
 
     protected $casts = [
         'divisor' => 'float',
