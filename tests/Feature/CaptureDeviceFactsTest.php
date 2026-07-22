@@ -150,6 +150,66 @@ class CaptureDeviceFactsTest extends TestCase
         $this->assertSame('MikroTik', $device->fresh()->vendor);
     }
 
+    public function test_snmp_location_with_coordinates_populates_lat_lng(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS RB5009 7.14',
+            $oids['sys_location'] => '[-27.4698, 153.0251]',
+        ];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+        $device->refresh();
+
+        $this->assertEqualsWithDelta(-27.4698, $device->latitude, 0.0001);
+        $this->assertEqualsWithDelta(153.0251, $device->longitude, 0.0001);
+        $this->assertSame('snmp', $device->geo_source);
+    }
+
+    public function test_snmp_location_that_is_a_plain_address_sets_no_coordinates(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id]);
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS RB5009 7.14',
+            $oids['sys_location'] => 'NextDC B1, 20 Wharf Street, Brisbane Q 4000',
+        ];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+
+        $this->assertNull($device->fresh()->latitude);
+        $this->assertNull($device->fresh()->geo_source);
+    }
+
+    public function test_snmp_location_never_overwrites_a_manual_pin(): void
+    {
+        $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+        $device = Device::factory()->create([
+            'poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id,
+            'latitude' => 10.0, 'longitude' => 20.0, 'geo_source' => 'manual',
+        ]);
+        $oids = config('mymate.snmp.oids');
+        $snmp = new FakeSnmpClient;
+        $snmp->getsByCommunity['public-test'] = [
+            $oids['sys_descr'] => 'RouterOS RB5009 7.14',
+            $oids['sys_location'] => '[-27.4698, 153.0251]',
+        ];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        app(CaptureDeviceFacts::class)($device);
+        $device->refresh();
+
+        $this->assertSame(10.0, $device->latitude); // manual pin kept
+        $this->assertSame('manual', $device->geo_source);
+    }
+
     public function test_snmp_facts_populate_vendor_and_uptime(): void
     {
         $cred = Credential::factory()->create(['snmp_community' => 'public-test']);

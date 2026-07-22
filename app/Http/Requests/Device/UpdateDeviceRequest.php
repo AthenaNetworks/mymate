@@ -29,6 +29,9 @@ class UpdateDeviceRequest extends FormRequest
             'agent_id' => ['nullable', 'integer', 'exists:agents,id'],
             'map_x' => ['sometimes', 'numeric'],
             'map_y' => ['sometimes', 'numeric'],
+            // Geographic position (geo overlay). Both or neither; setting them marks the source manual.
+            'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
             // Icon override: a named glyph key + a hex colour (both nullable = auto).
             'icon' => ['sometimes', 'nullable', 'string', 'max:40'],

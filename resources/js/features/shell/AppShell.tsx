@@ -7,6 +7,7 @@ import { NavRail } from './NavRail';
 import { UpdateNotice } from './UpdateNotice';
 import { MapCanvas } from '../topology/components/MapCanvas';
 import { DeviceInspector } from '../topology/components/DeviceInspector';
+import { GeoView } from '../geo/components/GeoView';
 import { DashboardView } from '../dashboard/components/DashboardView';
 import { DevicesView } from '../devices/components/DevicesView';
 import { DiscoveryView } from '../discovery/components/DiscoveryView';
@@ -63,6 +64,7 @@ export function AppShell() {
                     <MapCanvas />
                 </ReactFlowProvider>
             )}
+            {view === 'geo' && <GeoView />}
             {view === 'dashboard' && <DashboardView />}
             {view === 'devices' && <DevicesView />}
             {view === 'discovery' && <DiscoveryView />}

@@ -23,10 +23,12 @@
         "@phosphor-icons/react": "^2.1.10",
         "@tanstack/react-query": "^5.101.1",
         "@types/d3-force": "^3.0.10",
+        "@types/leaflet": "^1.9.21",
         "@xyflow/react": "^12.11.1",
         "axios": "^1.18.1",
         "d3-force": "^3.0.0",
         "laravel-echo": "^2.3.7",
+        "leaflet": "^1.9.4",
         "pusher-js": "^8.5.0",
         "react": "^19.2.7",
         "react-dom": "^19.2.7"

@@ -47,6 +47,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
     Route::get('update-check', \App\Http\Controllers\Api\UpdateCheckController::class)
         ->middleware('throttle:20,1')->name('update-check');
+    // Geo overlay: tile config + a server-side geocoder proxy (GitHub #11).
+    Route::get('map-config', [\App\Http\Controllers\Api\GeoController::class, 'config'])->name('map.config');
+    Route::get('geocode', [\App\Http\Controllers\Api\GeoController::class, 'geocode'])
+        ->middleware('throttle:30,1')->name('geocode');
     // System status board (db/redis/workers/polling/websockets/backups) for Settings.
     Route::get('system-status', \App\Http\Controllers\Api\SystemStatusController::class)
         ->middleware('throttle:60,1')->name('system-status');

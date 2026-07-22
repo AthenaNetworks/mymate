@@ -1,10 +1,11 @@
-import { MapTrifold, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
+import { MapTrifold, GlobeHemisphereWest, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
 import { useView, setView, useNavOpen, setNavOpen, type View } from '../../lib/shellStore';
 import { useUpdateCheck } from '../settings/api/updateCheck';
 import { MapLegend } from './MapLegend';
 
 const ITEMS: { id: View; label: string; icon: Icon }[] = [
     { id: 'map', label: 'Map', icon: MapTrifold },
+    { id: 'geo', label: 'Geo map', icon: GlobeHemisphereWest },
     { id: 'dashboard', label: 'Dashboard', icon: SquaresFour },
     { id: 'devices', label: 'Devices', icon: ListDashes },
     { id: 'discovery', label: 'Discovery', icon: MagnifyingGlass },

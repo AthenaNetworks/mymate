@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
  * Lives in the shared core so the shell and the topology feature both read/write
  * it without a cross-feature import. No provider needed.
  */
-export type View = 'map' | 'dashboard' | 'devices' | 'discovery' | 'outages' | 'alerts' | 'upgrades' | 'backups' | 'settings' | 'import';
+export type View = 'map' | 'geo' | 'dashboard' | 'devices' | 'discovery' | 'outages' | 'alerts' | 'upgrades' | 'backups' | 'settings' | 'import';
 
 /** Per-device inspector view prefs. */
 export type ChartMode = 'util' | 'rate';
@@ -48,6 +48,7 @@ type ShellState = {
 // server catch-all (GET /{any} -> app). Page only; map/device keep default-on-load.
 const VIEW_TO_PATH: Record<View, string> = {
     map: '/',
+    geo: '/geo',
     dashboard: '/dashboard',
     devices: '/devices',
     discovery: '/discovery',

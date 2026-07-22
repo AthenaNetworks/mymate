@@ -23,11 +23,17 @@ class SecurityHeaders
         $response->headers->set('X-Content-Type-Options', 'nosniff');
         $response->headers->set('X-Frame-Options', 'DENY');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+        // Geo-overlay map tiles are loaded straight from the tile provider, so its host(s) are
+        // allowed in img-src. Configurable (point at an internal tile server, or leave empty).
+        $tileHosts = trim((string) config('mymate.map.tile_csp_hosts', ''));
+        $imgSrc = trim("img-src 'self' data: {$tileHosts}");
+
         $response->headers->set('Content-Security-Policy', implode('; ', [
             "default-src 'self'",
             "script-src 'self'",
             "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data:",
+            $imgSrc,
             "font-src 'self' data:",
             "connect-src 'self' ws: wss:",
             "frame-ancestors 'none'",

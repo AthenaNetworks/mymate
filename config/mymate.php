@@ -89,6 +89,7 @@ return [
             // system group - used by discovery to identify a responder and
             // by CaptureDeviceFacts for vendor/uptime/type.
             'sys_name' => '.1.3.6.1.2.1.1.5.0',
+            'sys_location' => '.1.3.6.1.2.1.1.6.0', // operator-set location (may carry [lat, lng])
             'sys_object_id' => '.1.3.6.1.2.1.1.2.0',
             'sys_descr' => '.1.3.6.1.2.1.1.1.0',
             'sys_uptime' => '.1.3.6.1.2.1.1.3.0',
@@ -105,6 +106,20 @@ return [
     // colours by load instead of staying neutral. A per-link bandwidth override always wins.
     'links' => [
         'default_speed_mbps' => (int) env('MYMATE_LINK_DEFAULT_SPEED_MBPS', 1000),
+    ],
+
+    // Geographic map overlay (GitHub #11). Raster tiles are loaded straight from the tile
+    // provider by the browser, so its host is added to the CSP img-src (SecurityHeaders).
+    'map' => [
+        // Leaflet raster tile URL template ({z}/{x}/{y}). Empty string disables the geo overlay.
+        'tile_url' => env('MYMATE_MAP_TILE_URL', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+        // Attribution the provider requires (shown on the map).
+        'tile_attribution' => env('MYMATE_MAP_TILE_ATTRIBUTION', '(c) OpenStreetMap contributors'),
+        // Space-separated hosts allowed in the CSP img-src so the browser can fetch tiles.
+        'tile_csp_hosts' => env('MYMATE_MAP_TILE_CSP_HOSTS', 'https://*.tile.openstreetmap.org https://tile.openstreetmap.org'),
+        // Address -> lat/lng geocoder, proxied server-side (fixed trusted host, like the
+        // update check). Empty disables address lookup; drag-drop still works.
+        'geocoder_url' => env('MYMATE_MAP_GEOCODER_URL', 'https://nominatim.openstreetmap.org/search'),
     ],
 
     // Update check: compare this install's version against the latest GitHub release so

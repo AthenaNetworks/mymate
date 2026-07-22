@@ -51,6 +51,11 @@ class CaptureDeviceFacts
 
         $facts = array_filter($facts, static fn ($v): bool => $v !== null && $v !== '');
 
+        // Never let an SNMP-derived coordinate overwrite a pin the operator placed by hand.
+        if ($device->geo_source === 'manual') {
+            unset($facts['latitude'], $facts['longitude'], $facts['geo_source']);
+        }
+
         // Only set the type when we detected a real one and the device is still unknown.
         if ($detectedType !== null
             && $detectedType !== DeviceType::Unknown->value
@@ -99,6 +104,16 @@ class CaptureDeviceFacts
 
             $arch = trim((string) ($res['architecture-name'] ?? ''));
 
+            // A RouterOS box has no SNMP to read, so pull the SNMP location it would advertise
+            // straight from the API and parse any "[lat, lng]" out of it (best-effort).
+            $geo = null;
+            try {
+                $snmp = $conn->query('/snmp/print')[0] ?? [];
+                $geo = self::parseLatLng((string) ($snmp['location'] ?? ''));
+            } catch (\Throwable) {
+                // SNMP settings unreadable - just skip geo.
+            }
+
             return [
                 'vendor' => 'MikroTik',
                 'model' => self::cleanModel($model),
@@ -113,6 +128,9 @@ class CaptureDeviceFacts
                 'uptime_seconds' => $uptime,
                 'os_version' => UpgradeDevice::normalizeVersion((string) ($res['version'] ?? '')),
                 'device_type' => $this->routerOsType((string) ($model ?? ''))->value,
+                'latitude' => $geo['lat'] ?? null,
+                'longitude' => $geo['lng'] ?? null,
+                'geo_source' => $geo !== null ? 'snmp' : null,
             ];
         } finally {
             $conn->close();
@@ -130,10 +148,11 @@ class CaptureDeviceFacts
 
         /** @var array<string, string> $oids */
         $oids = config('mymate.snmp.oids', []);
-        $res = $this->snmp->get($device->mgmt_ip, $community, [$oids['sys_descr'], $oids['sys_uptime'], $oids['hr_memory']]);
+        $res = $this->snmp->get($device->mgmt_ip, $community, [$oids['sys_descr'], $oids['sys_uptime'], $oids['hr_memory'], $oids['sys_location']]);
 
         $descr = (string) ($res[$oids['sys_descr']] ?? '');
         $ticks = $res[$oids['sys_uptime']] ?? null;
+        $geo = self::parseLatLng((string) ($res[$oids['sys_location']] ?? ''));
 
         // ENTITY-MIB gives a clean cross-vendor model + serial (chassis row). Walk each and
         // take the first meaningful value. Falls back to null (never a wrong guess).
@@ -155,6 +174,9 @@ class CaptureDeviceFacts
             'ram_bytes' => is_numeric($memKb) && (int) $memKb > 0 ? (int) $memKb * 1024 : null,
             'uptime_seconds' => $ticks !== null ? intdiv((int) $ticks, 100) : null, // TimeTicks (1/100s) -> s
             'device_type' => $this->snmpType($descr)->value,
+            'latitude' => $geo['lat'] ?? null,
+            'longitude' => $geo['lng'] ?? null,
+            'geo_source' => $geo !== null ? 'snmp' : null,
         ];
     }
 
@@ -187,6 +209,36 @@ class CaptureDeviceFacts
         }
 
         return null;
+    }
+
+    /**
+     * Pull coordinates out of an SNMP location string when it carries them in "[lat, lng]"
+     * form (also accepts a bare "lat,lng"/"lat lng" of decimals). Strict enough not to mistake
+     * a "Rack 5, Room 12" style label for coordinates, and both values must be in range.
+     *
+     * @return array{lat: float, lng: float}|null
+     */
+    private static function parseLatLng(string $location): ?array
+    {
+        $location = trim($location);
+        if ($location === '') {
+            return null;
+        }
+
+        // Bracketed "[lat, lng]" (ints or decimals), else a plain pair that both have a decimal
+        // point (so a plain-text label with whole numbers isn't misread as a coordinate).
+        if (preg_match('/\[\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\]/', $location, $m) !== 1
+            && preg_match('/(-?\d+\.\d+)\s*[,\s]\s*(-?\d+\.\d+)/', $location, $m) !== 1) {
+            return null;
+        }
+
+        $lat = (float) $m[1];
+        $lng = (float) $m[2];
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180) {
+            return null; // out of range - not a coordinate
+        }
+
+        return ['lat' => $lat, 'lng' => $lng];
     }
 
     private static function cleanModel(mixed $model): ?string

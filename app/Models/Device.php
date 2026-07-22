@@ -20,7 +20,7 @@ class Device extends Model
 
     protected $fillable = [
         'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',
-        'status', 'monitored', 'last_change', 'map_x', 'map_y',
+        'status', 'monitored', 'last_change', 'map_x', 'map_y', 'latitude', 'longitude', 'geo_source',
         'device_type', 'icon', 'icon_color', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
@@ -39,6 +39,8 @@ class Device extends Model
         'last_change' => 'datetime',
         'map_x' => 'float',
         'map_y' => 'float',
+        'latitude' => 'float',
+        'longitude' => 'float',
         'uptime_seconds' => 'integer',
         'ram_bytes' => 'integer',
         'uptime_at' => 'datetime',
