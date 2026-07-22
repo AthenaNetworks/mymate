@@ -210,7 +210,7 @@ export function MapSwitcher() {
                     icon={<Trash weight="light" className="h-5 w-5" />}
                     message={
                         <>
-                            Delete map <span className="font-semibold text-white/85">"{dialog.name}"</span>? Devices stay - only this map\'s layout is removed.
+                            Delete map <span className="font-semibold text-white/85">"{dialog.name}"</span>? Devices stay - only this map's layout is removed.
                         </>
                     }
                     confirmLabel="Delete map"

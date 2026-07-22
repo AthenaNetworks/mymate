@@ -119,7 +119,7 @@ export function DeviceForm() {
                     <Plus weight="bold" className="h-4 w-4" />
                 </span>
             </button>
-            {create.isError && <p className="text-xs text-rose-400/90">Couldn\'t add - check the fields (a valid IP is required).</p>}
+            {create.isError && <p className="text-xs text-rose-400/90">Couldn't add - check the fields (a valid IP is required).</p>}
         </form>
     );
 }

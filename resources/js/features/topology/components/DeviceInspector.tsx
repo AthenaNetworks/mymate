@@ -89,7 +89,7 @@ function SpeedTag({ iface }: { iface: NetworkInterface }) {
     return (
         <span
             className="shrink-0 rounded px-1 py-0.5 font-mono text-[10px] text-white/45 ring-1 ring-white/10"
-            title="Interface speed (read-only, from SNMP). Set a link\'s bandwidth in its history dialog."
+            title="Interface speed (read-only, from SNMP). Set a link's bandwidth in its history dialog."
         >
             {iface.speed_mbps ? speedLabel(iface.speed_mbps) : '-'}
         </span>
