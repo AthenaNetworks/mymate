@@ -28,7 +28,7 @@ import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink } from '../../maps/api/maps';
+import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink, useRemoveChildMap } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
@@ -149,6 +149,7 @@ export function MapCanvas() {
     const savePosition = useSaveMapPosition();
     const saveLinkPosition = useSaveMapLinkPosition();
     const saveChildPosition = useSaveChildMapPosition();
+    const removeChildMap = useRemoveChildMap();
     const createMapLink = useCreateMapLink();
     const deleteMapLink = useDeleteMapLink();
     const deleteLink = useDeleteLink();
@@ -168,12 +169,14 @@ export function MapCanvas() {
     const [addChildMap, setAddChildMap] = useState(false); // "Add map" dialog (place a child map)
     const [deleteMapLinkId, setDeleteMapLinkId] = useState<number | null>(null);
     const [editMapLinkId, setEditMapLinkId] = useState<number | null>(null);
+    const [detachChildId, setDetachChildId] = useState<number | null>(null); // remove a child-map node from this canvas
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
     const [pendingLayout, setPendingLayout] = useState<LayoutKind | null>(null); // awaiting confirm before it overwrites positions
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
     const requestDelete = useCallback((linkId: number) => setDeleteLinkId(linkId), []);
+    const requestDetachChild = useCallback((childId: number) => setDetachChildId(childId), []);
 
     // This map\'s device placements + which links cross to another map.
     const posById = useMemo<Record<number, { x: number; y: number }>>(() => {
@@ -337,7 +340,7 @@ export function MapCanvas() {
             id: childNodeId(c.id),
             type: 'childmap',
             position: { x: c.node_x ?? 40 + (i % 5) * 240, y: c.node_y ?? 40 + Math.floor(i / 5) * 140 },
-            data: { mapId: c.id, name: c.name, deviceCount: c.device_count },
+            data: { mapId: c.id, name: c.name, deviceCount: c.device_count, onDetach: isAdmin ? () => requestDetachChild(c.id) : undefined },
             draggable: isAdmin,
             selectable: true,
         }));
@@ -791,12 +794,12 @@ export function MapCanvas() {
                 Details
             </button>
 
-            {!isLoading && mapDevices.length === 0 && (
+            {!isLoading && mapDevices.length === 0 && childMaps.length === 0 && (
                 <div className="pointer-events-none absolute inset-0 grid place-items-center">
                     <div className="max-w-xs text-center">
-                        <p className="text-sm font-medium text-white/70">No devices on this map yet</p>
+                        <p className="text-sm font-medium text-white/70">Nothing on this map yet</p>
                         <p className="mt-1 text-xs text-white/40">
-                            Add a device, or place existing ones here from the device inspector.
+                            Add a device, place existing ones from the device inspector, or add a map for a top-level overview.
                         </p>
                     </div>
                 </div>
@@ -885,6 +888,30 @@ export function MapCanvas() {
             {/* Click a manual overview link -> set its medium + label. */}
             {editMapLinkId !== null && activeMapId !== null && mapLinks.some((ml) => ml.id === editMapLinkId) && (
                 <MapLinkEditor mapId={activeMapId} link={mapLinks.find((ml) => ml.id === editMapLinkId)!} onClose={() => setEditMapLinkId(null)} />
+            )}
+
+            {/* Remove a child-map node from this canvas (the map + its devices stay). */}
+            {detachChildId !== null && activeMapId !== null && (
+                <ConfirmDialog
+                    title="Remove map from overview"
+                    icon={<LinkBreak weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Remove <span className="font-semibold text-white/85">{childMaps.find((c) => c.id === detachChildId)?.name ?? 'this map'}</span>{' '}
+                            from this overview? The map and its devices stay - only its node and any links to it here are removed.
+                        </>
+                    }
+                    confirmLabel="Remove"
+                    tone="danger"
+                    busy={removeChildMap.isPending}
+                    onConfirm={() =>
+                        removeChildMap.mutate(
+                            { mapId: activeMapId, childMapId: detachChildId },
+                            { onSuccess: () => setDetachChildId(null), onError: () => setDetachChildId(null) },
+                        )
+                    }
+                    onClose={() => setDetachChildId(null)}
+                />
             )}
 
             {/* ✕ on a manual map-link -> confirm, then remove it. */}

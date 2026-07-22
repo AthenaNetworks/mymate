@@ -234,6 +234,11 @@ class MapController extends Controller
     public function removeChildMap(Map $map, Map $child): Response
     {
         if ($child->parent_map_id === $map->id) {
+            // Drop any manual links on this canvas that touch the node, so no edge is left
+            // pointing at a node that's no longer here. (Grouped so the map_id scope holds.)
+            $map->mapLinks()
+                ->where(fn ($q) => $q->where('a_map_id', $child->id)->orWhere('b_map_id', $child->id))
+                ->delete();
             $child->update(['parent_map_id' => null, 'node_x' => null, 'node_y' => null]);
         }
 

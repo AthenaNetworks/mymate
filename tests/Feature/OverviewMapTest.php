@@ -44,6 +44,26 @@ class OverviewMapTest extends TestCase
         $this->assertDatabaseHas('maps', ['id' => $child->id, 'parent_map_id' => null, 'node_x' => null]);
     }
 
+    public function test_detaching_a_child_removes_only_the_links_that_touch_it_on_this_canvas(): void
+    {
+        $canvas = Map::create(['name' => 'Core']);
+        $a = Map::create(['name' => 'A', 'parent_map_id' => $canvas->id]);
+        $b = Map::create(['name' => 'B', 'parent_map_id' => $canvas->id]);
+        $c = Map::create(['name' => 'C', 'parent_map_id' => $canvas->id]);
+        $touches = MapLink::create(['map_id' => $canvas->id, 'a_map_id' => $a->id, 'b_map_id' => $b->id]);
+        $keep = MapLink::create(['map_id' => $canvas->id, 'a_map_id' => $b->id, 'b_map_id' => $c->id]);
+        // A link on a different canvas that also references A must survive.
+        $other = Map::create(['name' => 'Other']);
+        $oa = Map::create(['name' => 'OA', 'parent_map_id' => $other->id]);
+        $elsewhere = MapLink::create(['map_id' => $other->id, 'a_map_id' => $oa->id, 'b_map_id' => $a->id]);
+
+        $this->deleteJson("/api/maps/{$canvas->id}/child-maps/{$a->id}")->assertNoContent();
+
+        $this->assertDatabaseMissing('map_links', ['id' => $touches->id]);
+        $this->assertDatabaseHas('map_links', ['id' => $keep->id]);
+        $this->assertDatabaseHas('map_links', ['id' => $elsewhere->id]); // other canvas untouched
+    }
+
     public function test_placing_a_map_on_itself_or_creating_a_cycle_is_rejected(): void
     {
         $a = Map::create(['name' => 'A']);

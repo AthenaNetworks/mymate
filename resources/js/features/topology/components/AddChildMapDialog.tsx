@@ -16,10 +16,16 @@ export function AddChildMapDialog({ mapId, onClose }: { mapId: number; onClose: 
     if (!isAdmin) return null;
 
     const needle = q.trim().toLowerCase();
-    // Candidates: any map that isn't this canvas and isn't already a child node of it. (The
-    // backend also rejects a cycle.)
+    // Walk up the parent chain from this canvas so we can exclude its ancestors - placing one
+    // of those here would nest a map inside itself (the backend 422s it, which just read as a
+    // flash before). Also excludes the canvas itself and maps already placed here.
+    const byId = new Map((maps ?? []).map((m) => [m.id, m]));
+    const ancestors = new Set<number>();
+    for (let cur = byId.get(mapId)?.parent_map_id ?? null; cur !== null && !ancestors.has(cur); cur = byId.get(cur)?.parent_map_id ?? null) {
+        ancestors.add(cur);
+    }
     const candidates = (maps ?? []).filter(
-        (m) => m.id !== mapId && m.parent_map_id !== mapId && (needle === '' || m.name.toLowerCase().includes(needle)),
+        (m) => m.id !== mapId && m.parent_map_id !== mapId && !ancestors.has(m.id) && (needle === '' || m.name.toLowerCase().includes(needle)),
     );
 
     return (
@@ -52,6 +58,10 @@ export function AddChildMapDialog({ mapId, onClose }: { mapId: number; onClose: 
                             className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
                         />
                     </div>
+
+                    {add.isError && (
+                        <p className="mb-2 px-1 text-xs text-rose-400/90">Couldn't add that map - it may nest inside itself, or it's already here.</p>
+                    )}
 
                     <ul className="max-h-72 space-y-1 overflow-auto">
                         {candidates.length === 0 ? (

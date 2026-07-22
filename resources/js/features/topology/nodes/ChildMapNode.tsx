@@ -1,11 +1,12 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { MapTrifold, ArrowsOutSimple } from '@phosphor-icons/react';
+import { MapTrifold, ArrowsOutSimple, X } from '@phosphor-icons/react';
 import { setActiveMap } from '../../../lib/shellStore';
 
 export type ChildMapNodeData = {
     mapId: number;
     name: string;
     deviceCount: number;
+    onDetach?: () => void; // remove this map from the canvas (admin); the map itself stays
 };
 
 const handle = '!h-1.5 !w-1.5 !border-0 !bg-white/25';
@@ -42,6 +43,18 @@ export function ChildMapNode({ data, selected }: NodeProps) {
                     <Handle type="source" position={pos} id={srcId} className={handle} />
                 </span>
             ))}
+
+            {/* Detach from the canvas (admin) - hover to reveal. The map itself is not deleted. */}
+            {d.onDetach && (
+                <button
+                    type="button"
+                    title="Remove this map from the overview"
+                    onClick={(e) => { e.stopPropagation(); d.onDetach?.(); }}
+                    className="nodrag absolute -right-1.5 -top-1.5 z-10 grid h-4 w-4 place-items-center rounded-full bg-rose-500/80 text-white opacity-0 ring-1 ring-rose-300/40 transition-opacity duration-200 group-hover:opacity-100 hover:!bg-rose-500"
+                >
+                    <X weight="bold" className="h-2.5 w-2.5" />
+                </button>
+            )}
 
             <div className="flex min-w-[10rem] items-center gap-2.5 rounded-[calc(1rem-0.25rem)] bg-[#0d0d11] px-3 py-2.5 ring-1 ring-white/10">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/25">
