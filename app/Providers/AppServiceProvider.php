@@ -26,9 +26,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(Pinger::class, fn () => new FpingRunner(
             timeoutMs: (int) config('mymate.ping.timeout_ms', 500),
             retries: (int) config('mymate.ping.retries', 1),
+            processTimeout: (int) config('mymate.ping.process_timeout', 30),
             count: (int) config('mymate.ping.count', 3),
             periodMs: (int) config('mymate.ping.period_ms', 300),
             source: (string) config('mymate.ping.source', '') ?: null,
+            intervalMs: config('mymate.ping.interval_ms') !== null ? (int) config('mymate.ping.interval_ms') : null,
         ));
 
         $this->app->bind(SnmpClient::class, fn () => new PhpSnmpClient(

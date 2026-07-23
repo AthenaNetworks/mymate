@@ -213,7 +213,8 @@ return [
             'queue' => ['ping'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
-            'maxProcesses' => 1,
+            // Raise on large fleets so sharded ping sweeps (mymate.ping.shards) run in parallel.
+            'maxProcesses' => (int) env('MYMATE_PING_PROCESSES', 1),
             'maxTime' => 0,
             'maxJobs' => 0,
             'memory' => 128,
@@ -306,7 +307,7 @@ return [
 
     'environments' => [
         'production' => [
-            'supervisor-ping' => ['maxProcesses' => 2],
+            'supervisor-ping' => ['maxProcesses' => (int) env('MYMATE_PING_PROCESSES', 2)],
             // Raise with the fleet: ~ shards you want running concurrently.
             'supervisor-poll' => ['maxProcesses' => 20, 'balanceMaxShift' => 5, 'balanceCooldown' => 3],
             'supervisor-scan' => ['maxProcesses' => 4],

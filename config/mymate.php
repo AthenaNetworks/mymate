@@ -19,6 +19,18 @@ return [
         'interval' => (int) env('MYMATE_PING_INTERVAL', 5),
         'timeout_ms' => (int) env('MYMATE_PING_TIMEOUT_MS', 500),
         'retries' => (int) env('MYMATE_PING_RETRIES', 1),
+        // fping -i: ms between successive targets. Null keeps fping's own default (~10ms),
+        // which paces sends so hard that a big fleet takes minutes and trips the process
+        // timeout. Set a small value (e.g. 1) on large installs - it sweeps tens of thousands
+        // of hosts in seconds and is measurably more accurate (fewer late replies missed).
+        'interval_ms' => env('MYMATE_PING_INTERVAL_MS') !== null ? (int) env('MYMATE_PING_INTERVAL_MS') : null,
+        // Hard wall-clock cap (s) on a single fping process. A sweep that can't finish in time
+        // is killed and the job fails; raise it in step with fleet size / shard size.
+        'process_timeout' => (int) env('MYMATE_PING_PROCESS_TIMEOUT', 30),
+        // Shard the up/down sweep into N parallel ping jobs by crc32(device_id) % shards, so no
+        // single fping has to cover the whole fleet. 1 = one sweep (small installs). Raise it
+        // with the fleet AND raise the ping worker count (MYMATE_PING_PROCESSES) to match.
+        'shards' => (int) env('MYMATE_PING_SHARDS', 1),
         // Probes per host per sweep. >1 gives a real per-sweep loss % and jitter (min/max
         // RTT spread) for the latency graphs; 1 is lightest (loss is then 0/100 per sweep,
         // still averaged into a real % on read). fping sends them in parallel.

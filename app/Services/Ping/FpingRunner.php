@@ -20,6 +20,11 @@ class FpingRunner implements Pinger
         private int $count = 1,
         private int $periodMs = 300,
         private ?string $source = null, // optional source address (fping -S) to ping FROM
+        // fping -i: ms between successive targets. fping's default (~10ms) paces sends so
+        // hard the total grows to minutes over a big fleet; a small value (e.g. 1ms) sweeps
+        // tens of thousands quickly - and measurably more accurately, since fewer replies
+        // arrive after the timeout window. null = leave fping's default.
+        private ?int $intervalMs = null,
     ) {}
 
     public function reachable(array $ips): array
@@ -77,6 +82,11 @@ class FpingRunner implements Pinger
             $args[] = (string) max(1, $this->periodMs);
         }
         $args = array_merge($args, ['-r', (string) $this->retries, '-t', (string) $this->timeoutMs]);
+        // -i paces successive targets; a small value is what makes a large-fleet sweep finish.
+        if ($this->intervalMs !== null) {
+            $args[] = '-i';
+            $args[] = (string) max(0, $this->intervalMs);
+        }
         // -S sets the source address to ping FROM (e.g. a WAN/VRF interface, to test that a
         // customer path can reach the target). Only added when configured.
         if ($this->source !== null && $this->source !== '') {
