@@ -59,6 +59,9 @@ services:
 
   redis:
     image: redis:7
+    # Transient broker only (queues, cache, broadcasting) - persistence off so it can't fill the
+    # volume with an RDB dump or block writes on a failed save (GitHub #16).
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--stop-writes-on-bgsave-error", "no"]
     restart: unless-stopped
 
 volumes:

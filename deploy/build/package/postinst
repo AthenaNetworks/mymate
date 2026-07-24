@@ -40,6 +40,19 @@ configure)
     systemctl enable --now postgresql >/dev/null 2>&1 || service postgresql start || true
     systemctl enable --now redis-server >/dev/null 2>&1 || service redis-server start || true
 
+    # --- 2b. Redis hardening --------------------------------------------
+    # My Mate uses Redis purely as a transient broker (queues, cache, broadcasting); nothing here
+    # needs to survive a restart. The distro default keeps RDB snapshots on, which on large fleets
+    # filled disks with the dump and spiked memory via redis-check-rdb, and a failed save blocks
+    # writes (GitHub #16). Turn persistence off and never block writes on a save error. Applied
+    # live and persisted to the config file; best-effort so it never fails the install.
+    if command -v redis-cli >/dev/null 2>&1; then
+        redis-cli CONFIG SET save "" >/dev/null 2>&1 || true
+        redis-cli CONFIG SET appendonly no >/dev/null 2>&1 || true
+        redis-cli CONFIG SET stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+        redis-cli CONFIG REWRITE >/dev/null 2>&1 || true
+    fi
+
     # --- 2c. ICMP for up/down monitoring (HARD requirement) -------------
     # My Mate's core function is up/down probing via fping, run as the non-root mymate user.
     # Enable it (unprivileged ping sockets, else CAP_NET_RAW) and PROVE it works. Fail the

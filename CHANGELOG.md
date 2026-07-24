@@ -13,6 +13,15 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Changed
+- **Redis runs with persistence off (GitHub #16).** My Mate uses Redis only as a transient broker
+  (queues, cache, broadcasting), so the packaged installs now disable RDB snapshots and AOF and
+  never block writes on a failed save. This avoids the stock-Redis behaviour that, on large fleets,
+  filled the disk with the RDB dump and spiked memory via `redis-check-rdb`. Applies to the
+  `.deb`, LXC and Docker Compose; nothing of record lives in Redis, so there's no data to lose.
+- Added [REQUIREMENTS.md](REQUIREMENTS.md) with CPU/RAM/disk sizing guidance and how history
+  retention bounds disk use.
+
 ### Added
 - **Windows remote agent (GitHub #14).** The agent now builds for Windows (amd64 / arm64) and can
   install itself as a Windows service: `mymate-agent.exe install --url ... --token ...` registers

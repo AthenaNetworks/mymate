@@ -29,6 +29,17 @@ if su postgres -c "psql -c \"ALTER ROLE mymate LOGIN PASSWORD '$NEWPW'\"" >/dev/
     set_env DB_PASSWORD "$NEWPW"
 fi
 
+# 1b. Redis is a transient broker only (queues, cache, broadcasting) - disable persistence so it
+# can't fill the disk with its RDB dump or spike memory (redis-check-rdb), and never block writes
+# on a failed save (GitHub #16). Best-effort; runs here too since the template may have been built
+# with redis not running, so the postinst couldn't persist it.
+if command -v redis-cli >/dev/null 2>&1; then
+    redis-cli CONFIG SET save "" >/dev/null 2>&1 || true
+    redis-cli CONFIG SET appendonly no >/dev/null 2>&1 || true
+    redis-cli CONFIG SET stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+    redis-cli CONFIG REWRITE >/dev/null 2>&1 || true
+fi
+
 # 2. Point SPA cookie auth at this machine's identity. Prefer the source IP of the
 # default route (the address clients actually reach this box on) over the first entry
 # from `hostname -I`, which can be a secondary/wrong interface. Login no longer depends

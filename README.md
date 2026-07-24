@@ -39,7 +39,8 @@ web app you can run anywhere.
 ## Install
 
 Pick whichever fits how you run things. All three give you the same app. Grab the packages
-and templates from [Releases](../../releases).
+and templates from [Releases](../../releases). For CPU/RAM/disk guidance and how history
+retention affects disk, see [REQUIREMENTS.md](REQUIREMENTS.md).
 
 ### Debian / Ubuntu package
 
