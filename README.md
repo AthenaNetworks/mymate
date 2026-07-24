@@ -34,7 +34,8 @@ web app you can run anywhere.
 - A heads up in Settings when a newer release is out.
 - Login with an in app operator list and a read only viewer tier.
 - Alerting (email, Slack, Teams, Messenger), outage history, multiple maps, and a
-  wallboard/dashboard mode for the NOC screen.
+  wallboard/dashboard mode for the NOC screen - which you can also share as a read-only,
+  no-login link for a status screen.
 
 ## Install
 

@@ -39,6 +39,12 @@
         <meta name="mymate:demo-email" content="{{ config('mymate.demo.email') }}">
         <meta name="mymate:demo-password" content="{{ config('mymate.demo.password') }}">
     @endif
+    {{-- Public wallboard (GitHub #15): the /wall/{token} route sets these so the SPA boots straight
+         into a read-only, no-login view of one map. Only emitted on that route. --}}
+    @isset($wallToken)
+        <meta name="mymate:wall-token" content="{{ $wallToken }}">
+        <meta name="mymate:wall-map" content="{{ $wallMapId }}">
+    @endisset
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])
 </head>

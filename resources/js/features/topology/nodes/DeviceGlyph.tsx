@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react';
 import { Globe, WifiHigh, Broadcast, HardDrives, ShareNetwork, StackSimple, Cube, type Icon } from '@phosphor-icons/react';
 import type { DeviceType } from '../../../types';
 import { deviceIcon } from '../../../components/deviceIcons';
+import { isWall, wallToken } from '../../../lib/wall';
+
+// Product photos come from the authenticated device endpoint normally, or the token-gated public
+// one when running as a shared wallboard (GitHub #15) - so photos still render with no session.
+function iconSrc(deviceId: number, attempt: number): string {
+    const q = attempt > 0 ? `?r=${attempt}` : '';
+    return isWall()
+        ? `/api/public/wall/${wallToken()}/devices/${deviceId}/icon${q}`
+        : `/api/devices/${deviceId}/icon${q}`;
+}
 
 /**
  * Which drawn family icon represents a device. The coarse `device_type` is refined by MikroTik
@@ -116,7 +126,7 @@ export function DeviceGlyph({
         <>
             {useImage && (
                 <img
-                    src={`/api/devices/${deviceId}/icon${attempt > 0 ? `?r=${attempt}` : ''}`}
+                    src={iconSrc(deviceId, attempt)}
                     alt=""
                     onLoad={() => setLoaded(true)}
                     onError={() => setErrored(true)}

@@ -56,6 +56,12 @@ class Map extends Model
         return $this->hasMany(MapNote::class);
     }
 
+    /** Public read-only wallboard links for this map (GitHub #15). */
+    public function shares(): HasMany
+    {
+        return $this->hasMany(MapShare::class);
+    }
+
     public function devices(): BelongsToMany
     {
         return $this->belongsToMany(Device::class, 'device_map_positions')->withPivot('x', 'y');

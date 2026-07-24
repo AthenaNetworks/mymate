@@ -23,6 +23,11 @@ of commit subjects.
   retention bounds disk use.
 
 ### Added
+- **Anonymous wallboard links (GitHub #15).** Share a map's live wallboard as a read-only, no-login
+  link for a NOC screen or a status page. On any map, open the map menu and pick "Share wallboard"
+  to mint an unguessable link; turn it off or remove it to revoke access at any time. The public
+  view is read-only, polls for live status and link load, and never shows management addresses or
+  credentials - only what the map draws.
 - **Windows remote agent (GitHub #14).** The agent now builds for Windows (amd64 / arm64) and can
   install itself as a Windows service: `mymate-agent.exe install --url ... --token ...` registers
   and starts it (auto-start, restart on failure), with `start` / `stop` / `status` / `uninstall`

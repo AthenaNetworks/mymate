@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, Trash, UploadSimple } from '@phosphor-icons/react';
+import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, ShareNetwork, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import { PromptDialog, ConfirmDialog } from '../../../components/Dialog';
+import { ShareWallboardDialog } from './ShareWallboardDialog';
 import type { NetworkMap } from '../../../types';
 
 type MapDialog = { mode: 'create' } | { mode: 'rename'; id: number; current: string } | { mode: 'delete'; id: number; name: string };
@@ -32,6 +33,7 @@ export function MapSwitcher() {
     const fileRef = useRef<HTMLInputElement>(null);
     const [open, setOpen] = useState(false);
     const [dialog, setDialog] = useState<MapDialog | null>(null);
+    const [sharing, setSharing] = useState(false); // the "Share wallboard" dialog for the active map
 
     // Default the active map once maps load. Prefer one that actually has devices on
     // it, so a fresh/empty default map (e.g. the seed "Main" alongside imported maps)
@@ -146,6 +148,13 @@ export function MapSwitcher() {
                                         Geographic mode {active?.leaflet_enabled ? 'on' : 'off'}
                                     </button>
                                     <button
+                                        disabled={!active}
+                                        onClick={() => { setSharing(true); setOpen(false); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                    >
+                                        <ShareNetwork weight="bold" className="h-3.5 w-3.5 text-emerald-300" /> Share wallboard
+                                    </button>
+                                    <button
                                         disabled={!active || exportMap.isPending}
                                         onClick={() => active && exportMap.mutate({ mapId: active.id, name: active.name })}
                                         className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
@@ -185,6 +194,10 @@ export function MapSwitcher() {
                     </>
                 )}
             </div>
+
+            {sharing && active && (
+                <ShareWallboardDialog mapId={active.id} mapName={active.name} onClose={() => setSharing(false)} />
+            )}
 
             {dialog?.mode === 'create' && (
                 <PromptDialog

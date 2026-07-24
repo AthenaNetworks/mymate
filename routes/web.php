@@ -21,5 +21,17 @@ $shell = fn () => response(view('app'))->header('Cache-Control', 'no-store, no-c
 
 Route::get('/', $shell);
 
+// Public wallboard (GitHub #15): an unguessable per-map token serves the SPA in a read-only,
+// no-login wallboard mode. Resolved here so a bad/disabled token 404s cleanly instead of
+// loading a broken app; the map id + token are handed to the shell via meta tags. Declared
+// before the SPA catch-all. The data still comes from the token-gated /api/public/wall endpoints.
+Route::get('/wall/{token}', function (string $token) {
+    $share = \App\Models\MapShare::where('token', $token)->where('enabled', true)->with('map')->first();
+    abort_if($share === null || $share->map === null, 404);
+
+    return response(view('app', ['wallToken' => $token, 'wallMapId' => $share->map->id]))
+        ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
+})->where('token', '[A-Za-z0-9]+')->name('wall.show');
+
 // SPA catch-all: any non-/api path returns the React shell so client-side routing works.
 Route::get('/{any}', $shell)->where('any', '^(?!api).*$');

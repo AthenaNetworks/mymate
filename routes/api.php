@@ -36,6 +36,17 @@ Route::get('health', HealthController::class)->name('health');
 // rate-limited to deter abuse.
 Route::post('contact', [ContactController::class, 'store'])->middleware('throttle:5,1')->name('contact');
 
+// Public wallboard (GitHub #15): an unguessable per-map share token grants a read-only,
+// no-login view of one map. Token-gated, read-only, and rate-limited. The payload is a
+// whitelist - no addresses or credentials cross this boundary (see PublicWallController).
+Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
+    ->where(['token' => '[A-Za-z0-9]+'])->group(function (): void {
+        Route::get('map', [\App\Http\Controllers\Api\PublicWallController::class, 'map'])->name('public.wall.map');
+        Route::get('devices', [\App\Http\Controllers\Api\PublicWallController::class, 'devices'])->name('public.wall.devices');
+        Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\PublicWallController::class, 'icon'])->name('public.wall.icon');
+        Route::get('links', [\App\Http\Controllers\Api\PublicWallController::class, 'links'])->name('public.wall.links');
+    });
+
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
 
 // --- Authenticated (everything else) --------------------------------------
@@ -160,6 +171,12 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     Route::post('maps/{map}/notes', [MapController::class, 'storeMapNote'])->name('maps.notes.store');
     Route::patch('maps/{map}/notes/{mapNote}', [MapController::class, 'updateMapNote'])->name('maps.notes.update');
     Route::delete('maps/{map}/notes/{mapNote}', [MapController::class, 'destroyMapNote'])->name('maps.notes.destroy');
+    // Public read-only wallboard share links (GitHub #15). Listing is read; minting/revoking are
+    // writes, so RestrictWritesToAdmins keeps them admin-only like the rest of the map API.
+    Route::get('maps/{map}/shares', [\App\Http\Controllers\Api\MapShareController::class, 'index'])->name('maps.shares.index');
+    Route::post('maps/{map}/shares', [\App\Http\Controllers\Api\MapShareController::class, 'store'])->name('maps.shares.store');
+    Route::patch('maps/{map}/shares/{share}', [\App\Http\Controllers\Api\MapShareController::class, 'update'])->name('maps.shares.update');
+    Route::delete('maps/{map}/shares/{share}', [\App\Http\Controllers\Api\MapShareController::class, 'destroy'])->name('maps.shares.destroy');
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');

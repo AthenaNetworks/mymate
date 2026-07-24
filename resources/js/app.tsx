@@ -11,6 +11,8 @@ import { BrandedLoader } from './components/BrandedLoader';
 import { useWallboard } from './lib/shellStore';
 import { isDemo, demoCreds } from './features/demo/lib/demo';
 import { DemoChrome } from './features/demo/components/DemoChrome';
+import { isWall } from './lib/wall';
+import { PublicWallboard } from './features/wall/components/PublicWallboard';
 
 /**
  * Gate the console behind authentication: login screen until signed in.
@@ -18,6 +20,17 @@ import { DemoChrome } from './features/demo/components/DemoChrome';
  * chrome is layered over the live, synthetic-data console.
  */
 function Root() {
+    // Public wallboard (GitHub #15): opened via a /wall/{token} share link. It bypasses auth
+    // entirely and renders its own read-only view on token-gated data, so short-circuit before
+    // any authenticated query runs.
+    if (isWall()) {
+        return <PublicWallboard />;
+    }
+
+    return <AuthedApp />;
+}
+
+function AuthedApp() {
     const { data: user, isLoading } = useCurrentUser();
     const login = useLogin();
     const wallboard = useWallboard();
