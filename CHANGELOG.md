@@ -13,14 +13,7 @@ of commit subjects.
 
 ## [Unreleased]
 
-### Changed
-- **Redis runs with persistence off (GitHub #16).** My Mate uses Redis only as a transient broker
-  (queues, cache, broadcasting), so the packaged installs now disable RDB snapshots and AOF and
-  never block writes on a failed save. This avoids the stock-Redis behaviour that, on large fleets,
-  filled the disk with the RDB dump and spiked memory via `redis-check-rdb`. Applies to the
-  `.deb`, LXC and Docker Compose; nothing of record lives in Redis, so there's no data to lose.
-- Added [REQUIREMENTS.md](REQUIREMENTS.md) with CPU/RAM/disk sizing guidance and how history
-  retention bounds disk use.
+## [1.4.0] - 2026-07-24
 
 ### Added
 - **Anonymous wallboard links (GitHub #15).** Share a map's live wallboard as a read-only, no-login
@@ -33,6 +26,40 @@ of commit subjects.
   and starts it (auto-start, restart on failure), with `start` / `stop` / `status` / `uninstall`
   to manage it. Same single static binary, same outbound-only model. Config is read from the
   environment or a file the installer writes, so Linux/macOS behaviour is unchanged.
+- **Geographic map mode (GitHub #11).** Toggle a map into geographic mode and your own device
+  nodes sit over a real map background, positioned by each device's coordinates - set them from an
+  address or by dragging on the map, or auto-filled from an SNMP location. Devices sharing a spot
+  collapse into one stack node so a site doesn't turn into a pile of overlapping cards.
+- **OSPF neighbours and link cost (GitHub #11).** Device tiles show the OSPF full-neighbour count,
+  and links show the OSPF cost out of each end - read over the RouterOS API, including for MikroTiks
+  that are otherwise polled over SNMP (attach a RouterOS API credential).
+- **Export and import a map (GitHub #11).** Save a map's layout to a JSON file and import it back,
+  to move a map between instances or keep a copy.
+- **Free-text notes and labels on maps (GitHub #11).** Drop a note anywhere on a map to annotate it;
+  colour it and drag it into place.
+- **Real device links between child maps on an overview (GitHub #9).** An overview map can now show
+  the actual device links that cross between the sub-maps placed on it, aggregated per pair and
+  toggleable, so you can see the real wiring without a tangle.
+- **More alerting and map detail (GitHub #10, #11).** Per-interface "port down" alerts, a
+  low-throughput alert, link port-speed shown on the map, a per-device ping source address, a map
+  breadcrumb for nested maps, and a custom sensor that can walk an SNMP table and reduce it to one
+  value.
+
+### Changed
+- **Redis runs with persistence off (GitHub #16).** My Mate uses Redis only as a transient broker
+  (queues, cache, broadcasting), so the packaged installs now disable RDB snapshots and AOF and
+  never block writes on a failed save. This avoids the stock-Redis behaviour that, on large fleets,
+  filled the disk with the RDB dump and spiked memory via `redis-check-rdb`. Applies to the
+  `.deb`, LXC and Docker Compose; nothing of record lives in Redis, so there's no data to lose.
+- Added [REQUIREMENTS.md](REQUIREMENTS.md) with CPU/RAM/disk sizing guidance and how history
+  retention bounds disk use.
+
+### Fixed
+- Overview maps: child-map nodes can be detached from a canvas, and the empty-state and add-map
+  flash were cleaned up.
+- Geographic mode: dragging a device no longer zooms the map out, and fit-to-bounds no longer
+  over-zooms when devices are close together.
+- Removed a stray backslash that showed literally in a few UI strings.
 
 ## [1.3.0] - 2026-07-16
 
@@ -307,7 +334,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/AthenaNetworks/mymate/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/AthenaNetworks/mymate/compare/v1.1.0...v1.1.1
