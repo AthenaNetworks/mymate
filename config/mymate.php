@@ -29,6 +29,11 @@ return [
         // columns. The up/down status flip still happens every sweep; only the trend write is
         // throttled to keep the fast sweep cheap.
         'history_interval' => (int) env('MYMATE_PING_HISTORY_INTERVAL', 60),
+        // Consecutive missed sweeps before a device flips to `down`. 1 = flip on the first miss
+        // (original behaviour). Higher tolerates transient packet loss - important at scale,
+        // where a device that drops one reply shouldn't alarm. Recovery is always immediate
+        // (one reply -> up). At the default 5s interval, 3 = ~15s of solid misses before down.
+        'fail_threshold' => max(1, (int) env('MYMATE_PING_FAIL_THRESHOLD', 3)),
     ],
 
     // Interface throughput loop. intervals in seconds.

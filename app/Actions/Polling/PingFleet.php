@@ -41,17 +41,41 @@ class PingFleet
         /** @var array<string, PingSample> $samples */
         $samples = $this->pinger->measure($devices->pluck('mgmt_ip')->all());
 
+        // Flap dampening: a device only flips to `down` after `fail_threshold` consecutive
+        // missed sweeps, so a single dropped reply (transient loss, a busy sweep) doesn't alarm.
+        // Recovery is immediate - one reply resets the streak and marks it up.
+        $threshold = max(1, (int) config('mymate.ping.fail_threshold', 3));
+
         $changed = 0;
         foreach ($devices as $device) {
-            $new = ($samples[$device->mgmt_ip] ?? null)?->reachable ? DeviceStatus::Up : DeviceStatus::Down;
+            $reachable = ($samples[$device->mgmt_ip] ?? null)?->reachable ?? false;
 
-            if ($device->status !== $new) {
-                $device->status = $new;
+            $streak = (int) $device->fail_streak;
+            if ($reachable) {
+                $newStreak = 0;
+                $newStatus = DeviceStatus::Up;
+            } else {
+                $newStreak = min($streak + 1, $threshold); // cap so a long-down device isn't rewritten
+                // Hold the current status until we've missed `threshold` sweeps in a row.
+                $newStatus = $newStreak >= $threshold ? DeviceStatus::Down : $device->status;
+            }
+
+            $streakChanged = $newStreak !== $streak;
+            $statusChanged = $device->status !== $newStatus;
+            if (! $streakChanged && ! $statusChanged) {
+                continue;
+            }
+
+            $device->fail_streak = $newStreak;
+            if ($statusChanged) {
+                $device->status = $newStatus;
                 $device->last_change = now();
-                $device->save();
+            }
+            $device->save();
 
+            if ($statusChanged) {
                 // Log the outage window: open on down, close on recovery.
-                $new === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
+                $newStatus === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
 
                 LiveBroadcast::send(new DeviceStatusChanged($device));
                 $changed++;
