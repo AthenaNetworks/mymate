@@ -16,7 +16,7 @@ export CGO_ENABLED=0 GOFLAGS="${GOFLAGS:--buildvcs=false}"
 VERSION="${VERSION:-dev}"
 MODULE="github.com/AthenaNetworks/mymate/agent"
 LDFLAGS="-s -w -X ${MODULE}/internal/agent.Version=${VERSION}"
-PLATFORMS="linux/amd64 linux/arm64 linux/arm darwin/arm64 darwin/amd64"
+PLATFORMS="linux/amd64 linux/arm64 linux/arm darwin/arm64 darwin/amd64 windows/amd64 windows/arm64"
 
 if [ "${1:-}" = "host" ]; then
     go build -ldflags "$LDFLAGS" -o bin/mymate-agent .
@@ -32,19 +32,27 @@ for p in $PLATFORMS; do
     mkdir -p "$out"
 
     arm=""; [ "$arch" = "arm" ] && arm="GOARM=7"
+    bin="mymate-agent"; [ "$os" = "windows" ] && bin="mymate-agent.exe"
     echo "==> $os/$arch"
-    env GOOS="$os" GOARCH="$arch" $arm go build -ldflags "$LDFLAGS" -o "$out/mymate-agent" .
+    env GOOS="$os" GOARCH="$arch" $arm go build -ldflags "$LDFLAGS" -o "$out/$bin" .
 
-    cp packaging/agent.env.example packaging/install.sh README.md "$out/"
-    if [ "$os" = "darwin" ]; then
-        cp packaging/com.athenanetworks.mymate-agent.plist "$out/"
+    cp packaging/agent.env.example README.md "$out/"
+    if [ "$os" = "windows" ]; then
+        # Windows installs itself as a service via the binary (kardianos SCM); ship the how-to,
+        # and package a .zip which is what Windows users expect.
+        cp packaging/windows-install.md "$out/"
+        ( cd dist && python3 -m zipfile -c "$name.zip" "$name" && rm -rf "$name" )
     else
-        cp packaging/mymate-agent.service "$out/"
+        cp packaging/install.sh "$out/"
+        if [ "$os" = "darwin" ]; then
+            cp packaging/com.athenanetworks.mymate-agent.plist "$out/"
+        else
+            cp packaging/mymate-agent.service "$out/"
+        fi
+        ( cd dist && tar czf "$name.tar.gz" "$name" && rm -rf "$name" )
     fi
-
-    ( cd dist && tar czf "$name.tar.gz" "$name" && rm -rf "$name" )
 done
 
-( cd dist && sha256sum ./*.tar.gz > SHA256SUMS )
+( cd dist && sha256sum ./*.tar.gz ./*.zip > SHA256SUMS )
 echo "==> artifacts:"
 ls -1 dist

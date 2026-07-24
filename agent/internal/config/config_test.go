@@ -41,3 +41,41 @@ func TestLoadRequiresURLAndToken(t *testing.T) {
 		t.Errorf("ServerURL = %s", cfg.ServerURL)
 	}
 }
+
+func TestLoadFallsBackToTheConfigFile(t *testing.T) {
+	// Env unset, values only in the file (the Windows-service path).
+	t.Setenv("MYMATE_URL", "")
+	t.Setenv("MYMATE_AGENT_TOKEN", "")
+	path := t.TempDir() + "/agent.env"
+	t.Setenv("MYMATE_AGENT_CONFIG", path)
+
+	if err := WriteFile("https://app.example.com", "mma_tok", "winbox"); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with a config file: %v", err)
+	}
+	if cfg.ServerURL != "wss://app.example.com/agent" || cfg.Token != "mma_tok" || cfg.Name != "winbox" {
+		t.Errorf("got %+v", cfg)
+	}
+}
+
+func TestEnvWinsOverTheConfigFile(t *testing.T) {
+	path := t.TempDir() + "/agent.env"
+	t.Setenv("MYMATE_AGENT_CONFIG", path)
+	if err := WriteFile("https://file.example.com", "file_tok", ""); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv("MYMATE_URL", "https://env.example.com")
+	t.Setenv("MYMATE_AGENT_TOKEN", "env_tok")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ServerURL != "wss://env.example.com/agent" || cfg.Token != "env_tok" {
+		t.Errorf("env should win, got %+v", cfg)
+	}
+}

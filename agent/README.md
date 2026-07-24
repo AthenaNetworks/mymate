@@ -16,6 +16,11 @@ container, or a Raspberry Pi.
 | Linux  | arm (v7) | older 32-bit Raspberry Pi |
 | macOS  | arm64 | Apple Silicon |
 | macOS  | amd64 | Intel Mac |
+| Windows | amd64 | Windows servers / workstations (install as a service) |
+| Windows | arm64 | Windows on ARM |
+
+On Windows the agent installs itself as a service - see
+[packaging/windows-install.md](packaging/windows-install.md).
 
 ## Install
 

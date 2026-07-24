@@ -13,6 +13,13 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Windows remote agent (GitHub #14).** The agent now builds for Windows (amd64 / arm64) and can
+  install itself as a Windows service: `mymate-agent.exe install --url ... --token ...` registers
+  and starts it (auto-start, restart on failure), with `start` / `stop` / `status` / `uninstall`
+  to manage it. Same single static binary, same outbound-only model. Config is read from the
+  environment or a file the installer writes, so Linux/macOS behaviour is unchanged.
+
 ## [1.3.0] - 2026-07-16
 
 ### Added
