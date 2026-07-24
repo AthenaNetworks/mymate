@@ -16,8 +16,11 @@ const short: Record<DeviceStatus, string> = { up: 'up', down: 'down', unknown: '
 /** Live up/down/unknown tallies for the top bar, derived from the device snapshot. */
 export function StatusCounts() {
     const { data: devices } = useDevices();
+    // Count only monitored devices. A paused/acked device (monitored=false) is deliberately not
+    // being polled, so its stale status shouldn't inflate the up/down tallies - the pill reflects
+    // the health of what's actually watched.
     const counts: Record<DeviceStatus, number> = { up: 0, down: 0, unknown: 0 };
-    for (const d of devices ?? []) counts[d.status] += 1;
+    for (const d of devices ?? []) if (d.monitored) counts[d.status] += 1;
 
     return (
         <div className="flex items-center gap-1.5">
