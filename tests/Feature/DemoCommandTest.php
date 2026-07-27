@@ -81,6 +81,57 @@ class DemoCommandTest extends TestCase
         $this->assertTrue(\App\Models\AlertEvent::where('status', 'firing')->exists());
     }
 
+    public function test_seed_backfills_a_day_of_history_for_the_inspector_charts(): void
+    {
+        $this->artisan('mymate:demo --seed')->assertOk();
+
+        $db = \Illuminate\Support\Facades\DB::class;
+        $old = now()->subHours(20); // well before the run - proves backfill, not tick accrual
+        $mockIface = NetworkInterface::whereHas('device', fn ($q) => $q->where('monitored', false))->first();
+
+        $this->assertTrue($db::table('interface_samples')->where('interface_id', $mockIface->id)->where('ts', '<', $old)->exists());
+        $this->assertTrue($db::table('device_metric_samples')->where('ts', '<', $old)->exists());
+        $this->assertTrue($db::table('ping_samples')->where('ts', '<', $old)->exists());
+
+        // Every mock device got series - including currently-down ones (the inspector
+        // must never say "No history yet" on the demo).
+        foreach (Device::where('monitored', false)->pluck('id') as $id) {
+            $this->assertTrue($db::table('device_metric_samples')->where('device_id', $id)->exists(), "device {$id} has no metric history");
+            $this->assertTrue($db::table('ping_samples')->where('device_id', $id)->exists(), "device {$id} has no ping history");
+        }
+    }
+
+    public function test_tick_records_ping_latency_and_loss(): void
+    {
+        $this->artisan('mymate:demo --seed')->assertOk();
+        $this->artisan('mymate:demo --run --once')->assertOk();
+
+        $up = Device::where('monitored', false)->where('status', 'up')->first();
+        $down = Device::where('monitored', false)->where('status', 'down')->first();
+
+        $this->assertNotNull($up->fresh()->rtt_ms);        // up device pings
+        $this->assertNull($down->fresh()->rtt_ms);         // down device times out...
+        $this->assertSame(100.0, $down->fresh()->loss_pct); // ...at 100% loss
+        $this->assertTrue(\Illuminate\Support\Facades\DB::table('ping_samples')->where('device_id', $up->id)->whereNotNull('rtt_ms')->exists());
+    }
+
+    public function test_simulator_self_heals_missing_history_partitions(): void
+    {
+        $this->artisan('mymate:demo --seed')->assertOk();
+
+        // Simulate a daemon that outlived its create-ahead window: drop today's
+        // partitions so the first history insert of the tick fails.
+        $suffix = now()->format('Ymd');
+        \Illuminate\Support\Facades\DB::statement("DROP TABLE IF EXISTS interface_samples_{$suffix}");
+        \Illuminate\Support\Facades\DB::statement("DROP TABLE IF EXISTS device_metric_samples_{$suffix}");
+
+        $this->artisan('mymate:demo --run --once')->assertOk();
+
+        // The tick must have recreated the partitions and landed samples in them.
+        $this->assertTrue(\Illuminate\Support\Facades\DB::table('interface_samples')->whereDate('ts', now())->exists());
+        $this->assertTrue(\Illuminate\Support\Facades\DB::table('device_metric_samples')->whereDate('ts', now())->exists());
+    }
+
     public function test_clear_removes_the_viewer_and_topology(): void
     {
         $this->artisan('mymate:demo --seed')->assertOk();

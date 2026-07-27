@@ -156,6 +156,7 @@ ranges to it in the console.
 | [deploy/ssl/README.md](deploy/ssl/README.md) | HTTPS: Cloudflare Tunnel, reverse proxy, Let's Encrypt, own cert |
 | [deploy/rusted/README.md](deploy/rusted/README.md) | Config backups: the Rusted engine, how it's provisioned, and credentials |
 | [agent/README.md](agent/README.md) | The remote agent: deploy, configure, discover |
+| [deploy/demo/README.md](deploy/demo/README.md) | The public sales demo: synthetic topology, simulator, deploy/troubleshooting |
 
 ## Contributing
 

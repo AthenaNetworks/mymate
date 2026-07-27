@@ -122,8 +122,76 @@ class DemoCommand extends Command
         }
 
         app(ManageHistoryPartitions::class)(); // so history samples have a partition to land in
+        $this->backfillHistory();
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Seed ~24h of per-minute history for every mock device - throughput, cpu/mem/temp
+     * and ping - so the inspector charts are populated the moment the demo opens instead
+     * of accruing from zero ("No history yet"). Uses the same synth generators as the
+     * live tick (both are keyed on epoch seconds), so the simulator's live samples
+     * continue the backfilled series seamlessly. Replaces the window on re-run.
+     */
+    private function backfillHistory(): void
+    {
+        $devices = Device::where('monitored', false)->with('interfaces')->get();
+        if ($devices->isEmpty()) {
+            return;
+        }
+        $capOut = $this->linkCapOut();
+
+        $step = 60;
+        $to = now()->startOfSecond();
+        $from = $to->copy()->subDay()->addSeconds($step); // stays inside the partition window (yesterday..)
+
+        $deviceIds = $devices->pluck('id');
+        $ifaceIds = $devices->flatMap(fn (Device $d) => $d->interfaces->pluck('id'));
+        DB::table('interface_samples')->whereIn('interface_id', $ifaceIds)->where('ts', '<', $to)->delete();
+        DB::table('device_metric_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
+        DB::table('ping_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
+
+        $iface = [];
+        $metric = [];
+        $ping = [];
+        for ($ts = $from->copy(); $ts <= $to; $ts->addSeconds($step)) {
+            $t = (float) $ts->timestamp;
+            $stamp = $ts->toDateTimeString();
+            foreach ($devices as $device) {
+                [$cpu, $mem, $temp] = $this->synthMetrics($device->id, $t);
+                $metric[] = [
+                    'device_id' => $device->id, 'ts' => $stamp, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
+                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                ];
+                [$rtt, $jitter] = $this->synthPing($device->id, $t);
+                $ping[] = ['device_id' => $device->id, 'ts' => $stamp, 'rtt_ms' => $rtt, 'loss_pct' => 0.0, 'jitter_ms' => $jitter];
+
+                foreach ($device->interfaces as $if) {
+                    [$utilIn, $utilOut] = $this->synthUtil($if->id, $t);
+                    $speedIn = (int) ($if->speed_mbps ?: 1000);
+                    $speedOut = (int) ($capOut[$if->id] ?? ($if->speed_up_mbps ?: $if->speed_mbps ?: 1000));
+                    $iface[] = [
+                        'interface_id' => $if->id, 'ts' => $stamp,
+                        'bps_in' => (int) round($utilIn / 100 * $speedIn * 1_000_000),
+                        'bps_out' => (int) round($utilOut / 100 * $speedOut * 1_000_000),
+                        'util_in' => $utilIn, 'util_out' => $utilOut,
+                    ];
+                }
+            }
+        }
+
+        foreach (array_chunk($iface, 1000) as $chunk) {
+            DB::table('interface_samples')->insert($chunk);
+        }
+        foreach (array_chunk($metric, 1000) as $chunk) {
+            DB::table('device_metric_samples')->insert($chunk);
+        }
+        foreach (array_chunk($ping, 1000) as $chunk) {
+            DB::table('ping_samples')->insert($chunk);
+        }
+
+        $this->info('Backfilled 24h of demo history ('.count($iface).' throughput, '.count($metric).' metric, '.count($ping).' ping samples).');
     }
 
     private function clear(): int
@@ -163,21 +231,14 @@ class DemoCommand extends Command
         $devices = Device::where('monitored', false)->with('interfaces')->get();
         $this->maybeFlap($devices);
 
-        // A link-bound interface's OUTBOUND bps must be measured against the LINK's
-        // effective speed (slower end / override) - that's what Link::util() divides by.
-        // Computing it against the interface's own (faster) speed makes link util blow
-        // past 100%. Map each link end -> the capacity to size its bps_out against.
-        $capOut = [];
-        foreach (Link::with(['aInterface:id,speed_mbps', 'bInterface:id,speed_mbps'])->get() as $l) {
-            $capOut[$l->a_interface_id] = $l->effAbMbps();
-            $capOut[$l->b_interface_id] = $l->effBaMbps();
-        }
+        $capOut = $this->linkCapOut();
 
         $frames = [];
         $ifaceUpdates = [];
         $sampleRows = [];
         $metricFrames = [];   // cpu/mem/temp broadcast
         $metricSamples = [];  // cpu/mem/temp history
+        $pingSamples = [];    // latency/loss/jitter history
 
         foreach ($devices as $device) {
             $down = $device->status === DeviceStatus::Down;
@@ -187,7 +248,13 @@ class DemoCommand extends Command
             // last values, like a real poll). Smooth oscillation keeps the tiles + graphs alive.
             if (! $down) {
                 [$cpu, $mem, $temp] = $this->synthMetrics($device->id, $t);
-                $device->forceFill(['cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now])->save();
+                [$rtt, $jitter] = $this->synthPing($device->id, $t);
+                $loss = mt_rand(0, 99) < 3 ? (float) mt_rand(1, 5) : 0.0; // the odd dropped packet
+                $device->forceFill([
+                    'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
+                    'rtt_ms' => $rtt, 'loss_pct' => $loss, 'ping_at' => $now,
+                ])->save();
+                $pingSamples[] = ['device_id' => $device->id, 'ts' => $now, 'rtt_ms' => $rtt, 'loss_pct' => $loss, 'jitter_ms' => $jitter];
                 $metricFrames[] = [
                     'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
                     'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
@@ -196,6 +263,10 @@ class DemoCommand extends Command
                     'device_id' => $device->id, 'ts' => $now, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
                     'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
                 ];
+            } else {
+                // Down device: pings time out - 100% loss, no RTT (mirrors the real ping loop).
+                $device->forceFill(['rtt_ms' => null, 'loss_pct' => 100.0, 'ping_at' => $now])->save();
+                $pingSamples[] = ['device_id' => $device->id, 'ts' => $now, 'rtt_ms' => null, 'loss_pct' => 100.0, 'jitter_ms' => null];
             }
 
             foreach ($device->interfaces as $if) {
@@ -240,6 +311,7 @@ class DemoCommand extends Command
         $this->persistInterfaces($ifaceUpdates);
         $this->recordHistory($sampleRows);
         $this->recordMetricHistory($metricSamples);
+        $this->insertSamples('ping_samples', $pingSamples);
 
         if ($frames !== []) {
             InterfaceUtilUpdated::dispatch($frames);
@@ -250,6 +322,44 @@ class DemoCommand extends Command
 
         // Raise/resolve alerts for the current down devices (populates the Alerts view).
         app(EvaluateAlerts::class)();
+    }
+
+    /**
+     * A link-bound interface's OUTBOUND bps must be measured against the LINK's
+     * effective speed (slower end / override) - that's what Link::util() divides by.
+     * Computing it against the interface's own (faster) speed makes link util blow
+     * past 100%. Maps each link end's interface id -> the capacity (Mbps) to size
+     * its bps_out against.
+     *
+     * @return array<int, int|null>
+     */
+    private function linkCapOut(): array
+    {
+        $capOut = [];
+        foreach (Link::with(['aInterface:id,speed_mbps', 'bInterface:id,speed_mbps'])->get() as $l) {
+            $capOut[$l->a_interface_id] = $l->effAbMbps();
+            $capOut[$l->b_interface_id] = $l->effBaMbps();
+        }
+
+        return $capOut;
+    }
+
+    /**
+     * Smooth per-device latency + jitter (ms), seeded off the device id like the other
+     * synth generators - each device gets its own baseline and swing.
+     *
+     * @return array{0: float, 1: float}
+     */
+    private function synthPing(int $devId, float $t): array
+    {
+        $base = 2 + (($devId * 2654435761) % 23);                 // 2-24ms baseline
+        $amp = 1 + (($devId * 40503) % 6);                        // 1-6ms swing
+        $period = 30 + (($devId * 2246822519) % 60);              // 30-90s
+        $phase = (($devId * 3266489917) % 628) / 100.0;           // 0-6.28
+        $rtt = max(0.5, $base + $amp * sin($t / $period + $phase) + mt_rand(-80, 80) / 100);
+        $jitter = max(0.1, $amp / 3 + mt_rand(-30, 30) / 100);
+
+        return [round($rtt, 1), round($jitter, 1)];
     }
 
     /** Smooth per-interface oscillation (sine + jitter) so live graphs look organic. */
@@ -294,14 +404,7 @@ class DemoCommand extends Command
     /** @param list<array<string,mixed>> $rows */
     private function recordMetricHistory(array $rows): void
     {
-        if ($rows === []) {
-            return;
-        }
-        try {
-            DB::table('device_metric_samples')->insert($rows);
-        } catch (\Throwable) {
-            // best-effort - a missing partition must never break a tick
-        }
+        $this->insertSamples('device_metric_samples', $rows);
     }
 
     /** Small per-tick chance to flap one device up<->down for liveliness. */
@@ -345,13 +448,30 @@ class DemoCommand extends Command
     /** @param list<array<string,mixed>> $rows */
     private function recordHistory(array $rows): void
     {
+        $this->insertSamples('interface_samples', $rows);
+    }
+
+    /**
+     * Insert history rows; on failure (usually a missing day partition - the daemon
+     * outlives the start-of-run create-ahead window) roll the partitions forward and
+     * retry once. Still best-effort overall: history must never break a tick.
+     *
+     * @param list<array<string,mixed>> $rows
+     */
+    private function insertSamples(string $table, array $rows): void
+    {
         if ($rows === []) {
             return;
         }
         try {
-            DB::table('interface_samples')->insert($rows);
+            DB::table($table)->insert($rows);
         } catch (\Throwable) {
-            // best-effort - a missing partition must never break a tick
+            try {
+                app(ManageHistoryPartitions::class)();
+                DB::table($table)->insert($rows);
+            } catch (\Throwable) {
+                // best-effort
+            }
         }
     }
 }

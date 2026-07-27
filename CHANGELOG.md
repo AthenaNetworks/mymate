@@ -13,6 +13,23 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Sales demo: charts are full from the first click.** `mymate:demo --seed` now backfills 24 hours
+  of per-minute history for every mock device - throughput, CPU/memory/temperature, and ping
+  latency/loss/jitter - so the device inspector never shows "No history yet" on the demo. The
+  backfill uses the same generators as the live simulator (both keyed on wall-clock time), so the
+  simulator's live samples continue the backfilled series without a visible seam.
+- **Sales demo: synthetic ping data.** The simulator now records latency/loss/jitter each tick
+  (down devices report 100% loss and no RTT, mirroring the real ping loop), so the inspector's
+  Latency and Loss sparklines are populated and live-update. See [deploy/demo/README.md](deploy/demo/README.md).
+
+### Fixed
+- **Sales demo: history no longer silently goes stale.** The demo simulator created history
+  partitions only once at startup, so once the daemon outlived the create-ahead window (a few
+  days) every history insert failed silently and the charts froze. History inserts now roll the
+  partitions forward and retry when they hit a missing partition, so a long-running simulator
+  keeps recording indefinitely.
+
 ## [1.4.0] - 2026-07-24
 
 ### Added
