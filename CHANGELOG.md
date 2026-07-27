@@ -24,6 +24,11 @@ of commit subjects.
   Latency and Loss sparklines are populated and live-update. See [deploy/demo/README.md](deploy/demo/README.md).
 
 ### Fixed
+- **Dropdown options are readable on a light-mode OS.** Every native select popup (Add device's
+  poll method/type/agent, list filters, settings, and so on) could render as a white list with
+  invisible white text when the browser/OS runs in light mode - the options inherited the app's
+  translucent control background, which popup surfaces can't composite. Options now get an
+  explicit solid dark surface, app-wide.
 - **Geo map no longer opens on an empty world view.** On the first visit, the geographic map
   could show a fully zoomed-out world with no device pins (working only on the second open):
   the Leaflet map is created once the map config loads, but the pin-drawing and

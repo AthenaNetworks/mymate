@@ -22,6 +22,20 @@
     color-scheme: dark;
 }
 
+/* Native <select> option popups. The app's controls sit on translucent backgrounds
+   (bg-white/[0.03]) which the OS/browser popup surface can't composite - on a
+   light-mode OS the list renders white while the options inherit the select's white
+   text, so they're invisible. `color-scheme: dark` alone doesn't recolour the option
+   rows in every engine; they need an explicit SOLID dark surface. */
+select option,
+select optgroup {
+    background-color: #101014;
+    color: #f4f4f5;
+}
+select option:disabled {
+    color: #71717a;
+}
+
 html,
 body,
 #app {
