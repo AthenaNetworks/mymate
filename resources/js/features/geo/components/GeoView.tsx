@@ -35,6 +35,12 @@ export function GeoView() {
     const geocode = useGeocode();
 
     const mapRef = useRef<L.Map | null>(null);
+    // Effects that draw on the map key off this, not mapRef: the map is created
+    // asynchronously (once the config query resolves), and by then the device list -
+    // usually cached from the topology view - has already settled, so ref-only
+    // consumers would never re-run and the first open would show an unfitted,
+    // pinless world map.
+    const [mapReady, setMapReady] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const markersRef = useRef<Map<number, L.Marker>>(new Map());
     const [placingId, setPlacingId] = useState<number | null>(null); // device awaiting a click-to-place
@@ -54,6 +60,7 @@ export function GeoView() {
         const map = L.map(containerRef.current, { center: [20, 0], zoom: 2, worldCopyJump: true });
         L.tileLayer(config.tile_url, { attribution: config.attribution, maxZoom: 19 }).addTo(map);
         mapRef.current = map;
+        setMapReady(true);
 
         // Click the map to drop the device currently being placed.
         map.on('click', (e: L.LeafletMouseEvent) => {
@@ -64,7 +71,7 @@ export function GeoView() {
             }
         });
 
-        return () => { map.remove(); mapRef.current = null; markersRef.current.clear(); };
+        return () => { map.remove(); mapRef.current = null; markersRef.current.clear(); setMapReady(false); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [config?.enabled]);
 
@@ -94,7 +101,7 @@ export function GeoView() {
             if (!seen.has(id)) { marker.remove(); markersRef.current.delete(id); }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [placed, isAdmin]);
+    }, [placed, isAdmin, mapReady]);
 
     // Fit to the placed devices the first time there are any.
     const fittedRef = useRef(false);
@@ -104,7 +111,7 @@ export function GeoView() {
         fittedRef.current = true;
         const bounds = L.latLngBounds(placed.map((d) => [d.latitude as number, d.longitude as number] as L.LatLngExpression));
         map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
-    }, [placed]);
+    }, [placed, mapReady]);
 
     async function placeByAddress(device: Device) {
         if (address.trim() === '') return;

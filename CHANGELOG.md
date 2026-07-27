@@ -24,6 +24,12 @@ of commit subjects.
   Latency and Loss sparklines are populated and live-update. See [deploy/demo/README.md](deploy/demo/README.md).
 
 ### Fixed
+- **Geo map no longer opens on an empty world view.** On the first visit, the geographic map
+  could show a fully zoomed-out world with no device pins (working only on the second open):
+  the Leaflet map is created once the map config loads, but the pin-drawing and
+  fit-to-devices steps only reacted to the device list - which was usually already cached -
+  so they had run (and done nothing) before the map existed. They now also re-run when the
+  map is created, so the first open drops the pins and zooms to them like every later open.
 - **Sales demo: history no longer silently goes stale.** The demo simulator created history
   partitions only once at startup, so once the daemon outlived the create-ahead window (a few
   days) every history insert failed silently and the charts froze. History inserts now roll the
