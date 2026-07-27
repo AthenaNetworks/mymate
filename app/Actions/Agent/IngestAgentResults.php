@@ -12,6 +12,7 @@ use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Services\Polling\RateCalculator;
 use App\Support\EngineLog;
+use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -103,7 +104,7 @@ class IngestAgentResults
         }
 
         if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
-            DeviceMetricsUpdated::dispatch($frames);
+            LiveBroadcast::send(new DeviceMetricsUpdated($frames));
         }
     }
 
@@ -135,7 +136,7 @@ class IngestAgentResults
             $device->status = $new;
             $device->last_change = now();
             $device->save();
-            DeviceStatusChanged::dispatch($device);
+            LiveBroadcast::send(new DeviceStatusChanged($device));
             $new === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
         }
     }
@@ -190,7 +191,7 @@ class IngestAgentResults
             foreach ($frames as $deviceId => $ifaceFrames) {
                 $devices[] = ['device_id' => $deviceId, 'status' => DeviceStatus::Up->value, 'interfaces' => $ifaceFrames];
             }
-            InterfaceUtilUpdated::dispatch($devices);
+            LiveBroadcast::send(new InterfaceUtilUpdated($devices));
         }
     }
 

@@ -4,7 +4,7 @@ namespace App\Events;
 
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -13,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
  * carries many devices' latest rtt/loss so the internet/upstream card updates live.
  * Mirrors DeviceMetricsUpdated but on the ping latency cadence (~once a minute).
  */
-class DeviceLatencyUpdated implements ShouldBroadcast
+class DeviceLatencyUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

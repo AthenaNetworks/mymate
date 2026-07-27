@@ -12,6 +12,7 @@ use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\AlertPolicy;
 use App\Models\Device;
+use App\Support\LiveBroadcast;
 use App\Models\Link;
 use App\Models\Map;
 use App\Models\Outage;
@@ -314,10 +315,10 @@ class DemoCommand extends Command
         $this->insertSamples('ping_samples', $pingSamples);
 
         if ($frames !== []) {
-            InterfaceUtilUpdated::dispatch($frames);
+            LiveBroadcast::send(new InterfaceUtilUpdated($frames));
         }
         if ($metricFrames !== []) {
-            DeviceMetricsUpdated::dispatch($metricFrames);
+            LiveBroadcast::send(new DeviceMetricsUpdated($metricFrames));
         }
 
         // Raise/resolve alerts for the current down devices (populates the Alerts view).
@@ -416,7 +417,7 @@ class DemoCommand extends Command
         $device = $devices->random();
         $newStatus = $device->status === DeviceStatus::Down ? DeviceStatus::Up : DeviceStatus::Down;
         $device->forceFill(['status' => $newStatus, 'last_change' => now()])->save();
-        DeviceStatusChanged::dispatch($device);
+        LiveBroadcast::send(new DeviceStatusChanged($device));
 
         // Mirror the real up/down path - open an outage on down, close it on recovery.
         $rec = app(RecordOutage::class);

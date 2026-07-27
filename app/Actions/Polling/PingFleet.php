@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Services\Ping\Pinger;
 use App\Services\Ping\PingSample;
 use App\Support\EngineLog;
+use App\Support\LiveBroadcast;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -52,7 +53,7 @@ class PingFleet
                 // Log the outage window: open on down, close on recovery.
                 $new === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
 
-                DeviceStatusChanged::dispatch($device);
+                LiveBroadcast::send(new DeviceStatusChanged($device));
                 $changed++;
             }
         }
@@ -113,7 +114,7 @@ class PingFleet
         }
 
         if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
-            DeviceLatencyUpdated::dispatch($frames);
+            LiveBroadcast::send(new DeviceLatencyUpdated($frames));
         }
     }
 }

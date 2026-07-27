@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\Link;
 use App\Models\NetworkInterface;
 use App\Support\EngineLog;
+use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -198,7 +199,7 @@ class PollInterfaces
             }
 
             if ($chunk !== [] && ($chunkCount + $n > $capCount || $chunkBytes + $bytes + self::WRAPPER_OVERHEAD_BYTES > $capBytes)) {
-                InterfaceUtilUpdated::dispatch($chunk);
+                LiveBroadcast::send(new InterfaceUtilUpdated($chunk));
                 $totalBytes += $chunkBytes + self::WRAPPER_OVERHEAD_BYTES;
                 $chunk = [];
                 $chunkCount = 0;
@@ -211,7 +212,7 @@ class PollInterfaces
         }
 
         if ($chunk !== []) {
-            InterfaceUtilUpdated::dispatch($chunk);
+            LiveBroadcast::send(new InterfaceUtilUpdated($chunk));
             $totalBytes += $chunkBytes + self::WRAPPER_OVERHEAD_BYTES;
         }
 

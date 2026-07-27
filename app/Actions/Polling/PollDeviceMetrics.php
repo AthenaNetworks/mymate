@@ -7,6 +7,7 @@ use App\Events\DeviceMetricsUpdated;
 use App\Models\Device;
 use App\Services\Polling\DeviceMetricsDriverFactory;
 use App\Support\EngineLog;
+use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -170,6 +171,6 @@ class PollDeviceMetrics
             return;
         }
 
-        DeviceMetricsUpdated::dispatch($frames);
+        LiveBroadcast::send(new DeviceMetricsUpdated($frames));
     }
 }

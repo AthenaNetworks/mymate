@@ -13,6 +13,17 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Redis no longer grows until it gets OOM-killed on large fleets.** The live map updates
+  (interface load, device metrics, up/down, latency) were queued for delivery; on a big fleet the
+  per-tick stream out-ran the worker draining it and piled up in Redis until the kernel killed
+  `redis-server` and took monitoring down with it. These ephemeral updates now broadcast inline, so
+  they never touch the queue - a delayed frame is stale anyway. As a backstop the packaged installs
+  now cap Redis memory (`maxmemory` at 40% of RAM, `allkeys-lru`), and Horizon keeps far less
+  completed-job history and ignores the routine poll jobs entirely. Nothing here is durable, so the
+  cap and the shorter history are safe. Apply the cap to an existing box now with
+  `redis-cli CONFIG SET maxmemory <~40% of RAM>` and `redis-cli CONFIG SET maxmemory-policy allkeys-lru`.
+
 ### Added
 - **Sales demo: charts are full from the first click.** `mymate:demo --seed` now backfills 24 hours
   of per-minute history for every mock device - throughput, CPU/memory/temperature, and ping

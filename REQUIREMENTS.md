@@ -53,6 +53,13 @@ the two problems large fleets hit with the stock Redis defaults: the RDB dump fi
 jobs, cache, sessions) is lost on a Redis restart, which is fine here - the poll loop re-populates,
 and nothing of record lives there.
 
+The packaged installs also set a **memory ceiling** (`maxmemory` at 40% of RAM, `maxmemory-policy
+allkeys-lru`) so Redis can never grow until the kernel OOM-kills it and takes monitoring down with
+it. Because nothing in Redis is durable, evicting under pressure is safe - the poll loop rebuilds
+its working set on the next tick. Live map updates (interface load, device metrics, up/down) are
+broadcast inline rather than queued, so a large fleet's per-tick update stream no longer piles up
+in Redis waiting to be delivered - the single biggest source of runaway Redis memory before.
+
 The `.deb`/LXC installs apply this automatically; the Docker Compose Redis service is started with
 the same flags. If you run your own Redis, the equivalent settings are:
 
@@ -60,10 +67,13 @@ the same flags. If you run your own Redis, the equivalent settings are:
 save ""
 appendonly no
 stop-writes-on-bgsave-error no
+maxmemory <~40% of RAM>
+maxmemory-policy allkeys-lru
 ```
 
-You can additionally cap it with `maxmemory` if you want a hard ceiling, but note eviction can drop
-queued jobs under pressure (recoverable, but avoid it if you can just give it enough RAM).
+If Redis memory ever climbs toward the ceiling, check for a queue backlog (`redis-cli INFO
+keyspace`, and the `*queues*` list lengths) - it usually means the poll workers can't keep up, so
+raise `mymate.poll.shards` and the `poll` worker count rather than just giving Redis more RAM.
 
 ## CPU and memory
 

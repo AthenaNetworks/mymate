@@ -111,13 +111,16 @@ return [
     |
     */
 
+    // Kept deliberately short. On a large fleet the poll loop runs a high, steady rate of jobs, so
+    // holding an hour of completed/recent metadata (plus a week of everything else) is a lot of
+    // Redis for dashboard history nobody reads. Failures are still kept for a few days.
     'trim' => [
-        'recent' => 60,
-        'pending' => 60,
-        'completed' => 60,
-        'recent_failed' => 10080,
-        'failed' => 10080,
-        'monitored' => 10080,
+        'recent' => 15,
+        'pending' => 15,
+        'completed' => 15,
+        'recent_failed' => 4320,
+        'failed' => 4320,
+        'monitored' => 4320,
     ],
 
     /*
@@ -131,8 +134,15 @@ return [
     |
     */
 
+    // The recurring poll jobs run constantly and would otherwise dominate the completed/recent
+    // lists (and the Redis they cost) with routine, uninteresting successes. Silence them so
+    // Horizon stops recording their completed metadata - they still show up if they FAIL.
     'silenced' => [
-        // App\Jobs\ExampleJob::class,
+        \App\Jobs\PingSweepJob::class,
+        \App\Jobs\PollInterfacesBatchJob::class,
+        \App\Jobs\PollDeviceMetricsBatchJob::class,
+        \App\Jobs\PollSensorsBatchJob::class,
+        \App\Jobs\EvaluateAlertsJob::class,
     ],
 
     'silenced_tags' => [

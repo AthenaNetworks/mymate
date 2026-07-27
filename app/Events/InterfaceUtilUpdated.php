@@ -4,7 +4,7 @@ namespace App\Events;
 
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
  * mean thousands of WS messages. Broadcast every tick (unlike status, which is
  * change-only). The frontend colour ramp folds these frames onto edges.
  */
-class InterfaceUtilUpdated implements ShouldBroadcast
+class InterfaceUtilUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

@@ -60,8 +60,21 @@ services:
   redis:
     image: redis:7
     # Transient broker only (queues, cache, broadcasting) - persistence off so it can't fill the
-    # volume with an RDB dump or block writes on a failed save (GitHub #16).
-    command: ["redis-server", "--save", "", "--appendonly", "no", "--stop-writes-on-bgsave-error", "no"]
+    # volume with an RDB dump or block writes on a failed save (GitHub #16), and a memory ceiling
+    # so a runaway can't OOM the host; nothing here is durable, so allkeys-lru eviction is safe.
+    # Raise MYMATE_REDIS_MAXMEMORY for very large fleets.
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+      - "--stop-writes-on-bgsave-error"
+      - "no"
+      - "--maxmemory"
+      - "${MYMATE_REDIS_MAXMEMORY:-1gb}"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
     restart: unless-stopped
 
 volumes:

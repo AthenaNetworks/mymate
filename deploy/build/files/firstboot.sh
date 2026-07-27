@@ -31,12 +31,21 @@ fi
 
 # 1b. Redis is a transient broker only (queues, cache, broadcasting) - disable persistence so it
 # can't fill the disk with its RDB dump or spike memory (redis-check-rdb), and never block writes
-# on a failed save (GitHub #16). Best-effort; runs here too since the template may have been built
-# with redis not running, so the postinst couldn't persist it.
+# on a failed save (GitHub #16). Also cap its memory (40% of RAM, floor 256MB) so a runaway can't
+# OOM-kill redis-server and take monitoring down - nothing here is durable, so allkeys-lru eviction
+# under pressure is safe. Best-effort; runs here too since the template may have been built with
+# redis not running, so the postinst couldn't persist it.
 if command -v redis-cli >/dev/null 2>&1; then
     redis-cli CONFIG SET save "" >/dev/null 2>&1 || true
     redis-cli CONFIG SET appendonly no >/dev/null 2>&1 || true
     redis-cli CONFIG SET stop-writes-on-bgsave-error no >/dev/null 2>&1 || true
+    mm_kb=$(awk '/^MemTotal:/{print int($2*40/100)}' /proc/meminfo 2>/dev/null || echo "")
+    if [ -n "$mm_kb" ] && [ "$mm_kb" -gt 262144 ]; then
+        redis-cli CONFIG SET maxmemory "${mm_kb}kb" >/dev/null 2>&1 || true
+    else
+        redis-cli CONFIG SET maxmemory 256mb >/dev/null 2>&1 || true
+    fi
+    redis-cli CONFIG SET maxmemory-policy allkeys-lru >/dev/null 2>&1 || true
     redis-cli CONFIG REWRITE >/dev/null 2>&1 || true
 fi
 
