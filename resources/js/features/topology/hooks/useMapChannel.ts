@@ -40,8 +40,10 @@ export function useMapChannel(
                     prev,
             );
 
-            // Notify only on a real flip (skip the first unknown->up settle if you prefer).
-            if (before && before.status !== e.status) {
+            // Notify only on a real up<->down flip. Skip the settle out of `unknown` (a fresh
+            // device, or the first sweep after a restart), which on a large fleet would fire a
+            // notification for every device at once.
+            if (before && before.status !== e.status && before.status !== 'unknown') {
                 onStatus?.({ id: e.id, name: before.name, status: e.status });
             }
         });
