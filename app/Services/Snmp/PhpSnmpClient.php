@@ -98,7 +98,12 @@ class PhpSnmpClient implements SnmpClient
         return str_contains($e, 'no such object')
             || str_contains($e, 'no such instance')
             || str_contains($e, 'no more variables left') // "...past the end of the MIB tree"
-            || str_contains($e, 'end of mib');
+            || str_contains($e, 'end of mib')
+            // SNMPv1 has no noSuchObject/noSuchInstance exceptions - the agent reports an absent
+            // OID with the noSuchName error instead. Same meaning, so treat it the same way,
+            // otherwise one unsupported OID sinks the whole metric read on every v1-only device.
+            || str_contains($e, 'no such variable name')
+            || str_contains($e, 'nosuchname');
     }
 
     /**

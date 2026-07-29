@@ -48,6 +48,11 @@ class PhpSnmpClientTest extends TestCase
         $this->assertTrue($isAbsence('No Such Instance currently exists at this OID'));
         $this->assertTrue($isAbsence('No more variables left in this MIB View (It is past the end of the MIB tree)'));
 
+        // SNMPv1 has no noSuchObject/noSuchInstance exceptions - it reports absence as noSuchName.
+        // v1-only agents (airOS and much other WISP CPE) only ever produce these phrasings.
+        $this->assertTrue($isAbsence("Error in packet at '.1.3.6.1.4.1.14988.1.1.1.3.1': No such variable name in this MIB."));
+        $this->assertTrue($isAbsence('noSuchName'));
+
         // Genuine failures - must propagate so the device is isolated.
         $this->assertFalse($isAbsence('No response from 10.0.0.1'));
         $this->assertFalse($isAbsence('Timeout'));
