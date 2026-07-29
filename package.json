@@ -3,8 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vite build",
-        "dev": "vite"
+        "build": "sh deploy/build/vite-build.sh",
+        "dev": "vite",
+        "build:unsafe": "vite build"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
