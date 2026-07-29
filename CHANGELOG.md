@@ -35,6 +35,15 @@ of commit subjects.
   Latency and Loss sparklines are populated and live-update. See [deploy/demo/README.md](deploy/demo/README.md).
 
 ### Fixed
+- **Ping monitoring survives the sharding upgrade.** After deploying the sharded ping sweep
+  (1.4.0), a still-running pre-upgrade dispatcher (`mymate:loop`) kept queueing old-format
+  sweep jobs whose payloads lack the new shard fields - deserialisation skips the constructor,
+  so every sweep crashed on an uninitialised property and up/down status, live latency, and
+  ping history all silently froze until the daemons were restarted. Old-format jobs now fall
+  back to a whole-fleet sweep. (As always, restart `mymate-loop`/Horizon after upgrading.)
+- **Sharded sweeps record complete latency history.** With `ping.shards` > 1, the latency
+  history write-throttle was global, so only the first shard to sweep each interval recorded
+  history - devices in other shards got sparse, random samples. The throttle is now per shard.
 - **Dropdown options are readable on a light-mode OS.** Every native select popup (Add device's
   poll method/type/agent, list filters, settings, and so on) could render as a white list with
   invisible white text when the browser/OS runs in light mode - the options inherited the app's

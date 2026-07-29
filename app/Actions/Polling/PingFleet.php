@@ -92,7 +92,7 @@ class PingFleet
             }
         }
 
-        $this->recordLatency($devices, $samples);
+        $this->recordLatency($devices, $samples, $deviceIds);
 
         EngineLog::debug('ping: sweep complete', [
             'total' => $devices->count(),
@@ -110,15 +110,21 @@ class PingFleet
      *
      * @param  Collection<int, Device>  $devices
      * @param  array<string, PingSample>  $samples
+     * @param  list<int>|null  $deviceIds  the shard slice this sweep covered (null = whole fleet)
      */
-    private function recordLatency(Collection $devices, array $samples): void
+    private function recordLatency(Collection $devices, array $samples, ?array $deviceIds): void
     {
         $interval = max(5, (int) config('mymate.ping.history_interval', 60));
-        $last = (int) Cache::get(self::LATENCY_KEY, 0);
+        // Throttle PER SHARD SLICE, not globally: with ping sharding each slice sweeps
+        // in its own job, and a single global key would let only the first-arriving
+        // shard record history each interval - every other shard's devices would get
+        // sparse, random samples.
+        $key = self::LATENCY_KEY.($deviceIds === null ? '' : '.'.crc32(implode(',', $deviceIds)));
+        $last = (int) Cache::get($key, 0);
         if (now()->timestamp - $last < $interval) {
             return;
         }
-        Cache::put(self::LATENCY_KEY, now()->timestamp, now()->addHour());
+        Cache::put($key, now()->timestamp, now()->addHour());
 
         $ts = now();
         $rows = [];

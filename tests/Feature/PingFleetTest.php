@@ -127,6 +127,39 @@ class PingFleetTest extends TestCase
         $this->assertSame(1, Outage::where('device_id', $device->id)->count()); // no duplicate
     }
 
+    public function test_each_shard_records_latency_history_in_the_same_interval(): void
+    {
+        $a = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Up]);
+        $b = Device::factory()->create(['mgmt_ip' => '10.0.0.2', 'status' => DeviceStatus::Up]);
+        $this->fakePinger(['10.0.0.1', '10.0.0.2']);
+
+        // Two sharded sweeps back-to-back, well inside ping.history_interval. A global
+        // write-throttle would let only the first shard record history - the second
+        // shard's devices would silently get no latency series.
+        app(PingFleet::class)([$a->id]);
+        app(PingFleet::class)([$b->id]);
+
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $a->id]);
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $b->id]);
+    }
+
+    public function test_sweep_job_tolerates_payloads_from_a_pre_sharding_deploy(): void
+    {
+        $device = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Unknown]);
+        $this->fakePinger(['10.0.0.1']);
+
+        // A job serialized by pre-sharding code deserializes WITHOUT running the
+        // constructor, leaving the typed deviceIds/shard properties uninitialized.
+        // Every accessor must fall back instead of throwing (which froze all ping
+        // monitoring after the sharding deploy until the dispatcher was restarted).
+        $job = (new \ReflectionClass(\App\Jobs\PingSweepJob::class))->newInstanceWithoutConstructor();
+        $job->middleware();
+        $job->handle(app(PingFleet::class));
+        $job->failed(new \RuntimeException('x'));
+
+        $this->assertSame(DeviceStatus::Up, $device->refresh()->status); // swept the whole fleet
+    }
+
     public function test_skips_devices_with_monitoring_disabled(): void
     {
         Event::fake([DeviceStatusChanged::class]);

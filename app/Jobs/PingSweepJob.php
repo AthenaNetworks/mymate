@@ -28,9 +28,16 @@ class PingSweepJob implements ShouldQueue
         $this->onQueue('ping');
     }
 
+    // NOTE all property reads below use `??` (isset-safe): a job serialized by a
+    // pre-sharding deploy - or by a still-running old `mymate:loop` - has neither
+    // property in its payload, and unserialization skips the constructor, so a direct
+    // read of an uninitialized typed property throws and kills every sweep until the
+    // dispatcher is restarted. With the guards, an old-style payload degrades to the
+    // original whole-fleet sweep instead.
+
     public function handle(PingFleet $pingFleet): void
     {
-        $pingFleet($this->deviceIds);
+        $pingFleet($this->deviceIds ?? null);
     }
 
     /** @return array<int, object> */
@@ -41,13 +48,13 @@ class PingSweepJob implements ShouldQueue
         // a wedged sweep can't hold the lock forever.
         $expire = max(30, (int) config('mymate.ping.process_timeout', 30) + 5);
 
-        return [(new WithoutOverlapping('ping-sweep-'.$this->shard))->dontRelease()->expireAfter($expire)];
+        return [(new WithoutOverlapping('ping-sweep-'.($this->shard ?? 0)))->dontRelease()->expireAfter($expire)];
     }
 
     public function failed(Throwable $e): void
     {
         EngineLog::error('ping: sweep job failed', [
-            'shard' => $this->shard,
+            'shard' => $this->shard ?? 0,
             'exception' => $e::class,
             'error' => $e->getMessage(),
         ]);
