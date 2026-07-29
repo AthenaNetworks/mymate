@@ -38,6 +38,16 @@ class ReadOspf
             try {
                 $neighbors = self::countFull($conn->query('/routing/ospf/neighbor/print'));
                 $costs = self::costsByInterface($conn->query('/routing/ospf/interface/print'));
+
+                // Some RouterOS 7.x versions (seen on 7.16-7.20, GitHub #22) don't report the
+                // effective cost on the running OSPF interface, only on the configuration
+                // template - so fill any gaps from there. Guarded on its own: RouterOS 6 has no
+                // interface-template command, and the running print already gave us its costs.
+                try {
+                    $costs = self::mergeTemplateCosts($costs, $conn->query('/routing/ospf/interface-template/print'));
+                } catch (\Throwable) {
+                    // no template command (v6) - keep the running-interface costs as-is.
+                }
             } finally {
                 $conn->close();
             }
@@ -84,5 +94,33 @@ class ReadOspf
         }
 
         return $out;
+    }
+
+    /**
+     * Fill missing per-interface costs from the OSPF interface-template (RouterOS 7). A template
+     * carries the configured `cost` and an `interfaces` list of the ports it applies to; a running
+     * value already found wins over the template. Best-effort, so a template with no explicit
+     * interface list (applies by network/area) is simply skipped.
+     *
+     * @param  array<string, int>  $costs
+     * @param  array<int, array<string, mixed>>  $rows
+     * @return array<string, int>
+     */
+    public static function mergeTemplateCosts(array $costs, array $rows): array
+    {
+        foreach ($rows as $row) {
+            if (! isset($row['cost']) || ! is_numeric($row['cost'])) {
+                continue;
+            }
+            $cost = (int) $row['cost'];
+            $names = array_filter(array_map('trim', explode(',', (string) ($row['interfaces'] ?? ''))));
+            foreach ($names as $name) {
+                if (! isset($costs[$name])) {
+                    $costs[$name] = $cost; // running-interface value wins
+                }
+            }
+        }
+
+        return $costs;
     }
 }

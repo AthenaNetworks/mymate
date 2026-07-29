@@ -89,6 +89,27 @@ class RouterOsThroughputDriverTest extends TestCase
         $this->assertArrayHasKey(10, $samples);
     }
 
+    public function test_sample_captures_oper_status_from_the_running_flag(): void
+    {
+        // ether2 has a cable pulled: running=false, and monitor-traffic omits it entirely.
+        $client = new FakeRouterOsClient(replies: [
+            '/interface/print' => [
+                ['.id' => '*1', 'name' => 'ether1', 'type' => 'ether', 'running' => 'true'],
+                ['.id' => '*A', 'name' => 'ether2', 'type' => 'ether', 'running' => 'false'],
+            ],
+            '/interface/monitor-traffic' => [
+                ['name' => 'ether1', 'rx-bits-per-second' => '1000000', 'tx-bits-per-second' => '500000'],
+                // ether2 not reported (down) - the driver must still record it as down.
+            ],
+        ]);
+
+        $samples = (new RouterOsThroughputDriver($client))->sample($this->routerOsDevice());
+
+        $this->assertTrue($samples[1]->operUp);         // ether1 up
+        $this->assertFalse($samples[10]->operUp);       // ether2 down, even though monitor-traffic skipped it
+        $this->assertSame(0.0, $samples[10]->inBps);
+    }
+
     public function test_missing_routeros_credential_throws(): void
     {
         $credential = Credential::factory()->create(); // snmp type, no username

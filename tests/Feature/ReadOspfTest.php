@@ -34,4 +34,21 @@ class ReadOspfTest extends TestCase
 
         $this->assertSame(['ether4' => 1, 'ether6' => 10], $costs);
     }
+
+    public function test_template_costs_fill_gaps_but_running_wins(): void
+    {
+        // Running print gave us ether4 only (GitHub #22: some 7.x omit the rest); the template
+        // carries the configured cost for the ports it lists.
+        $costs = ReadOspf::mergeTemplateCosts(
+            ['ether4' => 1],
+            [
+                ['interfaces' => 'ether4,ether6', 'cost' => '30'], // ether4 already known -> kept; ether6 filled
+                ['interfaces' => 'ether8', 'cost' => '20'],
+                ['cost' => '5'],                                    // no interface list -> skipped
+                ['interfaces' => 'ether9'],                         // no cost -> skipped
+            ],
+        );
+
+        $this->assertSame(['ether4' => 1, 'ether6' => 30, 'ether8' => 20], $costs);
+    }
 }

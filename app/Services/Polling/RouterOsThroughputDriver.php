@@ -58,12 +58,17 @@ class RouterOsThroughputDriver implements ThroughputDriver
         $conn = $this->client->open($this->target($device));
 
         try {
-            // name -> ifIndex map (fresh, so monitor-traffic targets current names).
+            // name -> ifIndex map (fresh, so monitor-traffic targets current names), plus each
+            // port's oper status from `running` (false = link down / admin-disabled). SNMP carries
+            // ifOperStatus for free; the API doesn't, so read it here or the per-interface down
+            // alert (GitHub #22) never sees a RouterOS-polled port go down.
             $ifIndexByName = [];
+            $operByName = [];
             foreach ($conn->query('/interface/print') as $row) {
                 $ifIndex = $this->ifIndex($row);
                 if ($ifIndex !== null && ($row['name'] ?? '') !== '') {
                     $ifIndexByName[$row['name']] = $ifIndex;
+                    $operByName[$row['name']] = $this->boolFlag($row['running'] ?? null);
                 }
             }
             if ($ifIndexByName === []) {
@@ -85,13 +90,33 @@ class RouterOsThroughputDriver implements ThroughputDriver
                 $samples[$ifIndexByName[$name]] = InterfaceSample::rates(
                     (float) ($reply['rx-bits-per-second'] ?? 0),
                     (float) ($reply['tx-bits-per-second'] ?? 0),
+                    $operByName[$name] ?? null,
                 );
+            }
+
+            // monitor-traffic can skip a down port, so it would never land in $samples and its
+            // oper_status would go stale. Record the down ones explicitly (zero throughput) so
+            // they're seen as down.
+            foreach ($ifIndexByName as $name => $ifIndex) {
+                if (! isset($samples[$ifIndex]) && ($operByName[$name] ?? null) === false) {
+                    $samples[$ifIndex] = InterfaceSample::rates(0.0, 0.0, false);
+                }
             }
 
             return $samples;
         } finally {
             $conn->close();
         }
+    }
+
+    /** Parse a RouterOS API boolean field ("true"/"false", older "yes"/"no") to a tri-state. */
+    private function boolFlag(mixed $value): ?bool
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     }
 
     /**
