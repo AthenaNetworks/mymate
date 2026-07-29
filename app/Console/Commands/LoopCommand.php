@@ -7,10 +7,10 @@ use App\Enums\PollMethod;
 use App\Jobs\DiscoverInterfacesJob;
 use App\Jobs\EvaluateAlertsJob;
 use App\Jobs\ManageHistoryPartitionsJob;
-use App\Jobs\PingSweepJob;
 use App\Jobs\ScanSubnetJob;
 use App\Models\Device;
 use App\Models\Subnet;
+use App\Services\Polling\PingDispatcher;
 use App\Services\Polling\PollDispatcher;
 use App\Support\EngineLog;
 use App\Support\Settings;
@@ -57,10 +57,10 @@ class LoopCommand extends Command
         }
 
         if ($this->option('once')) {
-            PingSweepJob::dispatch();
+            $p = app(PingDispatcher::class)->dispatch();
             $n = $this->dispatchPoll();
             $m = $this->dispatchMetrics();
-            $this->info("Dispatched one ping sweep + {$n} poll + {$m} metrics batch job(s).");
+            $this->info("Dispatched {$p} ping + {$n} poll + {$m} metrics batch job(s).");
 
             return self::SUCCESS;
         }
@@ -100,7 +100,7 @@ class LoopCommand extends Command
             $scanCheckInterval = max(5, $settings->getInt('discovery.check_interval', 30));
             $historyInterval = max(60, $settings->getInt('history.maintain_interval', 3600));
 
-            PingSweepJob::dispatch();
+            app(PingDispatcher::class)->dispatch();
             $this->heartbeat(); // liveness signal for the Settings system-status panel
 
             $now = microtime(true);

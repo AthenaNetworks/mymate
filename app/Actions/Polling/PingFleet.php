@@ -28,11 +28,21 @@ class PingFleet
 
     public function __construct(private Pinger $pinger, private RecordOutage $outages) {}
 
-    public function __invoke(): int
+    /**
+     * @param  list<int>|null  $deviceIds  ping only this slice (one shard); null = the whole
+     *                                      fleet in a single sweep (small installs / the default).
+     *                                      A single fping over a very large fleet blows past the
+     *                                      process timeout, so PingDispatcher shards the fleet and
+     *                                      calls this once per shard - each sweep stays small and
+     *                                      the shards run in parallel across the ping workers.
+     */
+    public function __invoke(?array $deviceIds = null): int
     {
         // Skip monitoring-paused devices (monitored=false -> mock/demo) and agent-assigned
         // devices (agent_id set -> pinged by their remote agent, not from here).
-        $devices = Device::where('monitored', true)->whereNull('agent_id')->get();
+        $devices = Device::where('monitored', true)->whereNull('agent_id')
+            ->when($deviceIds !== null, fn ($q) => $q->whereIn('id', $deviceIds))
+            ->get();
 
         if ($devices->isEmpty()) {
             return 0;
