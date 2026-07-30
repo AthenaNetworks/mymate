@@ -32,6 +32,9 @@ class UpdateDeviceRequest extends FormRequest
             // Geographic position (geo overlay). Both or neither; setting them marks the source manual.
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            // Site assignment through the editor. Setting it marks the source manual so a
+            // re-import or nearest-site pass never moves it (see UpdateDevice).
+            'site_id' => ['sometimes', 'nullable', 'integer', 'exists:sites,id'],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
             // Icon override: a named glyph key + a hex colour (both nullable = auto).
             'icon' => ['sometimes', 'nullable', 'string', 'max:40'],

@@ -275,6 +275,11 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');
     Route::post('alert-events/{alertEvent}/ack', [AlertEventController::class, 'ack'])->name('alert-events.ack');
 
+    // Sites: physical locations (towers, fiber cabinets, POPs) devices sit at. Devices
+    // inherit their site's coordinates on the geo map, so a whole tower places at once.
+    Route::apiResource('sites', \App\Http\Controllers\Api\SiteController::class)
+        ->only(['index', 'show', 'store', 'update', 'destroy']);
+
     // Auto-discovery: authorized scan ranges + the candidate review queue.
     Route::apiResource('subnets', SubnetController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::post('subnets/{subnet}/scan', [SubnetController::class, 'scan'])

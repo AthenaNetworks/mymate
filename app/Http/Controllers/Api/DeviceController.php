@@ -25,9 +25,12 @@ class DeviceController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
-        $devices = Device::with('parent')->orderBy('name')->get();
-        // Resolve effective geo coordinates (own, else inherited from the uplink parent) in-memory
-        // for the whole set, so the geo map can place CPE that have no coordinates of their own.
+        // `site` is eager-loaded so DeviceGeo can read site coordinates without an N+1
+        // across the whole fleet.
+        $devices = Device::with(['parent', 'site'])->orderBy('name')->get();
+        // Resolve effective geo coordinates (own, else the site's, else inherited from the uplink
+        // parent) in-memory for the whole set, so the geo map can place CPE that have no
+        // coordinates of their own.
         \App\Support\DeviceGeo::apply($devices);
 
         return DeviceResource::collection($devices);
@@ -42,12 +45,20 @@ class DeviceController extends Controller
 
     public function show(Device $device): DeviceResource
     {
-        return new DeviceResource($device->loadMissing('parent'));
+        $device->loadMissing('parent', 'site');
+        // Single-device responses can still resolve own-or-site coordinates; only uplink
+        // inheritance needs the full set and stays a list-endpoint concern.
+        \App\Support\DeviceGeo::apply([$device]);
+
+        return new DeviceResource($device);
     }
 
     public function update(UpdateDeviceRequest $request, Device $device, UpdateDevice $updateDevice): DeviceResource
     {
-        return new DeviceResource($updateDevice($device, $request->validated())->loadMissing('parent'));
+        $device = $updateDevice($device, $request->validated())->loadMissing('parent', 'site');
+        \App\Support\DeviceGeo::apply([$device]);
+
+        return new DeviceResource($device);
     }
 
     public function updatePosition(UpdateDevicePositionRequest $request, Device $device, UpdateDevicePosition $updatePosition): DeviceResource

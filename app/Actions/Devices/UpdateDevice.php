@@ -15,6 +15,12 @@ class UpdateDevice
             $data['geo_source'] = ($data['latitude'] ?? null) !== null && ($data['longitude'] ?? null) !== null ? 'manual' : null;
         }
 
+        // Assigning (or clearing) a site through the editor is a manual decision - stamp the
+        // source so an import or nearest-site pass never overrides the operator.
+        if (array_key_exists('site_id', $data)) {
+            $data['site_source'] = $data['site_id'] !== null ? 'manual' : null;
+        }
+
         $device->update($data);
 
         return $device;

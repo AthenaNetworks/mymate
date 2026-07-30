@@ -33,6 +33,7 @@ class Device extends Model
     protected $fillable = [
         'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'fail_streak', 'map_x', 'map_y', 'latitude', 'longitude', 'geo_source',
+        'site_id', 'site_source',
         'device_type', 'icon', 'icon_color', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
@@ -109,6 +110,20 @@ class Device extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class);
+    }
+
+    /**
+     * The physical location this device sits at, or null when it isn't assigned to one.
+     *
+     * The site's coordinates reach the geo map through DeviceGeo::resolve at read time rather
+     * than being copied into the device columns on assignment. Writing the site's coordinates
+     * onto every device would make a site that moves (a corrected survey, a rebuild) leave
+     * thousands of devices behind at the old position, and would make "has this device been
+     * placed itself?" unanswerable.
+     */
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     /** The upstream device this one depends on (drives the hierarchy + inspector). */
