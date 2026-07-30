@@ -15,8 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  * regardless of whether the UI still shows the control.
  *
  * Runs after `auth:sanctum`, so `user()` is present. Admins bypass entirely. The only
- * write a non-admin keeps is changing *their own* password (a self-service action, not a
- * change to the monitored fleet).
+ * writes a non-admin keeps are changing *their own* password (a self-service action, not
+ * a change to the monitored fleet) and the OPERATOR_ACTION_ROUTES below (harmless writes
+ * that never touch the fleet's config either).
  */
 class RestrictWritesToAdmins
 {
@@ -26,6 +27,14 @@ class RestrictWritesToAdmins
     /** Route names a non-admin may still POST/PUT to (self-service only). */
     private const SELF_SERVICE_ROUTES = ['account.password.update'];
 
+    /**
+     * Route names a non-admin may still POST/DELETE to because the action is harmless:
+     * it can only affect the requesting operator's own view, never the monitored fleet's
+     * config. Live trace start/stop is the first example - the target is locked to the
+     * device's own mgmt IP, so there's nothing here for a viewer to break.
+     */
+    private const OPERATOR_ACTION_ROUTES = ['devices.trace.start', 'devices.trace.stop'];
+
     public function handle(Request $request, Closure $next): Response
     {
         $isWrite = ! in_array($request->getMethod(), self::SAFE_METHODS, true);
@@ -33,6 +42,7 @@ class RestrictWritesToAdmins
         if ($isWrite
             && ! $request->user()?->isAdmin()
             && ! $request->routeIs(self::SELF_SERVICE_ROUTES)
+            && ! $request->routeIs(self::OPERATOR_ACTION_ROUTES)
         ) {
             abort(403, 'Read-only operator - an administrator must make this change.');
         }

@@ -9,9 +9,12 @@ own for package names.
 ## What you need
 
 ```bash
-sudo apt-get install -y snmp postgresql redis-server composer \
+sudo apt-get install -y snmp mtr-tiny postgresql redis-server composer \
   php8.4-cli php8.4-pgsql php8.4-redis php8.4-snmp php8.4-mbstring php8.4-xml php8.4-bcmath php8.4-curl php8.4-intl
 ```
+
+`mtr-tiny` is what the device inspector's Trace button runs (`/usr/bin/mtr --raw`). The
+package's `mtr-packet` helper already carries `cap_net_raw`, so there's nothing to setcap.
 
 You also need Node 20 or newer (the NodeSource repo is the easy way to get it). On Debian 13
 the `sockets`, `pcntl` and `posix` extensions are already part of `php8.4-cli`, so there's

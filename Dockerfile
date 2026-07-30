@@ -41,10 +41,12 @@ FROM composer:2 AS composer
 FROM php:8.4-fpm-bookworm AS runtime
 
 # The servers we run under supervisor (openssl, for the self-signed HTTPS cert, is already
-# in the base image).
+# in the base image). mtr-tiny backs the live device trace - the distro package is fine
+# here (unlike fping we need no particular version), and its mtr-packet helper ships with
+# cap_net_raw so traces work without extra privileges.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        nginx supervisor tini postgresql-client procps libcap2-bin ca-certificates git \
+        nginx supervisor tini postgresql-client procps libcap2-bin ca-certificates git mtr-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 # PHP extensions via the maintained installer - it pulls the right C libraries, builds redis
