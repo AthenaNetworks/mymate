@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -25,6 +25,7 @@ import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddLinkDialog } from './LinkBinderDialog';
 import { DeviceDialog } from '../../devices/components/DeviceDialog';
 import { ChartModal } from './ChartModal';
+import { TraceModal } from './TraceModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
 import { ConfirmDialog } from '../../../components/Dialog';
@@ -484,6 +485,7 @@ export function DeviceInspector() {
     const [deletingLink, setDeletingLink] = useState<{ id: number; label: string } | null>(null);
     const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
     const [chartExpanded, setChartExpanded] = useState(false);
+    const [tracing, setTracing] = useState(false);
     const activeMapId = useActiveMapId();
     const { data: mapDetail } = useMap(activeMapId);
     const addToMap = useAddDeviceToMap();
@@ -623,6 +625,14 @@ export function DeviceInspector() {
                 <a href={`ssh://${device.mgmt_ip}`} className={actionBtn}>
                     <Terminal weight="light" className="h-3.5 w-3.5" /> SSH
                 </a>
+                {/* Path trace from the MyMate server to this device - read-only, so every operator gets it. */}
+                <button
+                    onClick={() => setTracing(true)}
+                    title="Live hop-by-hop trace from this server to the device (MTR)"
+                    className={actionBtn}
+                >
+                    <Path weight="light" className="h-3.5 w-3.5" /> Trace
+                </button>
                 {isAdmin && (
                     <button
                         onClick={doUpgrade}
@@ -862,6 +872,16 @@ export function DeviceInspector() {
                     deviceName={device.name}
                     hasSpeed={allHaveSpeed}
                     onClose={() => setChartExpanded(false)}
+                />
+            )}
+
+            {/* Live MTR trace to this device's mgmt IP; the run is stopped when this closes. */}
+            {tracing && (
+                <TraceModal
+                    deviceId={device.id}
+                    deviceName={device.name}
+                    targetIp={device.mgmt_ip}
+                    onClose={() => setTracing(false)}
                 />
             )}
 
