@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Geo map: devices inherit their uplink's location (GitHub #21).** A device with no coordinates
+  of its own now falls back to the nearest ancestor up its uplink (parent) chain, so CPE behind a
+  placed tower or AP appear on the geographic map automatically without geocoding every endpoint.
 - **Granular access: restrict operators to specific maps (GitHub #28).** On top of the admin /
   read-only split, an operator can now be marked "restricted" and granted specific maps. They then
   see only those maps (and their sub-maps) and the devices and links on them - everything else,
