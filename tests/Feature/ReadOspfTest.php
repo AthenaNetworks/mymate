@@ -35,6 +35,19 @@ class ReadOspfTest extends TestCase
         $this->assertSame(['ether4' => 1, 'ether6' => 10], $costs);
     }
 
+    public function test_reads_interface_name_from_address_on_routeros_7_16_to_7_20(): void
+    {
+        // 7.16-7.20 drop the `interface` field; the name is inside `address` as "<ip>%<if>".
+        $costs = ReadOspf::costsByInterface([
+            ['address' => '10.0.0.1%vlan90', 'cost' => '1'],
+            ['address' => '10.0.0.5%vlan416', 'cost' => '10'],
+            ['interface' => 'ether4', 'cost' => '5'],   // plain field still wins when present
+            ['address' => 'no-percent-here', 'cost' => '7'], // no '%' -> skipped
+        ]);
+
+        $this->assertSame(['vlan90' => 1, 'vlan416' => 10, 'ether4' => 5], $costs);
+    }
+
     public function test_template_costs_fill_gaps_but_running_wins(): void
     {
         // Running print gave us ether4 only (GitHub #22: some 7.x omit the rest); the template

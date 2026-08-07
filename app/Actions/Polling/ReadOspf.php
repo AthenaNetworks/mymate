@@ -87,13 +87,33 @@ class ReadOspf
     {
         $out = [];
         foreach ($rows as $row) {
-            $name = (string) ($row['interface'] ?? '');
+            $name = self::interfaceName($row);
             if ($name !== '' && isset($row['cost']) && is_numeric($row['cost'])) {
                 $out[$name] = (int) $row['cost'];
             }
         }
 
         return $out;
+    }
+
+    /**
+     * The interface name for a running OSPF interface row. RouterOS 6 and 7.21.2+ expose a plain
+     * `interface` field; 7.16-7.20 (GitHub #22) drop it and instead carry the name inside
+     * `address` as "<ip>%<interface>" (e.g. "10.0.0.1%vlan90"), so parse it out of there.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private static function interfaceName(array $row): string
+    {
+        $name = trim((string) ($row['interface'] ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        $address = (string) ($row['address'] ?? '');
+        $pos = strrpos($address, '%');
+
+        return $pos === false ? '' : substr($address, $pos + 1);
     }
 
     /**
