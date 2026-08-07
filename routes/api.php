@@ -52,7 +52,7 @@ Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
 // --- Authenticated (everything else) --------------------------------------
 // `RestrictWritesToAdmins` makes non-admin operators read-only across the whole API
 // - GETs pass, any write from a non-admin is 403 (except their own password).
-Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(function (): void {
+Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Middleware\RestrictedAccess::class])->group(function (): void {
     Route::get('user', [AuthController::class, 'user'])->name('user');
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).

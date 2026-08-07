@@ -42,7 +42,9 @@ class UserController extends Controller
         $user->email = $request->validated('email');
         $user->password = $request->validated('password'); // 'hashed' cast
         $user->is_admin = $request->boolean('is_admin'); // explicit - never mass-assigned
+        $this->applyAccess($user, $request);
         $user->save();
+        $this->syncMaps($user, $request);
 
         EngineLog::warning('auth: operator created', [
             'actor_id' => $request->user()->id,
@@ -77,7 +79,9 @@ class UserController extends Controller
         if ($request->has('is_admin')) {
             $user->is_admin = $request->boolean('is_admin'); // explicit - never mass-assigned
         }
+        $this->applyAccess($user, $request);
         $user->save();
+        $this->syncMaps($user, $request);
 
         EngineLog::warning('auth: operator updated', [
             'actor_id' => $request->user()->id,
@@ -116,6 +120,31 @@ class UserController extends Controller
     }
 
     /**
+     * Apply the restricted-access privilege (GitHub #28). Explicit, never mass-assigned. Restricted
+     * and admin are mutually exclusive - an admin sees everything, so restriction is meaningless
+     * there and we clear it to avoid a confusing half-state.
+     */
+    private function applyAccess(User $user, Request $request): void
+    {
+        if ($request->has('restricted')) {
+            $user->restricted = $request->boolean('restricted') && ! $user->is_admin;
+        }
+        if ($user->is_admin) {
+            $user->restricted = false;
+        }
+    }
+
+    /** Sync the operator's granted maps when the payload carries them (admins have no grants). */
+    private function syncMaps(User $user, Request $request): void
+    {
+        if (! $request->has('map_ids')) {
+            return;
+        }
+        $ids = $user->restricted ? array_map('intval', (array) $request->input('map_ids', [])) : [];
+        $user->maps()->sync($ids);
+    }
+
+    /**
      * Tier-shaped payload. Passwords are never present (model `$hidden`); a non-admin also
      * never sees email or timestamps - "can view the roster, not sensitive data".
      *
@@ -135,6 +164,8 @@ class UserController extends Controller
 
         return [
             ...$base,
+            'restricted' => (bool) $user->restricted,
+            'map_ids' => $user->restricted ? $user->maps()->withoutGlobalScopes()->pluck('maps.id')->all() : [],
             'email' => $user->email,
             'created_at' => $user->created_at?->toIso8601String(),
         ];

@@ -27,6 +27,10 @@ class StoreUserRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', Password::min(10)->letters()->mixedCase()->numbers()],
             'is_admin' => ['sometimes', 'boolean'],
+            // Restricted access (GitHub #28): confine the operator to specific maps.
+            'restricted' => ['sometimes', 'boolean'],
+            'map_ids' => ['sometimes', 'array'],
+            'map_ids.*' => ['integer', 'exists:maps,id'],
         ];
     }
 }

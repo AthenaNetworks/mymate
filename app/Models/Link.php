@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\Visibility;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -9,6 +11,20 @@ class Link extends Model
 {
     /** Physical medium a link can be tagged with, for map styling. */
     public const MEDIA_TYPES = ['fiber', 'ethernet', 'wireless', 'other'];
+
+    /**
+     * Restricted operators (GitHub #28) only see a link when BOTH ends are visible to them - a
+     * link with one end off-scope would otherwise leak the hidden device's id.
+     */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('visibility', function (Builder $query): void {
+            if ($user = Visibility::restrictedUser()) {
+                $ids = $user->visibleDeviceIds();
+                $query->whereIn('a_device_id', $ids)->whereIn('b_device_id', $ids);
+            }
+        });
+    }
 
     protected $fillable = [
         'a_device_id', 'a_interface_id', 'b_device_id', 'b_interface_id',

@@ -7,7 +7,9 @@ use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Enums\UpgradeStatus;
+use App\Support\Visibility;
 use Database\Factories\DeviceFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,16 @@ class Device extends Model
 {
     /** @use HasFactory<DeviceFactory> */
     use HasFactory;
+
+    /** Restricted operators (GitHub #28) only see devices on maps they're granted. */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('visibility', function (Builder $query): void {
+            if ($user = Visibility::restrictedUser()) {
+                $query->whereIn($query->getModel()->getTable().'.id', $user->visibleDeviceIds());
+            }
+        });
+    }
 
     protected $fillable = [
         'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',

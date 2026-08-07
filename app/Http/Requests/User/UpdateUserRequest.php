@@ -28,6 +28,10 @@ class UpdateUserRequest extends FormRequest
             'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($userId)],
             'password' => ['sometimes', 'nullable', 'string', Password::min(10)->letters()->mixedCase()->numbers()],
             'is_admin' => ['sometimes', 'boolean'],
+            // Restricted access (GitHub #28): confine the operator to specific maps.
+            'restricted' => ['sometimes', 'boolean'],
+            'map_ids' => ['sometimes', 'array'],
+            'map_ids.*' => ['integer', 'exists:maps,id'],
         ];
     }
 }

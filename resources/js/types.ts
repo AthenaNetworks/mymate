@@ -6,6 +6,7 @@ export interface AuthUser {
     name: string;
     email: string;
     is_admin: boolean;
+    restricted?: boolean; // GitHub #28: confined to granted maps
 }
 
 /**
@@ -16,6 +17,8 @@ export interface Operator {
     id: number;
     name: string;
     is_admin: boolean;
+    restricted?: boolean;
+    map_ids?: number[];
     email?: string;
     created_at?: string;
 }

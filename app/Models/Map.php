@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\Visibility;
 use Database\Factories\MapFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +19,16 @@ class Map extends Model
 {
     /** @use HasFactory<MapFactory> */
     use HasFactory;
+
+    /** Restricted operators (GitHub #28) only see the maps they're granted (and their sub-maps). */
+    protected static function booted(): void
+    {
+        static::addGlobalScope('visibility', function (Builder $query): void {
+            if ($user = Visibility::restrictedUser()) {
+                $query->whereIn($query->getModel()->getTable().'.id', $user->visibleMapIds());
+            }
+        });
+    }
 
     protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y', 'leaflet_enabled'];
 

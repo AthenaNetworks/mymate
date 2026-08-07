@@ -10,6 +10,7 @@ import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type B
 import { useAgents, useEnrolAgent, useDeleteAgent } from '../api/agents';
 import { useFactoryReset } from '../api/factoryReset';
 import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
+import { useMaps } from '../../maps/api/maps';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
@@ -661,7 +662,10 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         name: initial?.name ?? '',
         email: initial?.email ?? '',
         is_admin: initial?.is_admin ?? false,
+        restricted: initial?.restricted ?? false,
+        map_ids: initial?.map_ids ?? [],
     });
+    const { data: allMaps } = useMaps(); // for the per-map access picker (GitHub #28)
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -745,6 +749,45 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <ShieldCheck weight="bold" className="h-3.5 w-3.5 text-emerald-300/80" /> Administrator - can manage operator accounts
                 </span>
             </label>
+
+            {/* Per-map access (GitHub #28). Only meaningful for non-admins; admins see everything. */}
+            {!form.is_admin && (
+                <>
+                    <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
+                        <input
+                            type="checkbox"
+                            checked={form.restricted ?? false}
+                            onChange={(e) => set('restricted', e.target.checked)}
+                            className="h-4 w-4 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                        />
+                        <span>Restrict to specific maps - only sees the maps and devices below</span>
+                    </label>
+                    {form.restricted && (
+                        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-black/20 p-2 ring-1 ring-white/10">
+                            {(allMaps ?? []).length === 0 && <p className="px-1 text-xs text-white/35">No maps yet.</p>}
+                            {(allMaps ?? []).map((m) => {
+                                const on = (form.map_ids ?? []).includes(m.id);
+                                return (
+                                    <label key={m.id} className="flex cursor-pointer items-center gap-2 px-1 py-0.5 text-xs text-white/70">
+                                        <input
+                                            type="checkbox"
+                                            checked={on}
+                                            onChange={(e) =>
+                                                set('map_ids', e.target.checked
+                                                    ? [...(form.map_ids ?? []), m.id]
+                                                    : (form.map_ids ?? []).filter((id) => id !== m.id))
+                                            }
+                                            className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                                        />
+                                        {m.parent_map_id ? '- ' : ''}{m.name}
+                                    </label>
+                                );
+                            })}
+                            <p className="px-1 pt-1 text-[10px] text-white/35">Granting a parent map includes its sub-maps.</p>
+                        </div>
+                    )}
+                </>
+            )}
             {error && <p className="text-xs text-rose-400/90">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-1">
                 <button onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-white/55 hover:text-white/90">

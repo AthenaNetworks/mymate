@@ -21,6 +21,8 @@ export interface UserInput {
     email?: string;
     password?: string;
     is_admin: boolean;
+    restricted?: boolean;
+    map_ids?: number[];
 }
 
 export function useSaveUser() {
