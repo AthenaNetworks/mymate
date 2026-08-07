@@ -14,6 +14,12 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Granular access: restrict operators to specific maps (GitHub #28).** On top of the admin /
+  read-only split, an operator can now be marked "restricted" and granted specific maps. They then
+  see only those maps (and their sub-maps) and the devices and links on them - everything else,
+  including the fleet-wide tools, is hidden. Set it per operator under Settings -> Operators. Useful
+  for giving a customer or a colleague a limited view without exposing the rest of the network.
+  Admins and ordinary viewers are unaffected, and nobody is restricted by default.
 - **Service probes: HTTP/TCP checks for non-SNMP devices (GitHub #19).** My Mate's take on The
   Dude's custom probes. Attach an HTTP(S) or TCP check to a device to monitor a service that speaks
   neither SNMP nor the RouterOS API - a web UI, an API endpoint, a port. HTTP probes decide up/down
