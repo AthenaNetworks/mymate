@@ -30,6 +30,7 @@ import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapBreadcrumb } from '../../maps/components/MapBreadcrumb';
 import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
+import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
@@ -135,6 +136,11 @@ export function MapCanvas() {
     const intraLinks = useMemo(
         () => (links ?? []).filter((l) => memberSet.has(l.a_device_id) && memberSet.has(l.b_device_id)),
         [links, memberSet],
+    );
+    // Whether any link on this map carries an OSPF cost - gates the OSPF label control (GitHub #22).
+    const hasOspfCost = useMemo(
+        () => intraLinks.some((l) => l.a_interface?.ospf_cost != null || l.b_interface?.ospf_cost != null),
+        [intraLinks],
     );
     // Child-map nodes placed on this canvas + the manual links between them (GitHub #9).
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
@@ -688,6 +694,8 @@ export function MapCanvas() {
                             <LineSegment weight="bold" className="h-4 w-4" />
                         </button>
                     </div>
+                    {/* OSPF cost label size/colour - only when this map carries OSPF costs (GitHub #22). */}
+                    {hasOspfCost && <OspfCostControl />}
                     {isAdmin && (
                         <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
                             <button

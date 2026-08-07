@@ -17,6 +17,9 @@ export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
 /** Map link geometry - curved bezier (default) or straight point-to-point. */
 export type EdgeStyle = 'curved' | 'straight';
 
+/** OSPF cost badge size on the map - remembered per-browser (GitHub #22 readability). */
+export type OspfCostSize = 'sm' | 'md' | 'lg';
+
 /** Auto-layout algorithm - remembered per-browser; mirrors LayoutKind in lib/layout. */
 export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force';
 
@@ -34,6 +37,8 @@ type ShellState = {
     ifaceFilterById: Record<number, IfaceFilter>;
     tileMetricById: Record<number, TileMetric>; // which resource each map tile shows
     edgeStyle: EdgeStyle; // map link geometry - curved (default) or straight
+    ospfCostSize: OspfCostSize; // OSPF cost badge size on links
+    ospfCostColor: string; // OSPF cost badge colour (hex)
     layoutKind: LayoutKind; // last-chosen auto-layout algorithm
     wallboard: boolean; // big-screen / TV presentation mode
     // Dashboard: which devices the card grid shows + the auto-page interval.
@@ -80,6 +85,8 @@ type Persisted = Pick<
     | 'ifaceFilterById'
     | 'tileMetricById'
     | 'edgeStyle'
+    | 'ospfCostSize'
+    | 'ospfCostColor'
     | 'layoutKind'
     | 'wallboard'
     | 'dashboardAll'
@@ -108,6 +115,8 @@ let state: ShellState = {
     ifaceFilterById: saved.ifaceFilterById ?? {},
     tileMetricById: saved.tileMetricById ?? {},
     edgeStyle: saved.edgeStyle ?? 'curved',
+    ospfCostSize: saved.ospfCostSize ?? 'md',
+    ospfCostColor: saved.ospfCostColor ?? '#a5b4fc', // indigo-300
     layoutKind: saved.layoutKind ?? 'smart',
     wallboard: saved.wallboard ?? false,
     dashboardAll: saved.dashboardAll ?? true,
@@ -120,13 +129,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, layoutKind, wallboard,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, ospfCostSize, ospfCostColor, layoutKind, wallboard,
             dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, layoutKind, wallboard,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, ospfCostSize, ospfCostColor, layoutKind, wallboard,
                 dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -257,6 +266,28 @@ export function setEdgeStyle(style: EdgeStyle): void {
 
 export function useEdgeStyle(): EdgeStyle {
     return useSyncExternalStore(subscribe, () => state.edgeStyle);
+}
+
+// OSPF cost badge size + colour on map links. Global + persisted; UtilEdge reads them so an
+// operator can make the cost legible against their own planning view (GitHub #22).
+export function setOspfCostSize(size: OspfCostSize): void {
+    if (state.ospfCostSize === size) return;
+    state = { ...state, ospfCostSize: size };
+    emit();
+}
+
+export function useOspfCostSize(): OspfCostSize {
+    return useSyncExternalStore(subscribe, () => state.ospfCostSize);
+}
+
+export function setOspfCostColor(color: string): void {
+    if (state.ospfCostColor === color) return;
+    state = { ...state, ospfCostColor: color };
+    emit();
+}
+
+export function useOspfCostColor(): string {
+    return useSyncExternalStore(subscribe, () => state.ospfCostColor);
 }
 
 // Auto-layout algorithm: which arrange the map\'s "Tidy" menu last

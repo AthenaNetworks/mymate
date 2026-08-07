@@ -11,7 +11,7 @@ import { linkColor, linkWidth } from '../lib/linkColor';
 import { getFloatingParams } from '../lib/floatingEdge';
 import { mediaDash } from '../lib/mediaType';
 import { formatMbps } from '../../../lib/formatRate';
-import { useEdgeStyle } from '../../../lib/shellStore';
+import { useEdgeStyle, useOspfCostSize, useOspfCostColor, type OspfCostSize } from '../../../lib/shellStore';
 import type { LinkMediaType } from '../../../types';
 
 export type UtilEdgeData = {
@@ -62,6 +62,8 @@ export function UtilEdge({
 }: EdgeProps) {
     const d = (data ?? { util: null, mbps: null, down: false }) as UtilEdgeData;
     const edgeStyle = useEdgeStyle(); // curved (default) or straight
+    const ospfSize = useOspfCostSize(); // OSPF cost badge size (operator pref, GitHub #22)
+    const ospfColor = useOspfCostColor();
 
     // Floating geometry: attach to whichever sides of the two cards face each other
     // (handles live on all four sides) rather than the fixed top/bottom. Falls back to
@@ -169,23 +171,46 @@ export function UtilEdge({
                     )}
                 </div>
             </EdgeLabelRenderer>
-            {/* OSPF cost per end (directional) - a small badge tucked near each endpoint. */}
-            {!d.dimmed && (d.aCost != null || d.bCost != null) && (
-                <EdgeLabelRenderer>
-                    {d.aCost != null && <CostBadge x={sx + (tx - sx) * 0.22} y={sy + (ty - sy) * 0.22} cost={d.aCost} />}
-                    {d.bCost != null && <CostBadge x={sx + (tx - sx) * 0.78} y={sy + (ty - sy) * 0.78} cost={d.bCost} />}
-                </EdgeLabelRenderer>
-            )}
+            {/* OSPF cost per end (directional). Lifted off the wire (perpendicular to the link)
+                so it doesn't sit on the line or collide with the centred load label - the readability
+                gripe in GitHub #22. Size + colour are operator prefs. */}
+            {!d.dimmed && (d.aCost != null || d.bCost != null) && (() => {
+                // Unit perpendicular to the link, pointing "up" for a left-to-right link (screen
+                // y is down), so the badge floats above the wire rather than on it.
+                const dx = tx - sx, dy = ty - sy;
+                const len = Math.hypot(dx, dy) || 1;
+                const px = (dy / len) * OSPF_OFFSET;
+                const py = (-dx / len) * OSPF_OFFSET;
+                return (
+                    <EdgeLabelRenderer>
+                        {d.aCost != null && (
+                            <CostBadge x={sx + dx * 0.22 + px} y={sy + dy * 0.22 + py} cost={d.aCost} size={ospfSize} color={ospfColor} />
+                        )}
+                        {d.bCost != null && (
+                            <CostBadge x={sx + dx * 0.78 + px} y={sy + dy * 0.78 + py} cost={d.bCost} size={ospfSize} color={ospfColor} />
+                        )}
+                    </EdgeLabelRenderer>
+                );
+            })()}
         </>
     );
 }
 
-/** A tiny OSPF-cost chip positioned near one end of a link. */
-function CostBadge({ x, y, cost }: { x: number; y: number; cost: number }) {
+// How far (px) the OSPF cost badge floats off the link line.
+const OSPF_OFFSET = 16;
+
+const OSPF_SIZE_CLASS: Record<OspfCostSize, string> = {
+    sm: 'text-[9px] px-1',
+    md: 'text-[11px] px-1.5 py-px',
+    lg: 'text-[13px] px-2 py-0.5',
+};
+
+/** An OSPF-cost chip near one end of a link: dark pill, operator-coloured text + border. */
+function CostBadge({ x, y, cost, size, color }: { x: number; y: number; cost: number; size: OspfCostSize; color: string }) {
     return (
         <div
-            style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)` }}
-            className="pointer-events-none absolute rounded bg-indigo-500/20 px-1 text-[9px] font-semibold tabular-nums text-indigo-200 ring-1 ring-indigo-400/25"
+            style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, color, borderColor: color }}
+            className={`pointer-events-none absolute rounded-full border bg-[#0d0d11]/85 font-semibold tabular-nums shadow-[0_2px_8px_-2px_rgba(0,0,0,0.85)] ${OSPF_SIZE_CLASS[size]}`}
             title={`OSPF cost ${cost}`}
         >
             {cost}
