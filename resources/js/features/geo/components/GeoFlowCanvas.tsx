@@ -66,7 +66,7 @@ function GeoFlowInner() {
 
     const memberIds = useMemo(() => new Set((mapDetail?.positions ?? []).map((p) => p.device_id)), [mapDetail]);
     const placed = useMemo(
-        () => (devices ?? []).filter((d) => memberIds.has(d.id) && d.latitude != null && d.longitude != null),
+        () => (devices ?? []).filter((d) => memberIds.has(d.id) && d.geo_latitude != null && d.geo_longitude != null),
         [devices, memberIds],
     );
     const intraLinks = useMemo(
@@ -79,7 +79,7 @@ function GeoFlowInner() {
     // dragging a pin (coords change, ids don't) never re-projects the whole map.
     const idsKey = useMemo(() => placed.map((d) => d.id).sort((a, b) => a - b).join(','), [placed]);
     const baseZoom = useMemo(
-        () => computeBaseZoom(placed.map((d) => ({ lat: d.latitude as number, lng: d.longitude as number }))),
+        () => computeBaseZoom(placed.map((d) => ({ lat: d.geo_latitude as number, lng: d.geo_longitude as number }))),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [idsKey],
     );
@@ -92,7 +92,7 @@ function GeoFlowInner() {
     const nodeIdOfDevice = useMemo(() => {
         const groups = new Map<string, Device[]>();
         for (const d of placed) {
-            const k = coordKey(d.latitude as number, d.longitude as number);
+            const k = coordKey(d.geo_latitude as number, d.geo_longitude as number);
             (groups.get(k) ?? groups.set(k, []).get(k)!).push(d);
         }
         const map = new Map<number, string>();
@@ -106,13 +106,13 @@ function GeoFlowInner() {
     // Rebuild nodes when the placement/stacks change (positions from coords; drag is preserved by
     // React Flow between rebuilds). A rebuild signature keeps this off the every-tick path.
     const nodeSig = useMemo(
-        () => placed.map((d) => `${d.id}:${d.latitude}:${d.longitude}:${d.status}`).join('|') + '#' + [...expanded].sort().join(',') + '#' + baseZoom.toFixed(3),
+        () => placed.map((d) => `${d.id}:${d.geo_latitude}:${d.geo_longitude}:${d.status}`).join('|') + '#' + [...expanded].sort().join(',') + '#' + baseZoom.toFixed(3),
         [placed, expanded, baseZoom],
     );
     useEffect(() => {
         const built: Node[] = [];
         for (const [k, g] of nodeIdOfDevice.groups) {
-            const [lat, lng] = [g[0].latitude as number, g[0].longitude as number];
+            const [lat, lng] = [g[0].geo_latitude as number, g[0].geo_longitude as number];
             const at = project(lat, lng, baseZoom);
             if (g.length > 1 && !expanded.has(k)) {
                 const down = g.filter((d) => d.status === 'down').length;

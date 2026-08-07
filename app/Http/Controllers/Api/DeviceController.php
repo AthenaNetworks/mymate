@@ -25,7 +25,12 @@ class DeviceController extends Controller
 {
     public function index(): AnonymousResourceCollection
     {
-        return DeviceResource::collection(Device::with('parent')->orderBy('name')->get());
+        $devices = Device::with('parent')->orderBy('name')->get();
+        // Resolve effective geo coordinates (own, else inherited from the uplink parent) in-memory
+        // for the whole set, so the geo map can place CPE that have no coordinates of their own.
+        \App\Support\DeviceGeo::apply($devices);
+
+        return DeviceResource::collection($devices);
     }
 
     public function store(StoreDeviceRequest $request, CreateDevice $createDevice): JsonResponse

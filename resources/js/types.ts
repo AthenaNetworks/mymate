@@ -37,9 +37,13 @@ export interface Device {
     last_change: string | null;
     map_x: number;
     map_y: number;
-    latitude: number | null; // geo overlay position
+    latitude: number | null; // geo overlay position (the device's own coords)
     longitude: number | null;
     geo_source: 'manual' | 'address' | 'snmp' | null;
+    // Effective coords for the geo map (GitHub #21): own, else inherited from the uplink parent.
+    geo_latitude: number | null;
+    geo_longitude: number | null;
+    geo_inherited: boolean;
     credential_id: number | null;
     ssh_credential_id: number | null; // dedicated SSH cred for backups (separate from poll cred)
     routeros_credential_id: number | null; // optional RouterOS-API cred for OSPF reads on SNMP devices

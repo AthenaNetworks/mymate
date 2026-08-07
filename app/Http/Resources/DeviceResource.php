@@ -22,6 +22,12 @@ class DeviceResource extends JsonResource
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'geo_source' => $this->geo_source,
+            // Effective coordinates for the geo map (GitHub #21): own coords, else inherited from
+            // the uplink parent. Populated by DeviceGeo::apply on the list; single-device responses
+            // fall back to the device's own coords.
+            'geo_latitude' => $this->geo_latitude ?? $this->latitude,
+            'geo_longitude' => $this->geo_longitude ?? $this->longitude,
+            'geo_inherited' => (bool) ($this->geo_inherited ?? false),
             'credential_id' => $this->credential_id,
             'ssh_credential_id' => $this->ssh_credential_id,
             'routeros_credential_id' => $this->routeros_credential_id,
