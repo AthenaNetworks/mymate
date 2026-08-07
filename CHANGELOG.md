@@ -13,6 +13,16 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Service probes: HTTP/TCP checks for non-SNMP devices (GitHub #19).** My Mate's take on The
+  Dude's custom probes. Attach an HTTP(S) or TCP check to a device to monitor a service that speaks
+  neither SNMP nor the RouterOS API - a web UI, an API endpoint, a port. HTTP probes decide up/down
+  from the status code (ranges/lists/`2xx` wildcards) and an optional body keyword, time the round
+  trip, and for HTTPS also report the TLS certificate expiry (so a probe doubles as a cert watch).
+  TCP probes just open the port. Probes run on the poll loop with the same flap dampening as ping,
+  keep a latency/status history, and feed a new "service probe down" alert condition. Managed from
+  the device inspector, with a run-now test button.
+
 ### Fixed
 - **Redis no longer grows until it gets OOM-killed on large fleets.** The live map updates
   (interface load, device metrics, up/down, latency) were queued for delivery; on a big fleet the
