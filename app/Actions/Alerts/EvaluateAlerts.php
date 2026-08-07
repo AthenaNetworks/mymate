@@ -163,7 +163,37 @@ class EvaluateAlerts
                 (float) ($policy->params['threshold'] ?? 90),
                 $scope,
             ),
+            AlertCondition::ProbeDown => $this->probesDown($scope),
         };
+    }
+
+    /**
+     * Service probes (GitHub #19) currently down. Keyed as `device:{id}:probe:{id}` so a
+     * maintenance window on the device suppresses its probe alerts too.
+     *
+     * @param  list<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function probesDown(?array $scope): array
+    {
+        $out = [];
+        $inScope = $scope === null ? null : array_flip($scope);
+
+        $probes = \App\Models\Probe::where('enabled', true)
+            ->where('status', DeviceStatus::Down)
+            ->with('device:id,name')
+            ->get();
+
+        foreach ($probes as $probe) {
+            if ($inScope !== null && ! isset($inScope[$probe->device_id])) {
+                continue;
+            }
+            $dev = $probe->device?->name ?? "device {$probe->device_id}";
+            $why = $probe->message ? " ({$probe->message})" : '';
+            $out["device:{$probe->device_id}:probe:{$probe->id}"] = "Probe \"{$probe->name}\" is down on {$dev}{$why}.";
+        }
+
+        return $out;
     }
 
     /**

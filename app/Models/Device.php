@@ -115,4 +115,10 @@ class Device extends Model
     {
         return $this->hasMany(NetworkInterface::class);
     }
+
+    /** Service probes (HTTP/TCP) attached to this device (GitHub #19). */
+    public function probes(): HasMany
+    {
+        return $this->hasMany(Probe::class);
+    }
 }

@@ -16,6 +16,7 @@ enum AlertCondition: string
     case NewDiscovery = 'new_discovery';   // a new device awaits review
     case BackupFailed = 'backup_failed';   // a device's last config backup failed
     case HighMetric = 'high_metric';       // a device metric (cpu/mem/temp) is at/over a threshold
+    case ProbeDown = 'probe_down';         // a service probe (HTTP/TCP) is failing
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum AlertCondition: string
             self::NewDiscovery => 'New device discovered',
             self::BackupFailed => 'Config backup failed',
             self::HighMetric => 'High device metric (CPU / memory / temperature)',
+            self::ProbeDown => 'Service probe down (HTTP / TCP)',
         };
     }
 }

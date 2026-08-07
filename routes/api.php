@@ -144,6 +144,14 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class])->group(functi
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
     Route::get('devices/{device}/sensors', [\App\Http\Controllers\Api\SensorController::class, 'forDevice'])
         ->name('devices.sensors');
+    // Service probes (HTTP/TCP, GitHub #19): per-device list/create + edit/delete/run/history.
+    Route::get('devices/{device}/probes', [\App\Http\Controllers\Api\ProbeController::class, 'index'])->name('devices.probes.index');
+    Route::post('devices/{device}/probes', [\App\Http\Controllers\Api\ProbeController::class, 'store'])->name('devices.probes.store');
+    Route::put('probes/{probe}', [\App\Http\Controllers\Api\ProbeController::class, 'update'])->name('probes.update');
+    Route::delete('probes/{probe}', [\App\Http\Controllers\Api\ProbeController::class, 'destroy'])->name('probes.destroy');
+    Route::post('probes/{probe}/test', [\App\Http\Controllers\Api\ProbeController::class, 'test'])
+        ->middleware('throttle:20,1')->name('probes.test');
+    Route::get('probes/{probe}/samples', [\App\Http\Controllers\Api\ProbeController::class, 'samples'])->name('probes.samples');
     Route::get('devices/{device}/sensors/{sensor}/samples', [InterfaceSampleController::class, 'sensor'])
         ->name('devices.sensor-samples');
     // Recent history: bucketed cpu/mem/temp series for one device (resource chart).

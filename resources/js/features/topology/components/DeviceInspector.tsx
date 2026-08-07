@@ -27,6 +27,7 @@ import { DeviceDialog } from '../../devices/components/DeviceDialog';
 import { ChartModal } from './ChartModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
+import { ProbesSection } from './ProbesSection';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { MapDevicePalette } from './MapDevicePalette';
 import { pushToast } from '../../../lib/toast';
@@ -578,8 +579,9 @@ export function DeviceInspector() {
     // "nothing to show" rather than a perpetually-empty/errored section).
     const pingOnly = device.poll_method === 'none';
 
-    // Services derived from existing signals (no probe subsystem in v1): ping = fping
-    // status; the poll-method reachability follows whether util is flowing.
+    // Built-in reachability derived from existing signals: ping = fping status; the poll-method
+    // reachability follows whether util is flowing. Operator-defined HTTP/TCP checks are the
+    // separate "Service probes" section below (GitHub #19).
     const polled = ifaces.some((i) => i.util_in !== null || i.util_out !== null);
     const services: { label: string; state: DeviceStatus }[] = [
         { label: 'ICMP / ping', state: device.status },
@@ -821,6 +823,11 @@ export function DeviceInspector() {
                         </div>
                     ))}
                 </div>
+            </Section>
+
+            {/* Service probes (HTTP/TCP) attached to this device (GitHub #19). */}
+            <Section title="Service probes">
+                <ProbesSection deviceId={device.id} isAdmin={isAdmin} />
             </Section>
 
             <Section title="Recent outages">

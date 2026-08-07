@@ -333,7 +333,43 @@ export type AlertConditionType =
     | 'upgrade_failed'
     | 'new_discovery'
     | 'backup_failed'
-    | 'high_metric';
+    | 'high_metric'
+    | 'probe_down';
+
+// Service probes (GitHub #19): HTTP/TCP checks attached to a device.
+export type ProbeKind = 'http' | 'tcp';
+
+export interface Probe {
+    id: number;
+    device_id: number;
+    name: string;
+    kind: ProbeKind;
+    enabled: boolean;
+    interval_s: number;
+    timeout_ms: number;
+    fail_threshold: number;
+    config: {
+        url?: string;
+        method?: 'GET' | 'HEAD' | 'POST';
+        expect_status?: string;
+        expect_body?: string;
+        verify_tls?: boolean;
+        host?: string;
+        port?: number;
+    };
+    status: DeviceStatus;
+    latency_ms: number | null;
+    message: string | null;
+    cert_expires_at: string | null;
+    checked_at: string | null;
+}
+
+export interface ProbeTestResult {
+    up: boolean;
+    latency_ms: number | null;
+    message: string | null;
+    cert_expires_at: string | null;
+}
 
 export type DeviceMetricKey = 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
 

@@ -5,8 +5,10 @@ namespace App\Services\Polling;
 use App\Enums\PollMethod;
 use App\Jobs\PollDeviceMetricsBatchJob;
 use App\Jobs\PollInterfacesBatchJob;
+use App\Jobs\PollProbesBatchJob;
 use App\Jobs\PollSensorsBatchJob;
 use App\Models\Device;
+use App\Models\Probe;
 use App\Models\Sensor;
 
 /**
@@ -113,6 +115,37 @@ class PollDispatcher
 
         foreach ($byShard as $shard => $shardIds) {
             PollSensorsBatchJob::dispatch($shard, $shardIds);
+        }
+
+        return count($byShard);
+    }
+
+    /**
+     * Service probes (GitHub #19): shard the devices that carry an enabled probe and dispatch a
+     * probe-poll job per shard. No-op when nothing has a probe, so it's cheap to call every tick.
+     * Runs from the central host, so agent-assigned devices are skipped (their network is remote).
+     *
+     * @return int number of batch jobs dispatched (non-empty shards)
+     */
+    public function dispatchProbes(): int
+    {
+        $deviceIds = Probe::where('enabled', true)
+            ->whereHas('device', fn ($q) => $q->where('monitored', true)->whereNull('agent_id'))
+            ->pluck('device_id')->unique()->values();
+        if ($deviceIds->isEmpty()) {
+            return 0;
+        }
+
+        $shards = max(1, (int) config('mymate.poll.shards', 16));
+
+        /** @var array<int, list<int>> $byShard */
+        $byShard = [];
+        foreach ($deviceIds as $id) {
+            $byShard[crc32((string) $id) % $shards][] = (int) $id;
+        }
+
+        foreach ($byShard as $shard => $shardIds) {
+            PollProbesBatchJob::dispatch($shard, $shardIds);
         }
 
         return count($byShard);

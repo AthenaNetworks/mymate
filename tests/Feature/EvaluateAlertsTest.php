@@ -41,6 +41,28 @@ class EvaluateAlertsTest extends TestCase
         return $policy;
     }
 
+    public function test_probe_down_fires_and_resolves_when_it_recovers(): void
+    {
+        Http::fake();
+        $policy = $this->policyWithSlack(AlertCondition::ProbeDown);
+        $device = \App\Models\Device::factory()->create(['name' => 'PORTAL']);
+        $probe = \App\Models\Probe::factory()->create([
+            'device_id' => $device->id, 'name' => 'Web UI', 'status' => DeviceStatus::Down, 'message' => 'HTTP 503',
+        ]);
+
+        app(EvaluateAlerts::class)();
+        $this->assertDatabaseHas('alert_events', [
+            'alert_policy_id' => $policy->id,
+            'dedupe_key' => "device:{$device->id}:probe:{$probe->id}",
+            'status' => 'firing',
+        ]);
+
+        // Probe recovers -> the event resolves. (status is a result column, not mass-assignable.)
+        $probe->forceFill(['status' => DeviceStatus::Up])->save();
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
+    }
+
     public function test_device_down_fires_dedupes_resolves_and_delivers(): void
     {
         Http::fake();

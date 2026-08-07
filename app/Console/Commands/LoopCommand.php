@@ -112,6 +112,9 @@ class LoopCommand extends Command
                     EngineLog::debug('loop: agent jobs dispatched', ['agents' => $agents]);
                 }
                 EvaluateAlertsJob::dispatch(); // evaluate alert policies on the poll cadence
+                // Service probes (HTTP/TCP, GitHub #19) - dispatched on the poll cadence; each
+                // probe only actually runs when its own interval is due (a no-op if none exist).
+                app(PollDispatcher::class)->dispatchProbes();
                 $lastPoll = $now;
             }
             // Device resource metrics (cpu/mem/temp) on their own slower cadence, plus any

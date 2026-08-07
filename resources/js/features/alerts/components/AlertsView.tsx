@@ -17,7 +17,7 @@ import { pushToast } from '../../../lib/toast';
 import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -47,6 +47,7 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'high_metric', label: 'High device metric (CPU / memory / temperature)' },
     { value: 'upgrade_failed', label: 'Upgrade failed' },
     { value: 'backup_failed', label: 'Config backup failed' },
+    { value: 'probe_down', label: 'Service probe down (HTTP / TCP)' },
     { value: 'new_discovery', label: 'New device discovered' },
 ];
 
