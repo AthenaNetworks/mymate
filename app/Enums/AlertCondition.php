@@ -17,6 +17,7 @@ enum AlertCondition: string
     case BackupFailed = 'backup_failed';   // a device's last config backup failed
     case HighMetric = 'high_metric';       // a device metric (cpu/mem/temp) is at/over a threshold
     case ProbeDown = 'probe_down';         // a service probe (HTTP/TCP) is failing
+    case ProbeSlow = 'probe_slow';         // a service probe's response time is over a threshold
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum AlertCondition: string
             self::BackupFailed => 'Config backup failed',
             self::HighMetric => 'High device metric (CPU / memory / temperature)',
             self::ProbeDown => 'Service probe down (HTTP / TCP)',
+            self::ProbeSlow => 'Service probe slow (high response time)',
         };
     }
 }

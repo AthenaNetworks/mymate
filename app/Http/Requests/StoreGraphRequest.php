@@ -24,8 +24,17 @@ class StoreGraphRequest extends FormRequest
             'config.metric' => ['sometimes', Rule::in(['rate', 'util'])],
             'config.show_total' => ['sometimes', 'boolean'],
             'config.series' => ['sometimes', 'array', 'max:64'],
-            'config.series.*.interface_id' => ['required', 'integer', 'exists:interfaces,id'],
-            'config.series.*.direction' => ['required', Rule::in(['in', 'out'])],
+            // A series is sourced from an interface (default), a custom sensor, ping latency, or a
+            // service probe. Only the ids for its source are used; all are existence-checked.
+            'config.series.*.source' => ['sometimes', Rule::in(['interface', 'sensor', 'ping', 'probe'])],
+            'config.series.*.interface_id' => ['sometimes', 'integer', 'exists:interfaces,id'],
+            'config.series.*.direction' => ['sometimes', Rule::in(['in', 'out'])],
+            'config.series.*.sensor_id' => ['sometimes', 'integer', 'exists:sensors,id'],
+            'config.series.*.device_id' => ['sometimes', 'integer', 'exists:devices,id'],
+            'config.series.*.probe_id' => ['sometimes', 'integer', 'exists:probes,id'],
+            // A display label the editor captured when the series was added (the chart computes its
+            // own authoritative label; this is just for editing convenience).
+            'config.series.*.label' => ['sometimes', 'nullable', 'string', 'max:200'],
         ];
     }
 }

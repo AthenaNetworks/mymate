@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Actions\History\GetGraphSeries;
+use App\Actions\History\GetGraphData;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGraphRequest;
 use App\Http\Resources\GraphResource;
 use App\Models\Graph;
-use App\Models\NetworkInterface;
 use App\Support\Settings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,7 +46,7 @@ class GraphController extends Controller
     }
 
     /** The aligned per-series (and optional total) data for one graph over the chosen range. */
-    public function data(Request $request, Graph $graph, GetGraphSeries $get): JsonResponse
+    public function data(Request $request, Graph $graph, GetGraphData $get): JsonResponse
     {
         $seconds = self::RANGES[$request->query('range', '24h')] ?? 86400;
         // Don't ask for more history than we keep, or the chart just shows empty leading space.
@@ -61,64 +60,13 @@ class GraphController extends Controller
         $metric = ($config['metric'] ?? 'rate') === 'util' ? 'util' : 'rate';
         $configSeries = is_array($config['series'] ?? null) ? $config['series'] : [];
 
-        $interfaceIds = array_values(array_unique(array_map(static fn ($s) => (int) ($s['interface_id'] ?? 0), $configSeries)));
-        $names = NetworkInterface::whereIn('id', $interfaceIds)->with('device:id,name')
-            ->get(['id', 'device_id', 'name'])->keyBy('id');
-
-        $result = $get($interfaceIds, $from, $to);
-        $bucketCount = count($result['buckets']);
-
-        $series = [];
-        foreach ($configSeries as $s) {
-            $id = (int) ($s['interface_id'] ?? 0);
-            $direction = ($s['direction'] ?? 'in') === 'out' ? 'out' : 'in';
-            $iface = $names->get($id);
-            if ($iface === null || ! isset($result['interfaces'][$id])) {
-                continue; // interface deleted since the graph was saved
-            }
-            $key = ($metric === 'util' ? 'util' : 'bps')."_{$direction}"; // bps_in | bps_out | util_in | util_out
-            $series[] = [
-                'interface_id' => $id,
-                'direction' => $direction,
-                'device_name' => $iface->device?->name,
-                'interface_name' => $iface->name,
-                'values' => $result['interfaces'][$id][$key],
-            ];
-        }
-
-        $total = ! empty($config['show_total']) && $series !== []
-            ? self::sumSeries(array_map(static fn ($s) => $s['values'], $series), $bucketCount)
-            : null;
+        $result = $get($configSeries, $metric, ! empty($config['show_total']), $from, $to);
 
         return response()->json(['data' => [
             'buckets' => $result['buckets'],
             'metric' => $metric,
-            'series' => $series,
-            'total' => $total,
+            'series' => $result['series'],
+            'total' => $result['total'],
         ]]);
-    }
-
-    /**
-     * Elementwise sum across series, null-aware: a bucket is null only when every series is null
-     * there (no data), otherwise it sums the ones that have a value.
-     *
-     * @param  list<list<?float>>  $seriesValues
-     * @return list<?float>
-     */
-    private static function sumSeries(array $seriesValues, int $bucketCount): array
-    {
-        $out = [];
-        for ($i = 0; $i < $bucketCount; $i++) {
-            $sum = null;
-            foreach ($seriesValues as $values) {
-                $v = $values[$i] ?? null;
-                if ($v !== null) {
-                    $sum = ($sum ?? 0) + $v;
-                }
-            }
-            $out[] = $sum;
-        }
-
-        return $out;
     }
 }

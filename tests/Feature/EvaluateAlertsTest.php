@@ -63,6 +63,25 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
     }
 
+    public function test_probe_slow_fires_over_the_threshold_and_resolves_under_it(): void
+    {
+        Http::fake();
+        $policy = $this->policyWithSlack(AlertCondition::ProbeSlow, ['threshold' => 100]);
+        $device = \App\Models\Device::factory()->create();
+        $probe = \App\Models\Probe::factory()->create(['device_id' => $device->id, 'status' => DeviceStatus::Up, 'latency_ms' => 250]);
+
+        app(EvaluateAlerts::class)();
+        $this->assertDatabaseHas('alert_events', [
+            'alert_policy_id' => $policy->id,
+            'dedupe_key' => "device:{$device->id}:probe:{$probe->id}:slow",
+            'status' => 'firing',
+        ]);
+
+        $probe->forceFill(['latency_ms' => 20])->save();
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
+    }
+
     public function test_device_down_fires_dedupes_resolves_and_delivers(): void
     {
         Http::fake();

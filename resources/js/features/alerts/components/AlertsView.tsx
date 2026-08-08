@@ -17,7 +17,7 @@ import { pushToast } from '../../../lib/toast';
 import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down', 'probe_slow'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -48,6 +48,7 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'upgrade_failed', label: 'Upgrade failed' },
     { value: 'backup_failed', label: 'Config backup failed' },
     { value: 'probe_down', label: 'Service probe down (HTTP / TCP)' },
+    { value: 'probe_slow', label: 'Service probe slow (high response time)' },
     { value: 'new_discovery', label: 'New device discovered' },
 ];
 
@@ -180,6 +181,19 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                     </p>
                 </>
             )}
+            {form.condition === 'probe_slow' && (
+                <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                    <span>Response time threshold (ms)</span>
+                    <input
+                        type="number"
+                        min={1}
+                        value={form.params?.threshold ?? 1000}
+                        onChange={(e) => set('params', { ...form.params, threshold: Number(e.target.value) })}
+                        className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                    />
+                </label>
+            )}
+
             {form.condition === 'interface_down' && (
                 <p className="px-1 text-[11px] text-white/35">
                     Fires per port when an interface goes operationally down while its device stays up (eg a customer port drops but the uplink is fine). Read over SNMP; scope it to the devices you care about.

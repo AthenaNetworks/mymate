@@ -90,6 +90,29 @@ class GraphApiTest extends TestCase
         $this->assertEquals(1000, $sumTotal);
     }
 
+    public function test_data_resolves_ping_and_probe_latency_sources(): void
+    {
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $probe = \App\Models\Probe::factory()->create(['device_id' => $device->id]);
+        $t = now()->subMinutes(10)->format('Y-m-d H:i:s');
+        DB::table('ping_samples')->insert(['device_id' => $device->id, 'ts' => $t, 'rtt_ms' => 12.5, 'loss_pct' => 0, 'jitter_ms' => 1]);
+        DB::table('probe_samples')->insert(['probe_id' => $probe->id, 'ts' => $t, 'up' => true, 'latency_ms' => 45]);
+
+        $graph = Graph::factory()->create(['config' => ['metric' => 'rate', 'show_total' => false, 'series' => [
+            ['source' => 'ping', 'device_id' => $device->id],
+            ['source' => 'probe', 'probe_id' => $probe->id],
+        ]]]);
+
+        $data = $this->getJson("/api/graphs/{$graph->id}/data?range=24h")->assertOk()->json('data');
+
+        $this->assertCount(2, $data['series']);
+        $this->assertSame('ms', $data['series'][0]['format']);
+        $this->assertSame('ms', $data['series'][1]['format']);
+        $this->assertNotEmpty(array_filter($data['series'][0]['values'], fn ($v) => $v !== null));
+        $this->assertNotEmpty(array_filter($data['series'][1]['values'], fn ($v) => $v !== null));
+    }
+
     public function test_non_admin_cannot_create_a_graph(): void
     {
         $viewer = User::factory()->create(['is_admin' => false]);

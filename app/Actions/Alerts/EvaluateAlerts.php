@@ -164,7 +164,39 @@ class EvaluateAlerts
                 $scope,
             ),
             AlertCondition::ProbeDown => $this->probesDown($scope),
+            AlertCondition::ProbeSlow => $this->slowProbes((float) ($policy->params['threshold'] ?? 1000), $scope),
         };
+    }
+
+    /**
+     * Service probes whose latest response time is at/over the threshold (ms). Only up probes -
+     * a down one is the ProbeDown condition's job. Maintenance-aware key.
+     *
+     * @param  list<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function slowProbes(float $thresholdMs, ?array $scope): array
+    {
+        $out = [];
+        $inScope = $scope === null ? null : array_flip($scope);
+
+        $probes = \App\Models\Probe::where('enabled', true)
+            ->where('status', DeviceStatus::Up)
+            ->whereNotNull('latency_ms')
+            ->where('latency_ms', '>=', $thresholdMs)
+            ->with('device:id,name')
+            ->get();
+
+        foreach ($probes as $probe) {
+            if ($inScope !== null && ! isset($inScope[$probe->device_id])) {
+                continue;
+            }
+            $dev = $probe->device?->name ?? "device {$probe->device_id}";
+            $ms = round((float) $probe->latency_ms);
+            $out["device:{$probe->device_id}:probe:{$probe->id}:slow"] = "Probe \"{$probe->name}\" response time {$ms}ms on {$dev} (over ".round($thresholdMs)."ms).";
+        }
+
+        return $out;
     }
 
     /**

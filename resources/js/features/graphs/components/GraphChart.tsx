@@ -1,45 +1,54 @@
 import { useMemo, useRef, useState } from 'react';
 import { formatRate } from '../../../lib/formatRate';
-import type { GraphData } from '../../../types';
+import type { GraphData, GraphSeriesFormat } from '../../../types';
 
 // Same SVG drawing space + conventions as the device-modal interface chart, extended to many
-// series. Colour carries interface identity (validated categorical palette, fixed order); line
-// style carries direction (inbound solid, outbound dashed); the combined total is a bold pale line.
+// series from any source (interface throughput/util, custom OID, ping latency, probe latency).
+// Colour carries series identity (validated categorical palette); interface out is dashed; the
+// combined total is a bold pale line.
 const W = 760;
 const H = 260;
-const PAD = { t: 14, r: 16, b: 26, l: 56 };
+const PAD = { t: 14, r: 16, b: 26, l: 60 };
 
-// Dark-surface categorical palette, validated colourblind-safe on the adjacent pairlist (dataviz).
 const PALETTE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
 const TOTAL = '#e8e6dc';
 
 const fmtTime = (t: number) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 const fmtDate = (t: number) => new Date(t).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-type Line = { key: string; label: string; color: string; dashed: boolean; emphasized: boolean; values: (number | null)[] };
+function fmtValue(v: number, format: GraphSeriesFormat, unit: string | null): string {
+    if (format === 'rate') return formatRate(v);
+    if (format === 'util') return `${v.toFixed(v < 10 ? 1 : 0)}%`;
+    if (format === 'ms') return `${v < 10 ? v.toFixed(1) : Math.round(v)} ms`;
+    return `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ''}`;
+}
+
+type Line = { key: string; label: string; color: string; dashed: boolean; emphasized: boolean; format: GraphSeriesFormat; unit: string | null; values: (number | null)[] };
 
 export function GraphChart({ data }: { data: GraphData }) {
     const [hover, setHover] = useState<number | null>(null);
     const wrap = useRef<HTMLDivElement>(null);
 
     const times = useMemo(() => data.buckets.map((b) => Date.parse(b.replace(' ', 'T'))), [data.buckets]);
-    const fmtY = (v: number) => (data.metric === 'util' ? `${v.toFixed(v < 10 ? 1 : 0)}%` : formatRate(v));
 
-    // One coloured line per interface (in fixed order), plus the optional total.
+    // The y-axis format: shared when every series agrees, otherwise fall back to a plain number.
+    const dominant = useMemo<{ format: GraphSeriesFormat; unit: string | null }>(() => {
+        const fmts = new Set(data.series.map((s) => s.format));
+        const format = fmts.size === 1 ? [...fmts][0] : 'value';
+        return { format, unit: data.series.find((s) => s.format === format)?.unit ?? null };
+    }, [data.series]);
+    const fmtY = (v: number) => fmtValue(v, dominant.format, dominant.unit);
+
     const lines = useMemo<Line[]>(() => {
-        const colorOf = new Map<number, string>();
-        for (const s of data.series) if (!colorOf.has(s.interface_id)) colorOf.set(s.interface_id, PALETTE[colorOf.size % PALETTE.length]);
-        const out: Line[] = data.series.map((s) => ({
-            key: `${s.interface_id}:${s.direction}`,
-            label: `${s.device_name ? `${s.device_name} ` : ''}${s.interface_name} ${s.direction === 'out' ? 'out' : 'in'}`,
-            color: colorOf.get(s.interface_id) ?? PALETTE[0],
-            dashed: s.direction === 'out',
-            emphasized: false,
-            values: s.values,
+        const colorOf = new Map<string, string>();
+        for (const s of data.series) if (!colorOf.has(s.group)) colorOf.set(s.group, PALETTE[colorOf.size % PALETTE.length]);
+        const out: Line[] = data.series.map((s, i) => ({
+            key: `${s.group}:${i}`, label: s.label, color: colorOf.get(s.group) ?? PALETTE[0],
+            dashed: s.dashed, emphasized: false, format: s.format, unit: s.unit, values: s.values,
         }));
-        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, values: data.total });
+        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, format: dominant.format, unit: dominant.unit, values: data.total });
         return out;
-    }, [data]);
+    }, [data, dominant]);
 
     const tMin = times.length ? Math.min(...times) : 0;
     const tMax = times.length ? Math.max(...times) : 1;
@@ -50,7 +59,6 @@ export function GraphChart({ data }: { data: GraphData }) {
     const x = (t: number) => PAD.l + ((t - tMin) / tSpan) * (W - PAD.l - PAD.r);
     const y = (v: number) => PAD.t + (1 - v / yMax) * (H - PAD.t - PAD.b);
 
-    // Build a path that breaks at nulls (a gap in the data stays a gap, not a straight line across).
     const path = (values: (number | null)[]) => {
         let d = '';
         let pen = false;
@@ -68,7 +76,6 @@ export function GraphChart({ data }: { data: GraphData }) {
     function onMove(e: React.MouseEvent) {
         const rect = wrap.current?.getBoundingClientRect();
         if (!rect || times.length === 0) return;
-        // Map the cursor into the plot's x range, then to the nearest bucket.
         const px = ((e.clientX - rect.left) / rect.width) * W;
         const frac = Math.min(1, Math.max(0, (px - PAD.l) / (W - PAD.l - PAD.r)));
         setHover(Math.round(frac * (times.length - 1)));
@@ -88,21 +95,11 @@ export function GraphChart({ data }: { data: GraphData }) {
                     ))}
 
                     {!noData && lines.map((l) => (
-                        <path
-                            key={l.key}
-                            d={path(l.values)}
-                            fill="none"
-                            stroke={l.color}
-                            strokeWidth={l.emphasized ? 2.4 : 1.8}
-                            strokeDasharray={l.dashed ? '5 3' : undefined}
-                            strokeLinejoin="round"
-                            strokeLinecap="round"
-                            vectorEffect="non-scaling-stroke"
-                            opacity={l.emphasized ? 0.95 : 0.9}
-                        />
+                        <path key={l.key} d={path(l.values)} fill="none" stroke={l.color}
+                            strokeWidth={l.emphasized ? 2.4 : 1.8} strokeDasharray={l.dashed ? '5 3' : undefined}
+                            strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity={l.emphasized ? 0.95 : 0.9} />
                     ))}
 
-                    {/* crosshair + a dot per series at the hovered bucket */}
                     {hi != null && !noData && (
                         <g>
                             <line x1={x(times[hi])} x2={x(times[hi])} y1={PAD.t} y2={H - PAD.b} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
@@ -117,30 +114,24 @@ export function GraphChart({ data }: { data: GraphData }) {
                 </svg>
 
                 {noData && (
-                    <div className="pointer-events-none absolute inset-0 grid place-items-center text-xs text-white/35">
-                        No data in this range yet.
-                    </div>
+                    <div className="pointer-events-none absolute inset-0 grid place-items-center text-xs text-white/35">No data in this range yet.</div>
                 )}
 
-                {/* Tooltip: values at the hovered bucket. */}
                 {hi != null && !noData && (
-                    <div
-                        className="pointer-events-none absolute top-2 rounded-lg bg-[#0d0d11]/95 px-2.5 py-1.5 text-[11px] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/10"
-                        style={{ left: `${Math.min(72, (x(times[hi]) / W) * 100)}%` }}
-                    >
+                    <div className="pointer-events-none absolute top-2 rounded-lg bg-[#0d0d11]/95 px-2.5 py-1.5 text-[11px] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/10"
+                        style={{ left: `${Math.min(72, (x(times[hi]) / W) * 100)}%` }}>
                         <div className="mb-1 font-mono text-[10px] text-white/45">{fmtDate(times[hi])}</div>
                         {lines.map((l) => (
                             <div key={l.key} className="flex items-center gap-1.5">
                                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: l.color }} />
                                 <span className="min-w-0 flex-1 truncate text-white/60">{l.label}</span>
-                                <span className="ml-2 font-mono tabular-nums text-white/85">{l.values[hi] != null ? fmtY(l.values[hi] as number) : '-'}</span>
+                                <span className="ml-2 font-mono tabular-nums text-white/85">{l.values[hi] != null ? fmtValue(l.values[hi] as number, l.format, l.unit) : '-'}</span>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* Legend (always, for >= 2 series). Dashed swatch = outbound. */}
             {lines.length >= 2 && (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px]">
                     {lines.map((l) => (

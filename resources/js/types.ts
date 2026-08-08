@@ -341,7 +341,8 @@ export type AlertConditionType =
     | 'new_discovery'
     | 'backup_failed'
     | 'high_metric'
-    | 'probe_down';
+    | 'probe_down'
+    | 'probe_slow';
 
 // Service probes (GitHub #19): HTTP/TCP checks attached to a device.
 export type ProbeKind = 'http' | 'tcp';
@@ -378,13 +379,21 @@ export interface ProbeTestResult {
     cert_expires_at: string | null;
 }
 
-// Custom graphs (GitHub #28): a saved multi-interface chart.
+// Custom graphs (GitHub #28): a saved chart of any number of series.
 export type GraphMetric = 'rate' | 'util';
 export type GraphDirection = 'in' | 'out';
+export type GraphSource = 'interface' | 'sensor' | 'ping' | 'probe';
+export type GraphSeriesFormat = 'rate' | 'util' | 'ms' | 'value';
 
+// One plotted series. `source` selects which of the id fields apply.
 export interface GraphSeriesDef {
-    interface_id: number;
-    direction: GraphDirection;
+    source: GraphSource;
+    interface_id?: number;
+    direction?: GraphDirection;
+    sensor_id?: number;
+    device_id?: number;
+    probe_id?: number;
+    label?: string; // editor display label (the chart computes its own)
 }
 
 export interface GraphConfig {
@@ -399,11 +408,13 @@ export interface Graph {
     config: GraphConfig;
 }
 
+// A resolved series ready to draw: the backend has already worked out its label + how to format it.
 export interface GraphDataSeries {
-    interface_id: number;
-    direction: GraphDirection;
-    device_name: string | null;
-    interface_name: string;
+    label: string;
+    format: GraphSeriesFormat;
+    unit: string | null;
+    dashed: boolean;
+    group: string; // series sharing a group (e.g. an interface's in/out) share a colour
     values: (number | null)[];
 }
 
