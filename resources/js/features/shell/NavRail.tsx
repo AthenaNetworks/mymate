@@ -1,4 +1,4 @@
-import { MapTrifold, GlobeHemisphereWest, SquaresFour, ListDashes, MagnifyingGlass, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
+import { MapTrifold, GlobeHemisphereWest, SquaresFour, ListDashes, MagnifyingGlass, ChartLine, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
 import { useView, setView, useNavOpen, setNavOpen, type View } from '../../lib/shellStore';
 import { useUpdateCheck } from '../settings/api/updateCheck';
 import { MapLegend } from './MapLegend';
@@ -9,6 +9,7 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: SquaresFour },
     { id: 'devices', label: 'Devices', icon: ListDashes },
     { id: 'discovery', label: 'Discovery', icon: MagnifyingGlass },
+    { id: 'graphs', label: 'Graphs', icon: ChartLine },
     { id: 'outages', label: 'Outages', icon: Warning },
     { id: 'alerts', label: 'Alerts', icon: Bell },
     { id: 'upgrades', label: 'Upgrades', icon: ArrowCircleUp },

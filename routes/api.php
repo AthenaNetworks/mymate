@@ -152,6 +152,13 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     Route::post('probes/{probe}/test', [\App\Http\Controllers\Api\ProbeController::class, 'test'])
         ->middleware('throttle:20,1')->name('probes.test');
     Route::get('probes/{probe}/samples', [\App\Http\Controllers\Api\ProbeController::class, 'samples'])->name('probes.samples');
+
+    // Custom graphs (GitHub #28): saved multi-interface charts + their time series.
+    Route::get('graphs', [\App\Http\Controllers\Api\GraphController::class, 'index'])->name('graphs.index');
+    Route::post('graphs', [\App\Http\Controllers\Api\GraphController::class, 'store'])->name('graphs.store');
+    Route::put('graphs/{graph}', [\App\Http\Controllers\Api\GraphController::class, 'update'])->name('graphs.update');
+    Route::delete('graphs/{graph}', [\App\Http\Controllers\Api\GraphController::class, 'destroy'])->name('graphs.destroy');
+    Route::get('graphs/{graph}/data', [\App\Http\Controllers\Api\GraphController::class, 'data'])->name('graphs.data');
     Route::get('devices/{device}/sensors/{sensor}/samples', [InterfaceSampleController::class, 'sensor'])
         ->name('devices.sensor-samples');
     // Recent history: bucketed cpu/mem/temp series for one device (resource chart).

@@ -10,6 +10,7 @@ import { GeoView } from '../geo/components/GeoView';
 import { DashboardView } from '../dashboard/components/DashboardView';
 import { DevicesView } from '../devices/components/DevicesView';
 import { DiscoveryView } from '../discovery/components/DiscoveryView';
+import { GraphsView } from '../graphs/components/GraphsView';
 import { OutagesView } from '../outages/components/OutagesView';
 import { useOutages } from '../outages/api/getOutages';
 import { SettingsView } from '../settings/components/SettingsView';
@@ -63,6 +64,7 @@ export function AppShell() {
             {view === 'dashboard' && <DashboardView />}
             {view === 'devices' && <DevicesView />}
             {view === 'discovery' && <DiscoveryView />}
+            {view === 'graphs' && <GraphsView />}
             {view === 'outages' && <OutagesView />}
             {view === 'alerts' && <AlertsView />}
             {view === 'upgrades' && <UpgradesView />}

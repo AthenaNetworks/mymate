@@ -378,6 +378,42 @@ export interface ProbeTestResult {
     cert_expires_at: string | null;
 }
 
+// Custom graphs (GitHub #28): a saved multi-interface chart.
+export type GraphMetric = 'rate' | 'util';
+export type GraphDirection = 'in' | 'out';
+
+export interface GraphSeriesDef {
+    interface_id: number;
+    direction: GraphDirection;
+}
+
+export interface GraphConfig {
+    metric: GraphMetric;
+    series: GraphSeriesDef[];
+    show_total: boolean;
+}
+
+export interface Graph {
+    id: number;
+    name: string;
+    config: GraphConfig;
+}
+
+export interface GraphDataSeries {
+    interface_id: number;
+    direction: GraphDirection;
+    device_name: string | null;
+    interface_name: string;
+    values: (number | null)[];
+}
+
+export interface GraphData {
+    buckets: string[];
+    metric: GraphMetric;
+    series: GraphDataSeries[];
+    total: (number | null)[] | null;
+}
+
 export type DeviceMetricKey = 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
 
 /** Alert policy targeting - which devices a policy covers. */
