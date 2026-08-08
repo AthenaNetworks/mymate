@@ -169,13 +169,26 @@ export function TraceModal({
             runId === null ? null : { runId, running: run === undefined || run.status === 'running' };
     }, [runId, run]);
 
+    // Set once the modal unmounts, so a start whose response lands *after* the close can still
+    // stop its run instead of orphaning an mtr that nothing will ever cancel.
+    const unmountedRef = useRef(false);
+
     const startMutate = start.mutate;
     const startRun = useCallback(
         (nextRounds: number): void => {
             const previous = activeRef.current;
             if (previous?.running) stopTrace(deviceId, previous.runId); // never leave two runs queued
             setRunId(null);
-            startMutate({ deviceId, rounds: nextRounds }, { onSuccess: (started) => setRunId(started.run_id) });
+            startMutate(
+                { deviceId, rounds: nextRounds },
+                {
+                    onSuccess: (started) => {
+                        setRunId(started.run_id);
+                        // Modal was closed during the start round-trip: stop the run we just created.
+                        if (unmountedRef.current) stopTrace(deviceId, started.run_id);
+                    },
+                },
+            );
         },
         [deviceId, startMutate],
     );
@@ -193,9 +206,11 @@ export function TraceModal({
         startRun(DEFAULT_ROUNDS);
     }, [startRun]);
 
-    // Stop the server-side run when the modal goes away mid-trace.
+    // Stop the server-side run when the modal goes away mid-trace. Flag the unmount so a start
+    // still in flight (runId not set yet) gets stopped from its own onSuccess above.
     useEffect(
         () => () => {
+            unmountedRef.current = true;
             const active = activeRef.current;
             if (active?.running) stopTrace(deviceId, active.runId);
         },

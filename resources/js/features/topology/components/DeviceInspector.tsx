@@ -627,14 +627,17 @@ export function DeviceInspector() {
                 <a href={`ssh://${device.mgmt_ip}`} className={actionBtn}>
                     <Terminal weight="light" className="h-3.5 w-3.5" /> SSH
                 </a>
-                {/* Path trace from the MyMate server to this device - read-only, so every operator gets it. */}
-                <button
-                    onClick={() => setTracing(true)}
-                    title="Live hop-by-hop trace from this server to the device (MTR)"
-                    className={actionBtn}
-                >
-                    <Path weight="light" className="h-3.5 w-3.5" /> Trace
-                </button>
+                {/* Path trace from the MyMate server to this device - read-only, so every operator
+                    gets it. Only offered when there's a management IP to trace to (like SSH/Winbox). */}
+                {device.mgmt_ip && (
+                    <button
+                        onClick={() => setTracing(true)}
+                        title="Live hop-by-hop trace from this server to the device (MTR)"
+                        className={actionBtn}
+                    >
+                        <Path weight="light" className="h-3.5 w-3.5" /> Trace
+                    </button>
+                )}
                 {isAdmin && (
                     <button
                         onClick={doUpgrade}

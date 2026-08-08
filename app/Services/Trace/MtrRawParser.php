@@ -184,8 +184,10 @@ class MtrRawParser
             'avg_ms' => $answered ? round($hop['mean'], 1) : null,
             'best_ms' => $answered ? round($hop['best'], 1) : null,
             'worst_ms' => $answered ? round($hop['worst'], 1) : null,
-            // Population stdev over the received samples (matches mtr's own STDEV column).
-            'stdev_ms' => $answered ? round($recv > 1 ? sqrt($hop['m2'] / $recv) : 0.0, 1) : null,
+            // Population stdev over the received samples (matches mtr's own STDEV column). max(0)
+            // guards against a tiny negative m2 from Welford floating-point cancellation, which
+            // would otherwise make sqrt() NaN and break JSON encoding of the snapshot.
+            'stdev_ms' => $answered ? round($recv > 1 ? sqrt(max(0.0, $hop['m2']) / $recv) : 0.0, 1) : null,
         ];
     }
 }

@@ -49,6 +49,10 @@ class TraceController extends Controller
             'hops' => [],
         ], now()->addMinutes(self::CACHE_TTL_MINUTES));
 
+        // Remember who started it (a separate key the job's snapshot rewrites never touch) so
+        // only the starter or an admin can stop it - not any other operator on the same device.
+        Cache::put("trace:{$runId}:owner", $request->user()->id, now()->addMinutes(self::CACHE_TTL_MINUTES));
+
         RunTraceJob::dispatch($device->id, $runId, $device->mgmt_ip, $rounds);
 
         return response()->json(['run_id' => $runId, 'status' => 'running'], 202);
@@ -64,9 +68,14 @@ class TraceController extends Controller
      * Flags the run to stop; RunTraceJob polls this flag and exits within one poll
      * cycle (killing the mtr process), then writes a final status=stopped snapshot.
      */
-    public function stop(Device $device, string $runId): Response
+    public function stop(Request $request, Device $device, string $runId): Response
     {
         $this->ownedSnapshot($device, $runId); // 404s before setting a flag for a foreign run
+
+        // Only the operator who started this run (or an admin) may cancel it, so one operator
+        // can't kill another's live trace on a shared device.
+        $owner = Cache::get("trace:{$runId}:owner");
+        abort_unless($request->user()->isAdmin() || ($owner !== null && $owner === $request->user()->id), 403);
 
         Cache::put("trace:{$runId}:stop", true, now()->addMinutes(self::CACHE_TTL_MINUTES));
 

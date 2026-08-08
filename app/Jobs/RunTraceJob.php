@@ -61,8 +61,9 @@ class RunTraceJob implements ShouldQueue
 
     private function run(MtrRawParser $parser): void
     {
-        // -b resolves PTR names too; -i 1 = one round per second; --raw = machine lines.
-        $process = new Process([self::binary(), '--raw', '-b', '-i', '1', '-c', (string) $this->rounds, $this->ip]);
+        // -b resolves PTR names too; -i 1 = one round per second; --raw = machine lines. The `--`
+        // ends option parsing so a target that somehow begins with '-' can't be read as an mtr flag.
+        $process = new Process([self::binary(), '--raw', '-b', '-i', '1', '-c', (string) $this->rounds, '--', $this->ip]);
         $process->setTimeout(max(30, $this->timeout - 10)); // headroom under the job's own kill
         $process->start();
 
@@ -73,14 +74,15 @@ class RunTraceJob implements ShouldQueue
         while ($process->isRunning()) {
             $buffer = $this->consume($buffer.$process->getIncrementalOutput(), $parser);
 
-            if (Cache::get("trace:{$this->runId}:stop")) {
-                $process->stop(3); // SIGTERM, then SIGKILL after 3s if it won't die
-                $stopped = true;
-                break;
-            }
-
+            // Read process output frequently (smooth streaming) but only touch Redis for the
+            // stop flag + snapshot on the once-a-second push cadence, not every 250ms poll.
             $now = microtime(true);
             if ($now - $lastPush >= self::PUSH_INTERVAL_SECONDS) {
+                if (Cache::get("trace:{$this->runId}:stop")) {
+                    $process->stop(3); // SIGTERM, then SIGKILL after 3s if it won't die
+                    $stopped = true;
+                    break;
+                }
                 $this->push($parser, 'running');
                 $lastPush = $now;
             }
