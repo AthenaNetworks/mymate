@@ -14,6 +14,10 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Graphs page: custom multi-interface charts (GitHub #28).** A new Graphs page where you build
+  and save charts plotting any number of interfaces together - inbound and/or outbound - with an
+  optional combined total line, over a selectable time range, as throughput or utilisation. Handy
+  for watching several internet links and their combined usage on one chart.
 - **Geo map: devices inherit their uplink's location (GitHub #21).** A device with no coordinates
   of its own now falls back to the nearest ancestor up its uplink (parent) chain, so CPE behind a
   placed tower or AP appear on the geographic map automatically without geocoding every endpoint.
