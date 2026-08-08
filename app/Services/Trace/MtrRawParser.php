@@ -9,27 +9,30 @@ namespace App\Services\Trace;
  * fresh snapshot() every ~second without re-parsing anything already seen.
  *
  * Raw grammar (mtr-tiny 0.95, `mtr --raw -b -i 1 -c <rounds> <ip>`):
- *   x <ttl> <seq>          probe sent for hop <ttl>
- *   h <ttl> <ip>           responder address for hop <ttl> (repeats - idempotent to set)
- *   p <ttl> <usec> <seq>   round-trip time in MICROSECONDS for hop <ttl>
- *   d <ttl> <hostname>     lazy reverse-DNS name for hop <ttl> (may never arrive)
- * ttl 0 is the source (mtr itself), never part of the reported path - ignored.
+ *   x <idx> <seq>          probe sent for hop <idx>
+ *   h <idx> <ip>           responder address for hop <idx> (repeats - idempotent to set)
+ *   p <idx> <usec> <seq>   round-trip time in MICROSECONDS for hop <idx>
+ *   d <idx> <hostname>     lazy reverse-DNS name for hop <idx> (may never arrive)
+ *
+ * The <idx> field is a 0-based hop index: index 0 IS the first real hop (the local
+ * gateway), not the source. We keep it and present hops 1-based to the caller so the
+ * table reads like traceroute (hop 1, 2, 3, ...).
  */
 class MtrRawParser
 {
     /**
-     * Per-ttl running stats. mean/m2 are Welford's online-variance accumulators
-     * (avoids keeping every sample just to compute avg/stdev).
+     * Per-hop running stats, keyed by the raw 0-based hop index. mean/m2 are Welford's
+     * online-variance accumulators (avoids keeping every sample just to compute avg/stdev).
      *
      * @var array<int, array{ip: ?string, ptr: ?string, sent: int, recv: int, last: ?float, best: ?float, worst: ?float, mean: float, m2: float}>
      */
     private array $hops = [];
 
-    /** Count of `x 1 ...` lines - the number of rounds mtr has started firing probes for. */
+    /** Count of `x 0 ...` lines - the number of rounds mtr has started firing probes for. */
     private int $roundsDone = 0;
 
-    /** Highest ttl seen in any `x`/`h`/`p`/`d` line so far. */
-    private int $maxTtl = 0;
+    /** Highest hop index seen in any `x`/`h`/`p`/`d` line so far, or -1 if nothing yet. */
+    private int $maxIdx = -1;
 
     public function __construct(private readonly string $target)
     {
@@ -47,18 +50,22 @@ class MtrRawParser
             return; // not a line shape we understand - ignore rather than blow up mid-stream
         }
 
-        $ttl = (int) $parts[1];
-        if ($ttl < 1) {
-            return; // ttl 0 = source hop, or an unparsable ttl - not part of the reported path
+        if (! is_numeric($parts[1])) {
+            return; // no usable hop index - not a raw path line
         }
 
-        $this->maxTtl = max($this->maxTtl, $ttl);
+        $idx = (int) $parts[1];
+        if ($idx < 0) {
+            return; // shouldn't happen, but a negative index is not a real hop
+        }
+
+        $this->maxIdx = max($this->maxIdx, $idx);
 
         match ($parts[0]) {
-            'x' => $this->onSent($ttl),
-            'h' => $this->onAddress($ttl, $parts[2] ?? null),
-            'p' => $this->onRtt($ttl, $parts[2] ?? null),
-            'd' => $this->onPtr($ttl, $parts[2] ?? null),
+            'x' => $this->onSent($idx),
+            'h' => $this->onAddress($idx, $parts[2] ?? null),
+            'p' => $this->onRtt($idx, $parts[2] ?? null),
+            'd' => $this->onPtr($idx, $parts[2] ?? null),
             default => null, // unhandled raw line type (future mtr additions, event lines, ...)
         };
     }
@@ -75,44 +82,44 @@ class MtrRawParser
         $cutoff = $this->targetCutoff();
 
         $hops = [];
-        for ($ttl = 1; $ttl <= $cutoff; $ttl++) {
-            $hops[] = $this->hopSnapshot($ttl, $this->hops[$ttl] ?? null);
+        for ($idx = 0; $idx <= $cutoff; $idx++) {
+            $hops[] = $this->hopSnapshot($idx, $this->hops[$idx] ?? null);
         }
 
         return ['rounds_done' => $this->roundsDone, 'hops' => $hops];
     }
 
-    private function onSent(int $ttl): void
+    private function onSent(int $idx): void
     {
-        $hop = &$this->hop($ttl);
+        $hop = &$this->hop($idx);
         $hop['sent']++;
 
-        if ($ttl === 1) {
-            $this->roundsDone++;
+        if ($idx === 0) {
+            $this->roundsDone++; // first probe of each round is always the index-0 hop
         }
     }
 
-    private function onAddress(int $ttl, ?string $ip): void
+    private function onAddress(int $idx, ?string $ip): void
     {
         if ($ip === null) {
             return;
         }
 
-        $hop = &$this->hop($ttl);
+        $hop = &$this->hop($idx);
         $hop['ip'] = $ip; // repeated 'h' lines for the same hop just re-confirm it - idempotent
     }
 
-    private function onPtr(int $ttl, ?string $hostname): void
+    private function onPtr(int $idx, ?string $hostname): void
     {
         if ($hostname === null) {
             return;
         }
 
-        $hop = &$this->hop($ttl);
+        $hop = &$this->hop($idx);
         $hop['ptr'] = $hostname;
     }
 
-    private function onRtt(int $ttl, ?string $usec): void
+    private function onRtt(int $idx, ?string $usec): void
     {
         if ($usec === null || ! is_numeric($usec)) {
             return;
@@ -120,7 +127,7 @@ class MtrRawParser
 
         $ms = ((float) $usec) / 1000.0;
 
-        $hop = &$this->hop($ttl);
+        $hop = &$this->hop($idx);
         $hop['recv']++;
         $hop['last'] = $ms;
         $hop['best'] = $hop['best'] === null ? $ms : min($hop['best'], $ms);
@@ -133,48 +140,49 @@ class MtrRawParser
     }
 
     /** @return array{ip: ?string, ptr: ?string, sent: int, recv: int, last: ?float, best: ?float, worst: ?float, mean: float, m2: float} */
-    private function &hop(int $ttl): array
+    private function &hop(int $idx): array
     {
-        if (! isset($this->hops[$ttl])) {
-            $this->hops[$ttl] = [
+        if (! isset($this->hops[$idx])) {
+            $this->hops[$idx] = [
                 'ip' => null, 'ptr' => null, 'sent' => 0, 'recv' => 0,
                 'last' => null, 'best' => null, 'worst' => null, 'mean' => 0.0, 'm2' => 0.0,
             ];
         }
 
-        return $this->hops[$ttl];
+        return $this->hops[$idx];
     }
 
     /**
-     * mtr grows the probed ttl range while it hunts for the path length, so the target's
-     * own IP can show up at more than one trailing ttl (e.g. ttl 8 *and* 9 both answering
-     * as the final destination in the same run). The first ttl the target answers at IS
+     * mtr grows the probed range while it hunts for the path length, so the target's own
+     * IP can show up at more than one trailing index (e.g. index 7 *and* 8 both answering
+     * as the final destination in the same run). The first index the target answers at IS
      * the real path length - anything past it is that hunting artifact, not a real hop.
-     * Returns maxTtl unchanged when the target hasn't answered yet (or never does).
+     * Returns maxIdx unchanged when the target hasn't answered yet (or never does), and
+     * -1 when nothing has been seen at all.
      */
     private function targetCutoff(): int
     {
-        for ($ttl = 1; $ttl <= $this->maxTtl; $ttl++) {
-            if (($this->hops[$ttl]['ip'] ?? null) === $this->target) {
-                return $ttl;
+        for ($idx = 0; $idx <= $this->maxIdx; $idx++) {
+            if (($this->hops[$idx]['ip'] ?? null) === $this->target) {
+                return $idx;
             }
         }
 
-        return $this->maxTtl;
+        return $this->maxIdx;
     }
 
     /**
      * @param ?array{ip: ?string, ptr: ?string, sent: int, recv: int, last: ?float, best: ?float, worst: ?float, mean: float, m2: float} $hop
      * @return array<string, mixed>
      */
-    private function hopSnapshot(int $ttl, ?array $hop): array
+    private function hopSnapshot(int $idx, ?array $hop): array
     {
         $sent = $hop['sent'] ?? 0;
         $recv = $hop['recv'] ?? 0;
         $answered = $recv > 0; // a hop that never answered reports null ip/ptr/latency, 100% loss
 
         return [
-            'ttl' => $ttl,
+            'ttl' => $idx + 1, // present 1-based so the table numbers hops like traceroute
             'ip' => $answered ? $hop['ip'] : null,
             'ptr' => $answered ? $hop['ptr'] : null,
             'sent' => $sent,
