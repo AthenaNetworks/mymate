@@ -138,6 +138,15 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     // Recent history: bucketed latency/loss/jitter series for one device (ping chart).
     Route::get('devices/{device}/ping-samples', [InterfaceSampleController::class, 'ping'])
         ->name('devices.ping-samples');
+    // Live MTR trace from this server to a device's own mgmt IP. start/stop are
+    // non-admin-safe (see RestrictWritesToAdmins::OPERATOR_ACTION_ROUTES) - the target
+    // is locked to the device's own IP, so there's nothing here for an operator to break.
+    Route::post('devices/{device}/trace', [\App\Http\Controllers\Api\TraceController::class, 'start'])
+        ->name('devices.trace.start');
+    Route::get('devices/{device}/trace/{runId}', [\App\Http\Controllers\Api\TraceController::class, 'show'])
+        ->name('devices.trace.show');
+    Route::delete('devices/{device}/trace/{runId}', [\App\Http\Controllers\Api\TraceController::class, 'stop'])
+        ->name('devices.trace.stop');
     // Device model icon (MikroTik product photo, fetched + cached on first sighting).
     Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\DeviceIconController::class, 'show'])
         ->name('devices.icon');

@@ -48,6 +48,15 @@ of commit subjects.
   `redis-cli CONFIG SET maxmemory <~40% of RAM>` and `redis-cli CONFIG SET maxmemory-policy allkeys-lru`.
 
 ### Added
+- **Live path trace to a device.** A Trace button on the device inspector runs an MTR-style trace
+  from the My Mate server to the device's management IP and fills a live hop table - loss %,
+  probes sent, last/avg/best/worst/stdev latency, reverse-DNS names, colour-coded loss and a
+  latency bar - updating once a second until it finishes or you stop it. It answers "where does
+  it break?", not just "is it down?". Every operator can run one (read-only accounts included):
+  the target is always the device's own IP, so there is nothing to point somewhere else. Traces
+  run on their own `trace` Horizon queue, so a long one never delays a ping or poll sweep, and
+  closing the modal kills the mtr process. Needs the `mtr` binary on the box (Debian:
+  `apt-get install mtr-tiny`); the Docker image ships it.
 - **Sales demo: charts are full from the first click.** `mymate:demo --seed` now backfills 24 hours
   of per-minute history for every mock device - throughput, CPU/memory/temperature, and ping
   latency/loss/jitter - so the device inspector never shows "No history yet" on the demo. The
