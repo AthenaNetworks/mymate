@@ -13,14 +13,31 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-09
+
 ### Added
+- **Tools page: standalone network diagnostics.** A new Tools page in the nav with six utilities
+  that run from the My Mate server, aimed at a target you type rather than a monitored device:
+  ping, traceroute (MTR), an IPv4 subnet scan (a live-host sweep that adds reverse DNS, a NetBIOS
+  name/MAC, and an optional port scan per host), a port map (TCP connect scan of a target), an
+  IPv4/IPv6 subnet calculator, and a bgp.tools lookup (origin AS, name and covering prefix for an
+  IP or ASN). The scanning tools are pure PHP plus the fping already on the box - no nmap or other
+  new dependencies - and they stream results live with a Stop button; navigating away cancels the
+  run. Available to every operator as read-only diagnostics, and they share the isolated `trace`
+  Horizon queue so a scan never delays a ping or poll sweep.
 - **Graphs page: custom multi-interface charts (GitHub #28).** A new Graphs page where you build
   and save charts plotting any number of interfaces together - inbound and/or outbound - with an
   optional combined total line, over a selectable time range, as throughput or utilisation. Handy
   for watching several internet links and their combined usage on one chart.
-- **Geo map: devices inherit their uplink's location (GitHub #21).** A device with no coordinates
-  of its own now falls back to the nearest ancestor up its uplink (parent) chain, so CPE behind a
-  placed tower or AP appear on the geographic map automatically without geocoding every endpoint.
+- **Live path trace to a device.** A Trace button on the device inspector runs an MTR-style trace
+  from the My Mate server to the device's management IP and fills a live hop table - loss %,
+  probes sent, last/avg/best/worst/stdev latency, reverse-DNS names, colour-coded loss and a
+  latency bar - updating once a second until it finishes or you stop it. It answers "where does
+  it break?", not just "is it down?". Every operator can run one (read-only accounts included):
+  the target is always the device's own IP, so there is nothing to point somewhere else. Traces
+  run on their own `trace` Horizon queue, so a long one never delays a ping or poll sweep, and
+  closing the modal kills the mtr process. Needs the `mtr` binary on the box (Debian:
+  `apt-get install mtr-tiny`); the Docker image ships it.
 - **Granular access: restrict operators to specific maps (GitHub #28).** On top of the admin /
   read-only split, an operator can now be marked "restricted" and granted specific maps. They then
   see only those maps (and their sub-maps) and the devices and links on them - everything else,
@@ -35,28 +52,9 @@ of commit subjects.
   TCP probes just open the port. Probes run on the poll loop with the same flap dampening as ping,
   keep a latency/status history, and feed a new "service probe down" alert condition. Managed from
   the device inspector, with a run-now test button.
-
-### Fixed
-- **Redis no longer grows until it gets OOM-killed on large fleets.** The live map updates
-  (interface load, device metrics, up/down, latency) were queued for delivery; on a big fleet the
-  per-tick stream out-ran the worker draining it and piled up in Redis until the kernel killed
-  `redis-server` and took monitoring down with it. These ephemeral updates now broadcast inline, so
-  they never touch the queue - a delayed frame is stale anyway. As a backstop the packaged installs
-  now cap Redis memory (`maxmemory` at 40% of RAM, `allkeys-lru`), and Horizon keeps far less
-  completed-job history and ignores the routine poll jobs entirely. Nothing here is durable, so the
-  cap and the shorter history are safe. Apply the cap to an existing box now with
-  `redis-cli CONFIG SET maxmemory <~40% of RAM>` and `redis-cli CONFIG SET maxmemory-policy allkeys-lru`.
-
-### Added
-- **Live path trace to a device.** A Trace button on the device inspector runs an MTR-style trace
-  from the My Mate server to the device's management IP and fills a live hop table - loss %,
-  probes sent, last/avg/best/worst/stdev latency, reverse-DNS names, colour-coded loss and a
-  latency bar - updating once a second until it finishes or you stop it. It answers "where does
-  it break?", not just "is it down?". Every operator can run one (read-only accounts included):
-  the target is always the device's own IP, so there is nothing to point somewhere else. Traces
-  run on their own `trace` Horizon queue, so a long one never delays a ping or poll sweep, and
-  closing the modal kills the mtr process. Needs the `mtr` binary on the box (Debian:
-  `apt-get install mtr-tiny`); the Docker image ships it.
+- **Geo map: devices inherit their uplink's location (GitHub #21).** A device with no coordinates
+  of its own now falls back to the nearest ancestor up its uplink (parent) chain, so CPE behind a
+  placed tower or AP appear on the geographic map automatically without geocoding every endpoint.
 - **Sales demo: charts are full from the first click.** `mymate:demo --seed` now backfills 24 hours
   of per-minute history for every mock device - throughput, CPU/memory/temperature, and ping
   latency/loss/jitter - so the device inspector never shows "No history yet" on the demo. The
@@ -67,6 +65,19 @@ of commit subjects.
   Latency and Loss sparklines are populated and live-update. See [deploy/demo/README.md](deploy/demo/README.md).
 
 ### Fixed
+- **Trace now shows the first hop.** mtr's raw output numbers hops from zero, and index 0 is the
+  first real hop (the local gateway), not the source - the parser was dropping it, so both the
+  device trace and the new Tools traceroute started at the second hop. The first hop is now kept,
+  and hops are numbered from 1 like traceroute.
+- **Redis no longer grows until it gets OOM-killed on large fleets.** The live map updates
+  (interface load, device metrics, up/down, latency) were queued for delivery; on a big fleet the
+  per-tick stream out-ran the worker draining it and piled up in Redis until the kernel killed
+  `redis-server` and took monitoring down with it. These ephemeral updates now broadcast inline, so
+  they never touch the queue - a delayed frame is stale anyway. As a backstop the packaged installs
+  now cap Redis memory (`maxmemory` at 40% of RAM, `allkeys-lru`), and Horizon keeps far less
+  completed-job history and ignores the routine poll jobs entirely. Nothing here is durable, so the
+  cap and the shorter history are safe. Apply the cap to an existing box now with
+  `redis-cli CONFIG SET maxmemory <~40% of RAM>` and `redis-cli CONFIG SET maxmemory-policy allkeys-lru`.
 - **Ping monitoring survives the sharding upgrade.** After deploying the sharded ping sweep
   (1.4.0), a still-running pre-upgrade dispatcher (`mymate:loop`) kept queueing old-format
   sweep jobs whose payloads lack the new shard fields - deserialisation skips the constructor,
@@ -414,7 +425,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/AthenaNetworks/mymate/compare/v1.1.1...v1.2.0
