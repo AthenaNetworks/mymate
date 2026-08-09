@@ -30,10 +30,11 @@ class RestrictWritesToAdmins
     /**
      * Route names a non-admin may still POST/DELETE to because the action is harmless:
      * it can only affect the requesting operator's own view, never the monitored fleet's
-     * config. Live trace start/stop is the first example - the target is locked to the
-     * device's own mgmt IP, so there's nothing here for a viewer to break.
+     * config. Live device trace start/stop was the first example - the target is locked to
+     * the device's own mgmt IP. The Tools page (tools.*) is the same idea: ping/trace/sweep/
+     * port-scan/bgp are read-only network diagnostics that don't mutate any monitored config.
      */
-    private const OPERATOR_ACTION_ROUTES = ['devices.trace.start', 'devices.trace.stop'];
+    private const OPERATOR_ACTION_ROUTES = ['devices.trace.start', 'devices.trace.stop', 'tools.*'];
 
     public function handle(Request $request, Closure $next): Response
     {

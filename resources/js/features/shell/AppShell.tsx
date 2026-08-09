@@ -11,6 +11,7 @@ import { DashboardView } from '../dashboard/components/DashboardView';
 import { DevicesView } from '../devices/components/DevicesView';
 import { DiscoveryView } from '../discovery/components/DiscoveryView';
 import { GraphsView } from '../graphs/components/GraphsView';
+import { ToolsView } from '../tools/components/ToolsView';
 import { OutagesView } from '../outages/components/OutagesView';
 import { useOutages } from '../outages/api/getOutages';
 import { SettingsView } from '../settings/components/SettingsView';
@@ -65,6 +66,7 @@ export function AppShell() {
             {view === 'devices' && <DevicesView />}
             {view === 'discovery' && <DiscoveryView />}
             {view === 'graphs' && <GraphsView />}
+            {view === 'tools' && <ToolsView />}
             {view === 'outages' && <OutagesView />}
             {view === 'alerts' && <AlertsView />}
             {view === 'upgrades' && <UpgradesView />}

@@ -149,6 +149,20 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
         ->name('devices.trace.show');
     Route::delete('devices/{device}/trace/{runId}', [\App\Http\Controllers\Api\TraceController::class, 'stop'])
         ->name('devices.trace.stop');
+    // The Tools page: standalone network diagnostics aimed at an operator-typed target rather
+    // than a monitored device. Each start kicks off a streaming job written to the tool-run
+    // cache (same live pattern as the device trace) and returns a run id to poll via tools.show;
+    // tools.stop cancels it. Starts are throttled so they can't be looped to flood the queue.
+    // All are operator-safe (see RestrictWritesToAdmins::OPERATOR_ACTION_ROUTES 'tools.*').
+    Route::prefix('tools')->controller(\App\Http\Controllers\Api\Tools\ToolsController::class)->group(function () {
+        Route::post('ping', 'startPing')->middleware('throttle:30,1')->name('tools.ping.start');
+        Route::post('trace', 'startTrace')->middleware('throttle:30,1')->name('tools.trace.start');
+        Route::post('sweep', 'startSweep')->middleware('throttle:30,1')->name('tools.sweep.start');
+        Route::post('portscan', 'startPortScan')->middleware('throttle:30,1')->name('tools.portscan.start');
+        Route::post('bgp', 'bgp')->middleware('throttle:60,1')->name('tools.bgp');
+        Route::get('runs/{runId}', 'show')->name('tools.show');
+        Route::delete('runs/{runId}', 'stop')->name('tools.stop');
+    });
     // Device model icon (MikroTik product photo, fetched + cached on first sighting).
     Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\DeviceIconController::class, 'show'])
         ->name('devices.icon');

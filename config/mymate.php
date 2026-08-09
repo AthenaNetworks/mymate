@@ -55,6 +55,38 @@ return [
         'mtr' => env('MYMATE_MTR_PATH'),
     ],
 
+    // The Tools page (ping, trace, subnet sweep, port scan, subnet calc, bgp.tools lookup).
+    // Every tool streams its output into Redis for the browser to poll, same as a live trace.
+    'tools' => [
+        // Largest subnet a single sweep will enumerate, as a prefix length. /22 = 1024 hosts.
+        // Anything bigger is rejected up front - a sweep has to finish inside the job timeout,
+        // and nobody wants one operator kicking off a /8 ping storm from the poller box.
+        'max_sweep_hosts' => (int) env('MYMATE_TOOLS_MAX_SWEEP_HOSTS', 1024),
+        // Per-connection timeout (ms) for the TCP connect scan (port map + optional sweep ports).
+        // A refused port answers instantly; this only bounds how long a filtered/dropped port
+        // is waited on before it's called closed.
+        'connect_timeout_ms' => (int) env('MYMATE_TOOLS_CONNECT_TIMEOUT_MS', 700),
+        // How many TCP connects a scan has in flight at once. Higher finishes a wide port list
+        // faster but opens that many sockets from this box; keep it civil on a shared server.
+        'connect_concurrency' => (int) env('MYMATE_TOOLS_CONNECT_CONCURRENCY', 64),
+        // Hard cap on how many ports one port-scan request may probe, so a caller can't ask for
+        // all 65535 and pin the box. The "common ports" default list is well under this.
+        'max_ports' => (int) env('MYMATE_TOOLS_MAX_PORTS', 1024),
+        // NetBIOS node-status lookups during a sweep (UDP 137). Off = skip them (some networks
+        // firewall 137 and the per-host wait just adds latency for nothing).
+        'netbios' => (bool) env('MYMATE_TOOLS_NETBIOS', true),
+        'netbios_timeout_ms' => (int) env('MYMATE_TOOLS_NETBIOS_TIMEOUT_MS', 700),
+        // bgp.tools whois lookup (their port-43 interface). Host/port rarely need changing.
+        'bgp' => [
+            'host' => env('MYMATE_TOOLS_BGP_HOST', 'bgp.tools'),
+            'port' => (int) env('MYMATE_TOOLS_BGP_PORT', 43),
+            'timeout' => (int) env('MYMATE_TOOLS_BGP_TIMEOUT', 6),
+            // How long (minutes) to cache a lookup. bgp.tools ask that their data not be hammered;
+            // the same IP/ASN rarely changes AS within an hour.
+            'cache_minutes' => (int) env('MYMATE_TOOLS_BGP_CACHE_MINUTES', 60),
+        ],
+    ],
+
     // Interface throughput loop. intervals in seconds.
     'poll' => [
         'interval' => (int) env('MYMATE_POLL_INTERVAL', 12),
