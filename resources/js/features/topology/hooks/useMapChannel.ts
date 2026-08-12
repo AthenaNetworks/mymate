@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { deviceKeys } from '../../devices/api/getDevices';
+import { outageKeys } from '../../outages/api/getOutages';
 import { linkKeys } from '../api/getLinks';
 import type { Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
@@ -45,6 +46,9 @@ export function useMapChannel(
             // notification for every device at once.
             if (before && before.status !== e.status && before.status !== 'unknown') {
                 onStatus?.({ id: e.id, name: before.name, status: e.status });
+                // A real flip opens/closes an outage row - refresh the timeline now so the
+                // header status feed and Outages view update ahead of their 15s poll.
+                void qc.invalidateQueries({ queryKey: outageKeys.all });
             }
         });
 
