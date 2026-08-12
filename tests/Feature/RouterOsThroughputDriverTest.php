@@ -110,6 +110,25 @@ class RouterOsThroughputDriverTest extends TestCase
         $this->assertSame(0.0, $samples[10]->inBps);
     }
 
+    public function test_down_ports_are_recorded_even_when_monitor_traffic_fails(): void
+    {
+        // A monitor-traffic failure (a disabled interface in the batch trips the whole call on
+        // some RouterOS versions) must not lose the per-port down detection read from `running`.
+        // GitHub #22: the alert-critical up/down state comes from /interface/print, not traffic.
+        $client = new FakeRouterOsClient(replies: [
+            '/interface/print' => [
+                ['.id' => '*1', 'name' => 'ether1', 'type' => 'ether', 'running' => 'true'],
+                ['.id' => '*A', 'name' => 'ether2', 'type' => 'ether', 'running' => 'false'],
+            ],
+            '/interface/monitor-traffic' => new RouterOsClientException('interface disabled'),
+        ]);
+
+        $samples = (new RouterOsThroughputDriver($client))->sample($this->routerOsDevice());
+
+        $this->assertArrayHasKey(10, $samples);   // ether2 (hex A) still present
+        $this->assertFalse($samples[10]->operUp); // and still detected as down
+    }
+
     public function test_missing_routeros_credential_throws(): void
     {
         $credential = Credential::factory()->create(); // snmp type, no username

@@ -7,6 +7,7 @@ use App\Services\RouterOs\RouterOsClient;
 use App\Services\RouterOs\RouterOsClientException;
 use App\Services\RouterOs\RouterOsConnection;
 use App\Services\RouterOs\RouterOsTarget;
+use App\Support\EngineLog;
 
 /**
  * Throughput via the RouterOS binary API (no SNMP needed).
@@ -75,32 +76,43 @@ class RouterOsThroughputDriver implements ThroughputDriver
                 return [];
             }
 
-            $replies = $conn->query('/interface/monitor-traffic', [
-                'interface' => implode(',', array_keys($ifIndexByName)),
-                'once' => '',
-            ]);
-
+            // Record every down port up front, straight from `running`. Per-interface down
+            // detection is the alert-critical path (GitHub #22) and must not hinge on
+            // monitor-traffic, which can omit - or on some RouterOS versions error the whole
+            // batch on - a port with no link or an admin-disabled one. A down port carries no
+            // throughput, so 0 is the right reading; a monitor-traffic reply for the same port
+            // below just overlays the identical value.
             $samples = [];
-            foreach ($replies as $reply) {
-                $name = $reply['name'] ?? null;
-                if ($name === null || ! isset($ifIndexByName[$name])) {
-                    continue;
-                }
-
-                $samples[$ifIndexByName[$name]] = InterfaceSample::rates(
-                    (float) ($reply['rx-bits-per-second'] ?? 0),
-                    (float) ($reply['tx-bits-per-second'] ?? 0),
-                    $operByName[$name] ?? null,
-                );
-            }
-
-            // monitor-traffic can skip a down port, so it would never land in $samples and its
-            // oper_status would go stale. Record the down ones explicitly (zero throughput) so
-            // they're seen as down.
             foreach ($ifIndexByName as $name => $ifIndex) {
-                if (! isset($samples[$ifIndex]) && ($operByName[$name] ?? null) === false) {
+                if (($operByName[$name] ?? null) === false) {
                     $samples[$ifIndex] = InterfaceSample::rates(0.0, 0.0, false);
                 }
+            }
+
+            // Overlay live throughput for the ports that answer. Isolated so a monitor-traffic
+            // failure still leaves the down-port detection above intact - the throughput just
+            // goes stale for a tick, the up/down state does not.
+            try {
+                $replies = $conn->query('/interface/monitor-traffic', [
+                    'interface' => implode(',', array_keys($ifIndexByName)),
+                    'once' => '',
+                ]);
+                foreach ($replies as $reply) {
+                    $name = $reply['name'] ?? null;
+                    if ($name === null || ! isset($ifIndexByName[$name])) {
+                        continue;
+                    }
+                    $samples[$ifIndexByName[$name]] = InterfaceSample::rates(
+                        (float) ($reply['rx-bits-per-second'] ?? 0),
+                        (float) ($reply['tx-bits-per-second'] ?? 0),
+                        $operByName[$name] ?? null,
+                    );
+                }
+            } catch (RouterOsClientException $e) {
+                EngineLog::debug('routeros: monitor-traffic failed, oper-status still recorded', [
+                    'device_id' => $device->id,
+                    'error' => $e->getMessage(),
+                ]);
             }
 
             return $samples;

@@ -3,10 +3,12 @@
 namespace Tests\Support;
 
 use App\Services\RouterOs\RouterOsConnection;
+use Throwable;
 
 /**
  * In-memory RouterOsConnection - returns canned replies keyed by command.
- * Set `$replies['/interface/print'] = [[...], ...]` to script a device.
+ * Set `$replies['/interface/print'] = [[...], ...]` to script a device. A reply that is a
+ * Throwable is thrown instead of returned, so a test can simulate one command failing.
  */
 class FakeRouterOsConnection implements RouterOsConnection
 {
@@ -15,14 +17,19 @@ class FakeRouterOsConnection implements RouterOsConnection
 
     public bool $closed = false;
 
-    /** @param array<string, list<array<string, string>>> $replies */
+    /** @param array<string, list<array<string, string>>|Throwable> $replies */
     public function __construct(public array $replies = []) {}
 
     public function query(string $command, array $params = []): array
     {
         $this->queries[] = ['command' => $command, 'params' => $params];
 
-        return $this->replies[$command] ?? [];
+        $reply = $this->replies[$command] ?? [];
+        if ($reply instanceof Throwable) {
+            throw $reply;
+        }
+
+        return $reply;
     }
 
     /** Command strings issued, in order - handy for asserting an upgrade sequence. */
