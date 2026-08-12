@@ -27,9 +27,17 @@ func New() *Poller { return &Poller{state: newState()} }
 func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload {
 	flows := p.runSNMP(job.SNMP)
 	var metrics []proto.MetricsResult
+	var discovery []proto.DeviceDiscovery
 	for _, t := range job.SNMP {
 		if m := p.pollSNMPMetrics(t); m != nil {
 			metrics = append(metrics, *m)
+		}
+		// Discovery cadence: (re)walk interfaces + facts so an agent-polled device is
+		// discovered from the agent, not the central server (#33).
+		if t.Discover {
+			if d := p.discoverDevice(t); d != nil {
+				discovery = append(discovery, *d)
+			}
 		}
 	}
 	for _, t := range job.RouterOS {
@@ -42,6 +50,7 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 		Pings:      p.runPings(ctx, job.Ping),
 		Throughput: flows,
 		Metrics:    metrics,
+		Discovery:  discovery,
 	}
 }
 

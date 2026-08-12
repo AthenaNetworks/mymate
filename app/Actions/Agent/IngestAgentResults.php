@@ -2,6 +2,7 @@
 
 namespace App\Actions\Agent;
 
+use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
 use App\Enums\DeviceStatus;
 use App\Events\DeviceMetricsUpdated;
@@ -37,6 +38,7 @@ class IngestAgentResults
     public function __construct(
         private RecordOutage $outages,
         private RateCalculator $rates,
+        private CaptureDeviceFacts $facts,
     ) {}
 
     /** @param array<string,mixed> $payload */
@@ -45,6 +47,80 @@ class IngestAgentResults
         $this->ingestPings($agent, $payload['pings'] ?? []);
         $this->ingestThroughput($agent, $payload['throughput'] ?? []);
         $this->ingestMetrics($agent, $payload['metrics'] ?? []);
+        $this->ingestDiscovery($agent, $payload['discovery'] ?? []);
+    }
+
+    /**
+     * Fold an agent's discovery pass into the same tables the central discovery writes: upsert the
+     * device's interfaces (keyed on device_id+if_index, so re-running refreshes rather than
+     * duplicates) and apply the parsed facts. Only this agent's devices are touched (#33).
+     *
+     * @param  array<int,array<string,mixed>>  $discovery
+     */
+    private function ingestDiscovery(Agent $agent, array $discovery): void
+    {
+        if ($discovery === []) {
+            return;
+        }
+        $wanted = collect($discovery)->pluck('device_id')->all();
+        $devices = Device::where('agent_id', $agent->id)->whereIn('id', $wanted)->get()->keyBy('id');
+
+        foreach ($discovery as $d) {
+            $device = $devices->get($d['device_id'] ?? 0);
+            if ($device === null) {
+                continue; // not this agent's device - ignore
+            }
+
+            $this->applyDiscoveredInterfaces($device, $d['interfaces'] ?? []);
+
+            if (! empty($d['facts']) && is_array($d['facts'])) {
+                $this->applyDiscoveredFacts($device, $d['facts']);
+            }
+        }
+    }
+
+    /** @param array<int,array<string,mixed>> $interfaces */
+    private function applyDiscoveredInterfaces(Device $device, array $interfaces): void
+    {
+        foreach ($interfaces as $row) {
+            if (! isset($row['if_index'])) {
+                continue;
+            }
+            $iface = NetworkInterface::firstOrNew(['device_id' => $device->id, 'if_index' => (int) $row['if_index']]);
+            $iface->name = (string) ($row['name'] ?? $iface->name);
+            $iface->description = ($row['descr'] ?? null) ?: null;
+            // Only overwrite the discovered speed when the agent actually read one (>0); an absent
+            // ifHighSpeed must not wipe a known capacity. Overrides live on the link, not here.
+            if (isset($row['speed_mbps']) && (int) $row['speed_mbps'] > 0) {
+                $iface->speed_mbps = (int) $row['speed_mbps'];
+            }
+            if (array_key_exists('oper_up', $row) && $row['oper_up'] !== null) {
+                $iface->oper_status = $row['oper_up'] ? 'up' : 'down';
+            }
+            $iface->save();
+        }
+
+        $device->forceFill([
+            'discovered_at' => now(),
+            'discovery_error' => $interfaces === []
+                ? 'No interfaces returned - check the SNMP community and that the agent can reach the device.'
+                : null,
+        ])->save();
+    }
+
+    /** @param array<string,mixed> $facts */
+    private function applyDiscoveredFacts(Device $device, array $facts): void
+    {
+        $parsed = $this->facts->factsFromRaw(
+            (string) ($facts['sys_descr'] ?? ''),
+            isset($facts['uptime_ticks']) ? (int) $facts['uptime_ticks'] : null,
+            isset($facts['mem_kb']) ? (int) $facts['mem_kb'] : null,
+            (string) ($facts['sys_location'] ?? ''),
+            array_values((array) ($facts['ent_models'] ?? [])),
+            array_values((array) ($facts['ent_serials'] ?? [])),
+        );
+
+        $this->facts->applyFacts($device, $parsed);
     }
 
     /**

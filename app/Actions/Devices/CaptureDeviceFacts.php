@@ -46,6 +46,18 @@ class CaptureDeviceFacts
             return;
         }
 
+        $this->applyFacts($device, $facts);
+    }
+
+    /**
+     * Apply a captured facts array to the device: never overwrite a hand-placed pin, only set the
+     * device_type while it's still unknown (a manual override sticks), and skip an empty result.
+     * Extracted so the central capture and the remote-agent ingestion path (#33) share it.
+     *
+     * @param  array<string, mixed>  $facts
+     */
+    public function applyFacts(Device $device, array $facts): void
+    {
         $detectedType = $facts['device_type'] ?? null;
         unset($facts['device_type']);
 
@@ -71,6 +83,33 @@ class CaptureDeviceFacts
         }
 
         $device->update($facts);
+    }
+
+    /**
+     * Build the facts array from raw SNMP values - the same derivation fromSnmp() uses, but taking
+     * already-fetched values so the remote agent (#33) can walk the standard OIDs itself and hand
+     * the raw results back for the server to parse (vendor/model knowledge stays here).
+     *
+     * @param  list<string>  $entModels   entPhysicalModelName values (row order)
+     * @param  list<string>  $entSerials  entPhysicalSerialNum values (row order)
+     * @return array<string, mixed>
+     */
+    public function factsFromRaw(string $sysDescr, ?int $uptimeTicks, ?int $memKb, string $location, array $entModels, array $entSerials): array
+    {
+        $model = self::cleanModel(self::firstMeaningful($entModels)) ?? self::modelFromSysDescr($sysDescr);
+        $geo = self::parseLatLng($location);
+
+        return [
+            'vendor' => self::vendorFromSysDescr($sysDescr),
+            'model' => $model,
+            'serial' => self::firstMeaningful($entSerials),
+            'ram_bytes' => ($memKb !== null && $memKb > 0) ? $memKb * 1024 : null,
+            'uptime_seconds' => $uptimeTicks !== null ? intdiv($uptimeTicks, 100) : null,
+            'device_type' => $this->snmpType($sysDescr)->value,
+            'latitude' => $geo['lat'] ?? null,
+            'longitude' => $geo['lng'] ?? null,
+            'geo_source' => $geo !== null ? 'snmp' : null,
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -152,32 +191,22 @@ class CaptureDeviceFacts
 
         $descr = (string) ($res[$oids['sys_descr']] ?? '');
         $ticks = $res[$oids['sys_uptime']] ?? null;
-        $geo = self::parseLatLng((string) ($res[$oids['sys_location']] ?? ''));
+        $memKb = $res[$oids['hr_memory']] ?? null; // hrMemorySize is physical RAM in KB
+        $location = (string) ($res[$oids['sys_location']] ?? '');
 
-        // ENTITY-MIB gives a clean cross-vendor model + serial (chassis row). Walk each and
-        // take the first meaningful value. Falls back to null (never a wrong guess).
-        $model = self::cleanModel(self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model'])));
-        // MikroTik's ENTITY-MIB model row is a useless hex board id, but the real board name is
-        // right there in sysDescr ("RouterOS RB5009UPr+S+") - use it when ENTITY gave nothing.
-        if ($model === null) {
-            $model = self::modelFromSysDescr($descr);
-        }
-        $serial = self::firstMeaningful($this->snmp->walk($device->mgmt_ip, $community, $oids['ent_serial']));
+        // ENTITY-MIB gives a clean cross-vendor model + serial (chassis row); the raw walk values
+        // go to factsFromRaw, which does the vendor derivation - reused by the agent path too (#33).
+        $entModels = $this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model']);
+        $entSerials = $this->snmp->walk($device->mgmt_ip, $community, $oids['ent_serial']);
 
-        // hrMemorySize is physical RAM in KB.
-        $memKb = $res[$oids['hr_memory']] ?? null;
-
-        return [
-            'vendor' => self::vendorFromSysDescr($descr),
-            'model' => $model,
-            'serial' => $serial,
-            'ram_bytes' => is_numeric($memKb) && (int) $memKb > 0 ? (int) $memKb * 1024 : null,
-            'uptime_seconds' => $ticks !== null ? intdiv((int) $ticks, 100) : null, // TimeTicks (1/100s) -> s
-            'device_type' => $this->snmpType($descr)->value,
-            'latitude' => $geo['lat'] ?? null,
-            'longitude' => $geo['lng'] ?? null,
-            'geo_source' => $geo !== null ? 'snmp' : null,
-        ];
+        return $this->factsFromRaw(
+            $descr,
+            $ticks !== null ? (int) $ticks : null,
+            is_numeric($memKb) ? (int) $memKb : null,
+            $location,
+            array_values($entModels),
+            array_values($entSerials),
+        );
     }
 
     /** First non-empty, non-placeholder value from an SNMP walk (skips "", "N/A", "none"). */

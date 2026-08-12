@@ -56,6 +56,10 @@ type SNMPTarget struct {
 	Interfaces []IfaceTarget `json:"interfaces"`
 	// Metrics OIDs to read for cpu/mem/temp; nil when the device has no metrics profile.
 	Metrics *MetricsTarget `json:"metrics,omitempty"`
+	// Discover: also walk the ifTable (to find interfaces) and the standard facts OIDs
+	// (sysDescr/sysLocation/ENTITY-MIB/uptime/memory) this cycle. Set on the discovery cadence,
+	// so the agent-polled device is (re)discovered from the agent, not the central server (#33).
+	Discover bool `json:"discover,omitempty"`
 }
 
 // SNMPAuth carries the version + v3 USM parameters. Empty/"2c" version means a plain community
@@ -173,9 +177,40 @@ type Candidate struct {
 // Shape matches the server's IngestAgentResults / IngestAgentScan.
 
 type ResultPayload struct {
-	Pings      []PingResult    `json:"pings"`
-	Throughput []FlowResult    `json:"throughput"`
-	Metrics    []MetricsResult `json:"metrics,omitempty"`
+	Pings      []PingResult      `json:"pings"`
+	Throughput []FlowResult      `json:"throughput"`
+	Metrics    []MetricsResult   `json:"metrics,omitempty"`
+	Discovery  []DeviceDiscovery `json:"discovery,omitempty"`
+}
+
+// DeviceDiscovery is what a Discover pass found for one device: the interfaces walked from its
+// ifTable, plus raw facts. The server parses the facts (vendor/model/serial derivation stays in
+// one place, PHP) - the agent only walks the standard OIDs.
+type DeviceDiscovery struct {
+	DeviceID   int               `json:"device_id"`
+	Interfaces []DiscoveredIface `json:"interfaces"`
+	Facts      *DeviceFacts      `json:"facts,omitempty"`
+}
+
+// DiscoveredIface is one row of the ifTable/ifXTable. OperUp is a pointer so "not reported"
+// stays distinct from down.
+type DiscoveredIface struct {
+	IfIndex   int    `json:"if_index"`
+	Name      string `json:"name,omitempty"`  // ifName, else ifDescr
+	Descr     string `json:"descr,omitempty"` // ifDescr
+	SpeedMbps int    `json:"speed_mbps,omitempty"`
+	OperUp    *bool  `json:"oper_up"`
+}
+
+// DeviceFacts is the raw SNMP facts the server needs to derive vendor/model/serial/geo. Kept raw
+// on purpose so all the vendor-specific parsing lives server-side (CaptureDeviceFacts).
+type DeviceFacts struct {
+	SysDescr    string   `json:"sys_descr,omitempty"`
+	SysLocation string   `json:"sys_location,omitempty"`
+	UptimeTicks *uint64  `json:"uptime_ticks,omitempty"`
+	MemKb       *uint64  `json:"mem_kb,omitempty"`
+	EntModels   []string `json:"ent_models,omitempty"`
+	EntSerials  []string `json:"ent_serials,omitempty"`
 }
 
 // MetricsResult is one device's cpu/mem/temp reading. Each field is a pointer so an

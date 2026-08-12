@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Models\Subnet;
 use App\Services\Polling\DeviceMetricProfiles;
 use App\Services\Snmp\SnmpCredential;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
 
 /**
@@ -64,6 +65,17 @@ class DispatchAgentJobs
             ->with(['interfaces:id,device_id,if_index,name', 'credential'])
             ->get();
 
+        // Discovery cadence: ask the agent to (re)walk interfaces + facts for its SNMP devices
+        // once per discover_interval, gated per agent in cache. Cache-empty counts as due, so a
+        // freshly assigned device is discovered on the next tick. Mirrors the central discovery
+        // cadence, just routed through the agent (#33).
+        $discoverInterval = max(60, (int) config('mymate.poll.discover_interval', 600));
+        $discoverKey = "agent:{$agentId}:last_discover";
+        $discoverDue = (now()->timestamp - (int) Cache::get($discoverKey, 0)) >= $discoverInterval;
+        if ($discoverDue) {
+            Cache::put($discoverKey, now()->timestamp, now()->addDay());
+        }
+
         $ping = [];
         $snmp = [];
         $routeros = [];
@@ -81,6 +93,7 @@ class DispatchAgentJobs
                         'if_index' => $i->if_index,
                     ])->all(),
                     'metrics' => $this->metricsTarget($d),
+                    'discover' => $discoverDue,
                 ];
             } elseif ($d->poll_method === PollMethod::RouterOs && $d->credential?->type === 'routeros') {
                 $routeros[] = [
