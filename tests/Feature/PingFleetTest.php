@@ -85,6 +85,24 @@ class PingFleetTest extends TestCase
         $this->assertDatabaseHas('ping_samples', ['device_id' => $device->id, 'rtt_ms' => 12.5, 'loss_pct' => 0]);
     }
 
+    public function test_latency_history_is_throttled_per_device_not_per_sweep(): void
+    {
+        // Per-map ping cadence (GitHub #32) means a sweep can cover a shifting mix of devices, so
+        // the trend throttle is keyed on each device's own last write, not the swept set. A device
+        // that recorded within the window is skipped; a stale or never-recorded one writes.
+        config(['mymate.ping.history_interval' => 60]);
+        $fresh = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Up, 'ping_at' => now()->subSeconds(5)]);
+        $stale = Device::factory()->create(['mgmt_ip' => '10.0.0.2', 'status' => DeviceStatus::Up, 'ping_at' => now()->subSeconds(120)]);
+        $never = Device::factory()->create(['mgmt_ip' => '10.0.0.3', 'status' => DeviceStatus::Up, 'ping_at' => null]);
+        $this->fakePinger(['10.0.0.1', '10.0.0.2', '10.0.0.3']);
+
+        app(PingFleet::class)();
+
+        $this->assertDatabaseMissing('ping_samples', ['device_id' => $fresh->id]); // inside the window
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $stale->id]);
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $never->id]);
+    }
+
     public function test_broadcasts_live_latency_for_the_internet_card(): void
     {
         Event::fake([DeviceLatencyUpdated::class]);

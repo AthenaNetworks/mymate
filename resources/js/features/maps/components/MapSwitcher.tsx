@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, ShareNetwork, Trash, UploadSimple } from '@phosphor-icons/react';
+import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
@@ -147,6 +147,31 @@ export function MapSwitcher() {
                                         <GlobeHemisphereWest weight="bold" className={`h-3.5 w-3.5 ${active?.leaflet_enabled ? 'text-emerald-300' : 'text-white/40'}`} />
                                         Geographic mode {active?.leaflet_enabled ? 'on' : 'off'}
                                     </button>
+                                    {/* Per-map ping cadence (GitHub #32): faster for a critical map, slower to
+                                        save resources elsewhere. Blank = the global interval. A device on
+                                        several maps takes the fastest. */}
+                                    <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-white/70">
+                                        <Timer weight="bold" className={`h-3.5 w-3.5 ${active?.ping_interval ? 'text-emerald-300' : 'text-white/40'}`} />
+                                        <span className="flex-1">Ping interval</span>
+                                        <select
+                                            disabled={!active || saveMap.isPending}
+                                            value={active?.ping_interval ?? ''}
+                                            onChange={(e) => active && saveMap.mutate({
+                                                id: active.id,
+                                                name: active.name,
+                                                ping_interval: e.target.value === '' ? null : Number(e.target.value),
+                                            })}
+                                            title="Up/down ping cadence for devices on this map"
+                                            className="rounded-md bg-white/5 px-2 py-1 text-xs text-white/80 ring-1 ring-white/10 transition-colors hover:bg-white/10 focus:outline-none focus:ring-emerald-400/40 disabled:opacity-40"
+                                        >
+                                            <option value="">Global</option>
+                                            <option value="5">5s</option>
+                                            <option value="10">10s</option>
+                                            <option value="30">30s</option>
+                                            <option value="60">60s</option>
+                                            <option value="120">120s</option>
+                                        </select>
+                                    </div>
                                     <button
                                         disabled={!active}
                                         onClick={() => { setSharing(true); setOpen(false); }}

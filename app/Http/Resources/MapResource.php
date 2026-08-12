@@ -19,6 +19,7 @@ class MapResource extends JsonResource
             'node_x' => $this->node_x,
             'node_y' => $this->node_y,
             'leaflet_enabled' => (bool) $this->leaflet_enabled,
+            'ping_interval' => $this->ping_interval, // per-map ping cadence (s); null = global
             'device_count' => $this->positions_count ?? $this->whenCounted('positions'),
         ];
     }

@@ -256,6 +256,7 @@ export interface NetworkMap {
     position: number;
     device_count: number;
     leaflet_enabled: boolean;
+    ping_interval: number | null; // per-map up/down ping cadence (s); null = global
 }
 
 export interface MapPosition {

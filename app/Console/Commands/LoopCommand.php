@@ -85,6 +85,7 @@ class LoopCommand extends Command
         $this->dispatchDiscovery();
         ManageHistoryPartitionsJob::dispatch();
         $settings = app(Settings::class);
+        $dispatcher = app(PingDispatcher::class);
         $lastPoll = 0.0;
         $lastMetrics = 0.0;
         $lastDiscover = microtime(true);
@@ -100,7 +101,12 @@ class LoopCommand extends Command
             $scanCheckInterval = max(5, $settings->getInt('discovery.check_interval', 30));
             $historyInterval = max(60, $settings->getInt('history.maintain_interval', 3600));
 
-            app(PingDispatcher::class)->dispatch();
+            // The base tick is the global ping interval, unless a map sets a faster override -
+            // then we tick at that faster rate and each interval bucket is swept when it's due
+            // (see PingDispatcher). No override -> pingBase == pingInterval, loop unchanged.
+            $pingBase = $dispatcher->baseInterval($pingInterval);
+
+            $dispatcher->dispatch();
             $this->heartbeat(); // liveness signal for the Settings system-status panel
 
             $now = microtime(true);
@@ -141,7 +147,7 @@ class LoopCommand extends Command
                 $lastHistory = $now;
             }
 
-            sleep($pingInterval);
+            sleep($pingBase);
         }
     }
 

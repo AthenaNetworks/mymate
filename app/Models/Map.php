@@ -30,7 +30,7 @@ class Map extends Model
         });
     }
 
-    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y', 'leaflet_enabled'];
+    protected $fillable = ['name', 'parent_map_id', 'is_default', 'position', 'node_x', 'node_y', 'leaflet_enabled', 'ping_interval'];
 
     protected $casts = [
         'is_default' => 'boolean',
@@ -38,6 +38,7 @@ class Map extends Model
         'node_x' => 'float',
         'node_y' => 'float',
         'leaflet_enabled' => 'boolean',
+        'ping_interval' => 'integer', // per-map up/down ping cadence override (s); null = global
     ];
 
     public function parent(): BelongsTo

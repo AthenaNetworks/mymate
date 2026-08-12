@@ -12,7 +12,6 @@ use App\Services\Ping\PingSample;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,9 +22,6 @@ use Illuminate\Support\Facades\DB;
  */
 class PingFleet
 {
-    /** Cache key: unix time of the last latency-history write (throttles the trend write). */
-    private const LATENCY_KEY = 'mymate.ping.last_latency_write';
-
     public function __construct(private Pinger $pinger, private RecordOutage $outages) {}
 
     /**
@@ -92,7 +88,7 @@ class PingFleet
             }
         }
 
-        $this->recordLatency($devices, $samples, $deviceIds);
+        $this->recordLatency($devices, $samples);
 
         EngineLog::debug('ping: sweep complete', [
             'total' => $devices->count(),
@@ -104,40 +100,39 @@ class PingFleet
     }
 
     /**
-     * Persist a latency/loss trend sample and refresh the live rtt/loss columns. Throttled to
-     * `ping.history_interval` so it runs about once a minute rather than every few-second sweep
-     * (the up/down flip above still happens every sweep).
+     * Persist a latency/loss trend sample and refresh the live rtt/loss columns. Throttled PER
+     * DEVICE to `ping.history_interval` (off each device's own last write, `ping_at`) so it runs
+     * about once a minute rather than every few-second sweep - the up/down flip above still happens
+     * every sweep. Keying the throttle on the device rather than the swept set keeps the trend
+     * cadence steady no matter how the fleet was sharded, or which per-map ping bucket (GitHub #32)
+     * a device fell in this tick - a device on a 5s map still records latency at the history
+     * cadence, not on every sweep, and every device gets its samples regardless of shard.
      *
      * @param  Collection<int, Device>  $devices
      * @param  array<string, PingSample>  $samples
-     * @param  list<int>|null  $deviceIds  the shard slice this sweep covered (null = whole fleet)
      */
-    private function recordLatency(Collection $devices, array $samples, ?array $deviceIds): void
+    private function recordLatency(Collection $devices, array $samples): void
     {
         $interval = max(5, (int) config('mymate.ping.history_interval', 60));
-        // Throttle PER SHARD SLICE, not globally: with ping sharding each slice sweeps
-        // in its own job, and a single global key would let only the first-arriving
-        // shard record history each interval - every other shard's devices would get
-        // sparse, random samples.
-        $key = self::LATENCY_KEY.($deviceIds === null ? '' : '.'.crc32(implode(',', $deviceIds)));
-        $last = (int) Cache::get($key, 0);
-        if (now()->timestamp - $last < $interval) {
-            return;
-        }
-        Cache::put($key, now()->timestamp, now()->addHour());
+        $now = now();
+        $cutoff = $now->copy()->subSeconds($interval);
 
-        $ts = now();
         $rows = [];
         $frames = []; // live rtt/loss for the internet card
         foreach ($devices as $device) {
+            // One trend point per interval per device - skip a device that recorded within the
+            // window. A never-recorded device (ping_at null) always writes on the first sweep.
+            if ($device->ping_at !== null && $device->ping_at->greaterThan($cutoff)) {
+                continue;
+            }
             $s = $samples[$device->mgmt_ip] ?? null;
             if ($s === null) {
                 continue;
             }
-            $device->forceFill(['rtt_ms' => $s->rttMs, 'loss_pct' => $s->lossPct, 'ping_at' => $ts])->save();
+            $device->forceFill(['rtt_ms' => $s->rttMs, 'loss_pct' => $s->lossPct, 'ping_at' => $now])->save();
             $rows[] = [
                 'device_id' => $device->id,
-                'ts' => $ts,
+                'ts' => $now,
                 'rtt_ms' => $s->rttMs,
                 'loss_pct' => $s->lossPct,
                 'jitter_ms' => $s->jitterMs,
