@@ -30,14 +30,50 @@ class EvaluateAlerts
     public function __invoke(): void
     {
         $guard = new MaintenanceGuard;
-        foreach (AlertPolicy::where('enabled', true)->with('transports')->get() as $policy) {
-            $this->reconcile($policy, $guard);
+        $policies = AlertPolicy::where('enabled', true)->with('transports')->get();
+
+        // Resolve each policy's targeting once (a map scope hits the DB).
+        $scopes = [];
+        foreach ($policies as $policy) {
+            $scopes[$policy->id] = DeviceScope::resolve($policy->scope);
+        }
+
+        // Specific-over-general (GitHub #32): a device covered by a narrower policy (map /
+        // device / device-type scope) must not also alert from the fleet-wide policy for the
+        // same condition, or the operator gets two notifications for one event. Build, per
+        // condition, the set of device ids any narrower policy claims; a fleet-wide policy then
+        // skips those devices. Two narrower policies never suppress each other, so several
+        // map-specific policies on the same map all still fire.
+        $claimed = [];
+        foreach ($policies as $policy) {
+            $ids = $scopes[$policy->id];
+            if ($ids === null) {
+                continue; // fleet-wide policy claims nothing specifically
+            }
+            $cond = $policy->condition->value;
+            $claimed[$cond] ??= [];
+            foreach ($ids as $id) {
+                $claimed[$cond][$id] = true;
+            }
+        }
+
+        foreach ($policies as $policy) {
+            $suppress = $scopes[$policy->id] === null
+                ? ($claimed[$policy->condition->value] ?? [])
+                : [];
+            $this->reconcile($policy, $guard, $suppress);
         }
     }
 
-    private function reconcile(AlertPolicy $policy, MaintenanceGuard $guard): void
+    /**
+     * @param  array<int, bool>  $suppressDeviceIds  device ids a narrower policy already owns
+     */
+    private function reconcile(AlertPolicy $policy, MaintenanceGuard $guard, array $suppressDeviceIds = []): void
     {
         $active = $this->activeConditions($policy);
+        if ($suppressDeviceIds !== []) {
+            $active = $this->dropClaimedDevices($active, $suppressDeviceIds);
+        }
         // Sustained-duration gate: a
         // breach must hold for this many minutes before it fires, AND a recovery must hold
         // for the same window before it resolves+notifies. 0 (default) = instant both ways -
@@ -184,14 +220,14 @@ class EvaluateAlerts
             ->where('status', DeviceStatus::Up)
             ->whereNotNull('latency_ms')
             ->where('latency_ms', '>=', $thresholdMs)
-            ->with('device:id,name')
+            ->with('device:id,name,mgmt_ip')
             ->get();
 
         foreach ($probes as $probe) {
             if ($inScope !== null && ! isset($inScope[$probe->device_id])) {
                 continue;
             }
-            $dev = $probe->device?->name ?? "device {$probe->device_id}";
+            $dev = self::label($probe->device?->name ?? "device {$probe->device_id}", $probe->device?->mgmt_ip);
             $ms = round((float) $probe->latency_ms);
             $out["device:{$probe->device_id}:probe:{$probe->id}:slow"] = "Probe \"{$probe->name}\" response time {$ms}ms on {$dev} (over ".round($thresholdMs)."ms).";
         }
@@ -213,14 +249,14 @@ class EvaluateAlerts
 
         $probes = \App\Models\Probe::where('enabled', true)
             ->where('status', DeviceStatus::Down)
-            ->with('device:id,name')
+            ->with('device:id,name,mgmt_ip')
             ->get();
 
         foreach ($probes as $probe) {
             if ($inScope !== null && ! isset($inScope[$probe->device_id])) {
                 continue;
             }
-            $dev = $probe->device?->name ?? "device {$probe->device_id}";
+            $dev = self::label($probe->device?->name ?? "device {$probe->device_id}", $probe->device?->mgmt_ip);
             $why = $probe->message ? " ({$probe->message})" : '';
             $out["device:{$probe->device_id}:probe:{$probe->id}"] = "Probe \"{$probe->name}\" is down on {$dev}{$why}.";
         }
@@ -237,6 +273,36 @@ class EvaluateAlerts
     private function scopeDeviceIds(AlertPolicy $policy): ?array
     {
         return DeviceScope::resolve($policy->scope);
+    }
+
+    /**
+     * Drop active conditions whose device is already owned by a narrower policy of the same
+     * condition, so a fleet-wide policy doesn't double-notify (GitHub #32). Only device-keyed
+     * entries (`device:{id}...`) are affected; link/discovery keys have no single owning device
+     * and are left untouched.
+     *
+     * @param  array<string, string>  $active
+     * @param  array<int, bool>  $claimed
+     * @return array<string, string>
+     */
+    private function dropClaimedDevices(array $active, array $claimed): array
+    {
+        foreach ($active as $key => $_message) {
+            if (preg_match('/^device:(\d+)/', $key, $m) === 1 && isset($claimed[(int) $m[1]])) {
+                unset($active[$key]);
+            }
+        }
+
+        return $active;
+    }
+
+    /** A device label carrying its management IP alongside the hostname (GitHub #32): "name
+     *  (1.2.3.4)" when an IP is known, else just the name. */
+    private static function label(?string $name, ?string $ip): string
+    {
+        $name = ($name === null || $name === '') ? 'device' : $name;
+
+        return ($ip !== null && $ip !== '') ? "{$name} ({$ip})" : $name;
     }
 
     /**
@@ -269,7 +335,7 @@ class EvaluateAlerts
      */
     private function downDevices(bool $suppressDependent, ?array $scope): array
     {
-        $devices = Device::get(['id', 'name', 'parent_device_id', 'status']);
+        $devices = Device::get(['id', 'name', 'mgmt_ip', 'parent_device_id', 'status']);
         $inScope = $scope === null ? null : array_flip($scope);
 
         /** @var array<int, DeviceStatus> $statusById */
@@ -307,7 +373,7 @@ class EvaluateAlerts
             if ($suppressDependent && $hasDownAncestor($d->id)) {
                 continue;
             }
-            $out["device:{$d->id}"] = "Device {$d->name} is down.";
+            $out["device:{$d->id}"] = 'Device '.self::label($d->name, $d->mgmt_ip).' is down.';
         }
 
         return $out;
@@ -396,20 +462,21 @@ class EvaluateAlerts
         $inScope = $scope === null ? null : array_flip($scope);
 
         // Only ports on UP devices - a down device is the device-down policy's job.
-        $upDeviceIds = Device::where('status', DeviceStatus::Up)->pluck('name', 'id');
-        if ($upDeviceIds->isEmpty()) {
+        $upDevices = Device::where('status', DeviceStatus::Up)->get(['id', 'name', 'mgmt_ip'])->keyBy('id');
+        if ($upDevices->isEmpty()) {
             return $out;
         }
 
         $ifaces = NetworkInterface::where('oper_status', 'down')
-            ->whereIn('device_id', $upDeviceIds->keys())
+            ->whereIn('device_id', $upDevices->keys())
             ->get(['id', 'device_id', 'name']);
 
         foreach ($ifaces as $if) {
             if ($inScope !== null && ! isset($inScope[$if->device_id])) {
                 continue;
             }
-            $dev = $upDeviceIds->get($if->device_id) ?? "device {$if->device_id}";
+            $device = $upDevices->get($if->device_id);
+            $dev = self::label($device?->name ?? "device {$if->device_id}", $device?->mgmt_ip);
             $out["device:{$if->device_id}:iface:{$if->id}"] = "Interface {$if->name} is down on {$dev}.";
         }
 
@@ -461,10 +528,10 @@ class EvaluateAlerts
         if ($scope !== null) {
             $query->whereIn('id', $scope);
         }
-        foreach ($query->get(['id', 'name', 'upgrade_at', 'upgrade_message']) as $d) {
+        foreach ($query->get(['id', 'name', 'mgmt_ip', 'upgrade_at', 'upgrade_message']) as $d) {
             // Key by the failure timestamp so a *new* failure re-fires after resolve.
             $stamp = $d->upgrade_at?->timestamp ?? 0;
-            $out["device:{$d->id}:upgrade:{$stamp}"] = "Upgrade failed on {$d->name}: ".($d->upgrade_message ?? 'unknown error').'.';
+            $out["device:{$d->id}:upgrade:{$stamp}"] = 'Upgrade failed on '.self::label($d->name, $d->mgmt_ip).': '.($d->upgrade_message ?? 'unknown error').'.';
         }
 
         return $out;
@@ -485,8 +552,8 @@ class EvaluateAlerts
         if ($scope !== null) {
             $query->whereIn('id', $scope);
         }
-        foreach ($query->get(['id', 'name', 'backup_message']) as $d) {
-            $out["device:{$d->id}:backup"] = "Config backup failed on {$d->name}: ".($d->backup_message ?: 'unknown error').'.';
+        foreach ($query->get(['id', 'name', 'mgmt_ip', 'backup_message']) as $d) {
+            $out["device:{$d->id}:backup"] = 'Config backup failed on '.self::label($d->name, $d->mgmt_ip).': '.($d->backup_message ?: 'unknown error').'.';
         }
 
         return $out;
@@ -528,9 +595,9 @@ class EvaluateAlerts
         }
 
         $out = [];
-        foreach ($query->get(['id', 'name', $col]) as $d) {
+        foreach ($query->get(['id', 'name', 'mgmt_ip', $col]) as $d) {
             $val = (int) round((float) $d->{$col});
-            $out["device:{$d->id}:metric:{$metric}"] = "High {$label} {$val}{$unit} on {$d->name}.";
+            $out["device:{$d->id}:metric:{$metric}"] = "High {$label} {$val}{$unit} on ".self::label($d->name, $d->mgmt_ip).'.';
         }
 
         return $out;

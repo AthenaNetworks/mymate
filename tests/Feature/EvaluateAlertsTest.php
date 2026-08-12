@@ -631,4 +631,42 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame(0, AlertEvent::count());
         Http::assertNothingSent();
     }
+
+    public function test_alert_message_carries_the_device_ip_alongside_the_name(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        Device::factory()->create(['name' => 'CPE1', 'mgmt_ip' => '10.20.30.40', 'status' => DeviceStatus::Down]);
+
+        app(EvaluateAlerts::class)();
+
+        $message = AlertEvent::firstOrFail()->message;
+        $this->assertStringContainsString('CPE1', $message);
+        $this->assertStringContainsString('10.20.30.40', $message); // GitHub #32
+    }
+
+    public function test_a_scoped_policy_suppresses_the_fleet_wide_policy_for_its_devices(): void
+    {
+        Http::fake();
+        $onMap = Device::factory()->create(['name' => 'ONMAP', 'status' => DeviceStatus::Down]);
+        $offMap = Device::factory()->create(['name' => 'OFFMAP', 'status' => DeviceStatus::Down]);
+
+        $map = Map::factory()->create();
+        DeviceMapPosition::create(['device_id' => $onMap->id, 'map_id' => $map->id, 'x' => 0, 'y' => 0]);
+
+        $global = $this->policyWithSlack(AlertCondition::DeviceDown); // scope null = fleet-wide
+        $mapPolicy = $this->policyWithSlack(AlertCondition::DeviceDown, [], ['type' => 'map', 'map_id' => $map->id]);
+        // A second policy on the same map must still fire - specific policies don't suppress each other.
+        $mapPolicy2 = $this->policyWithSlack(AlertCondition::DeviceDown, [], ['type' => 'map', 'map_id' => $map->id]);
+
+        app(EvaluateAlerts::class)();
+
+        // The on-map device alerts from both map policies, but NOT the fleet-wide one.
+        $this->assertDatabaseHas('alert_events', ['alert_policy_id' => $mapPolicy->id, 'dedupe_key' => "device:{$onMap->id}", 'status' => 'firing']);
+        $this->assertDatabaseHas('alert_events', ['alert_policy_id' => $mapPolicy2->id, 'dedupe_key' => "device:{$onMap->id}", 'status' => 'firing']);
+        $this->assertDatabaseMissing('alert_events', ['alert_policy_id' => $global->id, 'dedupe_key' => "device:{$onMap->id}"]);
+
+        // The off-map device is not covered by any scoped policy, so the fleet-wide one still fires.
+        $this->assertDatabaseHas('alert_events', ['alert_policy_id' => $global->id, 'dedupe_key' => "device:{$offMap->id}", 'status' => 'firing']);
+    }
 }
