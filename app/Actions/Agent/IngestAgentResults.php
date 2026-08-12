@@ -4,6 +4,7 @@ namespace App\Actions\Agent;
 
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
+use App\Actions\Polling\PollProbes;
 use App\Enums\DeviceStatus;
 use App\Events\DeviceMetricsUpdated;
 use App\Events\DeviceStatusChanged;
@@ -11,7 +12,9 @@ use App\Events\InterfaceUtilUpdated;
 use App\Models\Agent;
 use App\Models\Device;
 use App\Models\NetworkInterface;
+use App\Models\Probe;
 use App\Services\Polling\RateCalculator;
+use App\Services\Probes\ProbeResult;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +42,7 @@ class IngestAgentResults
         private RecordOutage $outages,
         private RateCalculator $rates,
         private CaptureDeviceFacts $facts,
+        private PollProbes $probes,
     ) {}
 
     /** @param array<string,mixed> $payload */
@@ -48,6 +52,46 @@ class IngestAgentResults
         $this->ingestThroughput($agent, $payload['throughput'] ?? []);
         $this->ingestMetrics($agent, $payload['metrics'] ?? []);
         $this->ingestDiscovery($agent, $payload['discovery'] ?? []);
+        $this->ingestProbes($agent, $payload['probes'] ?? []);
+    }
+
+    /**
+     * Fold the agent's service-probe verdicts into the probe rows through the same flap-dampening
+     * and history the central probe loop uses (PollProbes::applyResult) - the agent ran the check
+     * from its own network, the server owns the status decision. Only this agent's probes (#33).
+     *
+     * @param  array<int,array<string,mixed>>  $probes
+     */
+    private function ingestProbes(Agent $agent, array $probes): void
+    {
+        if ($probes === []) {
+            return;
+        }
+        $wanted = collect($probes)->pluck('probe_id')->all();
+        $models = Probe::whereIn('id', $wanted)
+            ->whereIn('device_id', Device::where('agent_id', $agent->id)->select('id'))
+            ->get()->keyBy('id');
+
+        $now = now();
+        $samples = [];
+        foreach ($probes as $p) {
+            $probe = $models->get($p['probe_id'] ?? 0);
+            if ($probe === null) {
+                continue; // not this agent's probe - ignore
+            }
+            $cert = isset($p['cert_expires']) ? \Carbon\CarbonImmutable::createFromTimestamp((int) $p['cert_expires']) : null;
+            $result = new ProbeResult(
+                (bool) ($p['up'] ?? false),
+                self::num($p['latency_ms'] ?? null),
+                ((string) ($p['message'] ?? '')) ?: null,
+                $cert,
+            );
+            $samples[] = $this->probes->applyResult($probe, $result, $now);
+        }
+
+        if ($samples !== []) {
+            DB::table('probe_samples')->insert($samples);
+        }
     }
 
     /**

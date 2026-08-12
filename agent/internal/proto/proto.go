@@ -41,6 +41,23 @@ type PollJob struct {
 	Ping     []PingTarget     `json:"ping"`
 	SNMP     []SNMPTarget     `json:"snmp"`
 	RouterOS []RouterOSTarget `json:"routeros"`
+	Probes   []ProbeTarget    `json:"probes,omitempty"`
+}
+
+// ProbeTarget is one HTTP/TCP service probe (#19) for the agent to run from its own network (#33).
+// The agent runs the check and reports the verdict; the server owns status/dampening/alerting.
+type ProbeTarget struct {
+	ProbeID      int    `json:"probe_id"`
+	DeviceID     int    `json:"device_id"`
+	Kind         string `json:"kind"` // "http" | "tcp"
+	TimeoutMs    int    `json:"timeout_ms"`
+	URL          string `json:"url,omitempty"`
+	Method       string `json:"method,omitempty"`
+	ExpectStatus string `json:"expect_status,omitempty"`
+	ExpectBody   string `json:"expect_body,omitempty"`
+	VerifyTLS    bool   `json:"verify_tls,omitempty"`
+	Host         string `json:"host,omitempty"` // TCP; defaults to the device mgmt IP server-side
+	Port         int    `json:"port,omitempty"`
 }
 
 type PingTarget struct {
@@ -181,6 +198,17 @@ type ResultPayload struct {
 	Throughput []FlowResult      `json:"throughput"`
 	Metrics    []MetricsResult   `json:"metrics,omitempty"`
 	Discovery  []DeviceDiscovery `json:"discovery,omitempty"`
+	Probes     []ProbeCheck      `json:"probes,omitempty"`
+}
+
+// ProbeCheck is the outcome of one service probe the agent ran. LatencyMs/CertExpires are pointers
+// so "not measured" stays distinct from zero. The server folds this into the probe row (#33).
+type ProbeCheck struct {
+	ProbeID     int      `json:"probe_id"`
+	Up          bool     `json:"up"`
+	LatencyMs   *float64 `json:"latency_ms"`
+	Message     string   `json:"message,omitempty"`
+	CertExpires *int64   `json:"cert_expires,omitempty"` // unix seconds, HTTPS only
 }
 
 // DeviceDiscovery is what a Discover pass found for one device: the interfaces walked from its

@@ -4,9 +4,11 @@ namespace App\Actions\Agent;
 
 use App\Enums\AgentStatus;
 use App\Enums\PollMethod;
+use App\Enums\ProbeKind;
 use App\Models\Agent;
 use App\Models\Credential;
 use App\Models\Device;
+use App\Models\Probe;
 use App\Models\Subnet;
 use App\Services\Polling\DeviceMetricProfiles;
 use App\Services\Snmp\SnmpCredential;
@@ -110,6 +112,33 @@ class DispatchAgentJobs
             }
         }
 
+        // Due service probes (HTTP/TCP, #19) for this agent's devices - the agent runs the check
+        // from its own network instead of the check running centrally (#33). Stamp checked_at as
+        // we hand each one off so it isn't re-sent every tick before the result lands.
+        $probes = [];
+        $dueProbes = Probe::where('enabled', true)
+            ->whereIn('device_id', $devices->pluck('id'))
+            ->with('device:id,mgmt_ip')
+            ->get()
+            ->filter(fn (Probe $p) => $p->isDue());
+        foreach ($dueProbes as $probe) {
+            $cfg = $probe->config ?? [];
+            $probes[] = array_filter([
+                'probe_id' => $probe->id,
+                'device_id' => $probe->device_id,
+                'kind' => $probe->kind->value,
+                'timeout_ms' => (int) $probe->timeout_ms,
+                'url' => $cfg['url'] ?? null,
+                'method' => $cfg['method'] ?? null,
+                'expect_status' => $cfg['expect_status'] ?? null,
+                'expect_body' => $cfg['expect_body'] ?? null,
+                'verify_tls' => array_key_exists('verify_tls', $cfg) ? (bool) $cfg['verify_tls'] : true,
+                'host' => $probe->kind === ProbeKind::Tcp ? ((string) ($cfg['host'] ?? '') ?: $probe->device?->mgmt_ip) : null,
+                'port' => $cfg['port'] ?? null,
+            ], static fn ($v) => $v !== null);
+            $probe->forceFill(['checked_at' => now()])->save();
+        }
+
         // Only DUE subnets - the agent scans on the per-subnet cadence, same rule the
         // central loop uses (never scanned, or last scan older than scan_interval_s).
         // last_scanned_at is stamped when the agent's scan result is ingested.
@@ -136,7 +165,7 @@ class DispatchAgentJobs
 
         return [
             'agent_id' => $agentId,
-            'poll' => ['ping' => $ping, 'snmp' => $snmp, 'routeros' => $routeros],
+            'poll' => ['ping' => $ping, 'snmp' => $snmp, 'routeros' => $routeros, 'probes' => $probes],
             'scan' => [
                 'subnets' => $subnets,
                 // credential pool for the agent to try. no point sending it if theres nothing

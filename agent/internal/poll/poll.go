@@ -46,11 +46,16 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 			metrics = append(metrics, *m)
 		}
 	}
+	var probes []proto.ProbeCheck
+	for _, t := range job.Probes {
+		probes = append(probes, p.runProbe(t))
+	}
 	return proto.ResultPayload{
 		Pings:      p.runPings(ctx, job.Ping),
 		Throughput: flows,
 		Metrics:    metrics,
 		Discovery:  discovery,
+		Probes:     probes,
 	}
 }
 
