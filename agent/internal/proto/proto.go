@@ -115,6 +115,9 @@ type RouterOSTarget struct {
 	Password   string        `json:"password"`
 	APIPort    int           `json:"api_port"`
 	Interfaces []IfaceTarget `json:"interfaces"`
+	// Discover: also read /interface/print (interfaces) and the /system + /snmp facts this cycle,
+	// so a RouterOS-polled agent device is discovered from the agent, not centrally (#33).
+	Discover bool `json:"discover,omitempty"`
 }
 
 // IfaceTarget carries what each poller needs: if_index for SNMP, name for RouterOS.
@@ -211,13 +214,31 @@ type ProbeCheck struct {
 	CertExpires *int64   `json:"cert_expires,omitempty"` // unix seconds, HTTPS only
 }
 
-// DeviceDiscovery is what a Discover pass found for one device: the interfaces walked from its
-// ifTable, plus raw facts. The server parses the facts (vendor/model/serial derivation stays in
-// one place, PHP) - the agent only walks the standard OIDs.
+// DeviceDiscovery is what a Discover pass found for one device: the interfaces, plus raw facts.
+// The server parses the facts (vendor/model/serial derivation stays in one place, PHP). Facts is
+// set for an SNMP device, RouterOSFacts for a RouterOS-API device - never both.
 type DeviceDiscovery struct {
-	DeviceID   int               `json:"device_id"`
-	Interfaces []DiscoveredIface `json:"interfaces"`
-	Facts      *DeviceFacts      `json:"facts,omitempty"`
+	DeviceID      int               `json:"device_id"`
+	Interfaces    []DiscoveredIface `json:"interfaces"`
+	Facts         *DeviceFacts      `json:"facts,omitempty"`
+	RouterOSFacts *RouterOSFacts    `json:"routeros_facts,omitempty"`
+}
+
+// RouterOSFacts is the raw RouterOS-API facts the server needs to derive model/serial/version/geo.
+// Kept raw so the MikroTik-specific parsing stays server-side (CaptureDeviceFacts).
+type RouterOSFacts struct {
+	Version      string `json:"version,omitempty"`
+	BoardName    string `json:"board_name,omitempty"`     // /system/routerboard board-name
+	Model        string `json:"model,omitempty"`          // /system/routerboard model
+	ResBoardName string `json:"res_board_name,omitempty"` // /system/resource board-name (fallback)
+	Serial       string `json:"serial,omitempty"`
+	Architecture string `json:"architecture,omitempty"`
+	CPU          string `json:"cpu,omitempty"`
+	CPUCount     int    `json:"cpu_count,omitempty"`
+	CPUFreq      int    `json:"cpu_frequency,omitempty"`
+	TotalMemory  uint64 `json:"total_memory,omitempty"`
+	Uptime       string `json:"uptime,omitempty"`
+	Location     string `json:"location,omitempty"`
 }
 
 // DiscoveredIface is one row of the ifTable/ifXTable. OperUp is a pointer so "not reported"

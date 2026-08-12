@@ -135,45 +135,72 @@ class CaptureDeviceFacts
             // The API needs the /print action (a bare "/system/resource" traps).
             $res = $conn->query('/system/resource/print')[0] ?? [];
             $board = $conn->query('/system/routerboard/print')[0] ?? [];
-            $model = $board['model'] ?? $board['board-name'] ?? $res['board-name'] ?? null;
-            $uptime = isset($res['uptime']) ? self::parseRouterOsUptime((string) $res['uptime']) : null;
-
-            $ram = (int) ($res['total-memory'] ?? 0);
-            $serial = trim((string) ($board['serial-number'] ?? ''));
-
-            $arch = trim((string) ($res['architecture-name'] ?? ''));
 
             // A RouterOS box has no SNMP to read, so pull the SNMP location it would advertise
-            // straight from the API and parse any "[lat, lng]" out of it (best-effort).
-            $geo = null;
+            // straight from the API (best-effort); the parsing lives in factsFromRouterOsRaw.
+            $location = '';
             try {
-                $snmp = $conn->query('/snmp/print')[0] ?? [];
-                $geo = self::parseLatLng((string) ($snmp['location'] ?? ''));
+                $location = (string) (($conn->query('/snmp/print')[0] ?? [])['location'] ?? '');
             } catch (\Throwable) {
                 // SNMP settings unreadable - just skip geo.
             }
 
-            return [
-                'vendor' => 'MikroTik',
-                'model' => self::cleanModel($model),
-                'arch' => $arch !== '' ? $arch : null,
-                'serial' => $serial !== '' ? $serial : null,
-                'cpu' => self::formatCpu(
-                    trim((string) ($res['cpu'] ?? '')),
-                    (int) ($res['cpu-count'] ?? 0),
-                    (int) ($res['cpu-frequency'] ?? 0),
-                ),
-                'ram_bytes' => $ram > 0 ? $ram : null,
-                'uptime_seconds' => $uptime,
-                'os_version' => UpgradeDevice::normalizeVersion((string) ($res['version'] ?? '')),
-                'device_type' => $this->routerOsType((string) ($model ?? ''))->value,
-                'latitude' => $geo['lat'] ?? null,
-                'longitude' => $geo['lng'] ?? null,
-                'geo_source' => $geo !== null ? 'snmp' : null,
-            ];
+            return $this->factsFromRouterOsRaw(
+                (string) ($res['version'] ?? ''),
+                $board['model'] ?? null,
+                $board['board-name'] ?? null,
+                $res['board-name'] ?? null,
+                trim((string) ($board['serial-number'] ?? '')),
+                trim((string) ($res['architecture-name'] ?? '')),
+                trim((string) ($res['cpu'] ?? '')),
+                (int) ($res['cpu-count'] ?? 0),
+                (int) ($res['cpu-frequency'] ?? 0),
+                (int) ($res['total-memory'] ?? 0),
+                (string) ($res['uptime'] ?? ''),
+                $location,
+            );
         } finally {
             $conn->close();
         }
+    }
+
+    /**
+     * Build the facts array from raw RouterOS-API values - the same derivation fromRouterOs() does,
+     * so the remote agent (#33) can read them itself and hand them back for the server to parse.
+     *
+     * @return array<string, mixed>
+     */
+    public function factsFromRouterOsRaw(
+        string $version,
+        ?string $boardModel,
+        ?string $boardName,
+        ?string $resBoardName,
+        string $serial,
+        string $arch,
+        string $cpu,
+        int $cpuCount,
+        int $cpuFreq,
+        int $totalMemory,
+        string $uptime,
+        string $location,
+    ): array {
+        $model = $boardModel ?: ($boardName ?: ($resBoardName ?: null));
+        $geo = self::parseLatLng($location);
+
+        return [
+            'vendor' => 'MikroTik',
+            'model' => self::cleanModel($model),
+            'arch' => $arch !== '' ? $arch : null,
+            'serial' => $serial !== '' ? $serial : null,
+            'cpu' => self::formatCpu($cpu, $cpuCount, $cpuFreq),
+            'ram_bytes' => $totalMemory > 0 ? $totalMemory : null,
+            'uptime_seconds' => $uptime !== '' ? self::parseRouterOsUptime($uptime) : null,
+            'os_version' => UpgradeDevice::normalizeVersion($version),
+            'device_type' => $this->routerOsType((string) ($model ?? ''))->value,
+            'latitude' => $geo['lat'] ?? null,
+            'longitude' => $geo['lng'] ?? null,
+            'geo_source' => $geo !== null ? 'snmp' : null,
+        ];
     }
 
     /** @return array<string, mixed> */

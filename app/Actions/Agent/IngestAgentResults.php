@@ -117,7 +117,9 @@ class IngestAgentResults
 
             $this->applyDiscoveredInterfaces($device, $d['interfaces'] ?? []);
 
-            if (! empty($d['facts']) && is_array($d['facts'])) {
+            if (! empty($d['routeros_facts']) && is_array($d['routeros_facts'])) {
+                $this->applyRouterOsFacts($device, $d['routeros_facts']);
+            } elseif (! empty($d['facts']) && is_array($d['facts'])) {
                 $this->applyDiscoveredFacts($device, $d['facts']);
             }
         }
@@ -150,6 +152,27 @@ class IngestAgentResults
                 ? 'No interfaces returned - check the SNMP community and that the agent can reach the device.'
                 : null,
         ])->save();
+    }
+
+    /** @param array<string,mixed> $facts */
+    private function applyRouterOsFacts(Device $device, array $facts): void
+    {
+        $parsed = $this->facts->factsFromRouterOsRaw(
+            (string) ($facts['version'] ?? ''),
+            $facts['model'] ?? null,
+            $facts['board_name'] ?? null,
+            $facts['res_board_name'] ?? null,
+            (string) ($facts['serial'] ?? ''),
+            (string) ($facts['architecture'] ?? ''),
+            (string) ($facts['cpu'] ?? ''),
+            (int) ($facts['cpu_count'] ?? 0),
+            (int) ($facts['cpu_frequency'] ?? 0),
+            (int) ($facts['total_memory'] ?? 0),
+            (string) ($facts['uptime'] ?? ''),
+            (string) ($facts['location'] ?? ''),
+        );
+
+        $this->facts->applyFacts($device, $parsed);
     }
 
     /** @param array<string,mixed> $facts */

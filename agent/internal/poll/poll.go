@@ -45,6 +45,11 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 		if m := p.pollRouterOSMetrics(t); m != nil {
 			metrics = append(metrics, *m)
 		}
+		if t.Discover {
+			if d := p.discoverRouterOS(t); d != nil {
+				discovery = append(discovery, *d)
+			}
+		}
 	}
 	var probes []proto.ProbeCheck
 	for _, t := range job.Probes {

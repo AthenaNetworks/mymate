@@ -108,6 +108,7 @@ class DispatchAgentJobs
                         'interface_id' => $i->id,
                         'name' => $i->name,
                     ])->all(),
+                    'discover' => $discoverDue,
                 ];
             }
         }
