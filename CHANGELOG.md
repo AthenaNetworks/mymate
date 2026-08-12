@@ -13,6 +13,14 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Map: device up/down toasts no longer pile up.** Down toasts were sticky (meant for error
+  messages), so a flapping device stacked a fresh "X is down" notification every cycle and the
+  pile grew for as long as the page stayed open. Status toasts now auto-dismiss after 10 seconds,
+  a repeat flip from the same device replaces its existing toast instead of adding another, and
+  the stack is capped at six with the oldest dropped first. Error toasts still stay until
+  dismissed.
+
 ## [1.5.0] - 2026-08-09
 
 ### Added

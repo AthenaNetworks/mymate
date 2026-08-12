@@ -191,26 +191,31 @@ export function MapCanvas() {
     // Coalesce status-change toasts. A single flip still shows its own toast; a storm (large
     // fleet, or many devices flapping at once) collapses into one "N down, M back online"
     // summary per window instead of a firehose of individual toasts.
-    const statusBuf = useRef<{ up: number; down: number; n: number; lastName: string; lastStatus: DeviceStatus }>(
-        { up: 0, down: 0, n: 0, lastName: '', lastStatus: 'unknown' },
+    const statusBuf = useRef<{ up: number; down: number; n: number; lastId: number; lastName: string; lastStatus: DeviceStatus }>(
+        { up: 0, down: 0, n: 0, lastId: 0, lastName: '', lastStatus: 'unknown' },
     );
     const statusFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const handleStatus = useCallback((e: { name: string; status: DeviceStatus }) => {
+    const handleStatus = useCallback((e: { id: number; name: string; status: DeviceStatus }) => {
         const b = statusBuf.current;
         if (e.status === 'up') b.up++;
         else if (e.status === 'down') b.down++;
         b.n++;
+        b.lastId = e.id;
         b.lastName = e.name;
         b.lastStatus = e.status;
         if (statusFlush.current) return; // a flush is already scheduled; keep accumulating
         statusFlush.current = setTimeout(() => {
             const s = statusBuf.current;
+            // Status toasts always time out (the map dots and Alerts page carry the durable
+            // record), and are keyed so a flapping device updates one toast instead of
+            // stacking a duplicate every cycle.
             if (s.n === 1) {
                 pushToast({
                     title: `${s.lastName} is ${s.lastStatus}`,
                     detail: s.lastStatus === 'down' ? 'No longer responding to ping' : s.lastStatus === 'up' ? 'Back online' : undefined,
                     tone: s.lastStatus === 'up' ? 'up' : s.lastStatus === 'down' ? 'down' : 'info',
-                });
+                    key: `device-status-${s.lastId}`,
+                }, 10000);
             } else {
                 const parts: string[] = [];
                 if (s.down) parts.push(`${s.down} down`);
@@ -219,9 +224,10 @@ export function MapCanvas() {
                     title: parts.join(', '),
                     detail: `${s.n} devices changed state`,
                     tone: s.down >= s.up ? 'down' : 'up',
-                });
+                    key: 'device-status-summary',
+                }, 10000);
             }
-            statusBuf.current = { up: 0, down: 0, n: 0, lastName: '', lastStatus: 'unknown' };
+            statusBuf.current = { up: 0, down: 0, n: 0, lastId: 0, lastName: '', lastStatus: 'unknown' };
             statusFlush.current = null;
         }, 3000);
     }, []);
