@@ -235,4 +235,76 @@ class AgentIngestionTest extends TestCase
         $count = app(DispatchAgentJobs::class)();
         $this->assertSame(1, $count); // only the online agent
     }
+
+    public function test_ingest_discovery_creates_interfaces_and_applies_snmp_facts(): void
+    {
+        $agent = Agent::factory()->create();
+        $device = Device::factory()->create(['agent_id' => $agent->id]);
+
+        app(IngestAgentResults::class)($agent, ['discovery' => [[
+            'device_id' => $device->id,
+            'interfaces' => [
+                ['if_index' => 1, 'name' => 'ether1', 'descr' => 'Ethernet', 'speed_mbps' => 1000, 'oper_up' => true],
+                ['if_index' => 2, 'name' => 'ether2', 'oper_up' => false],
+            ],
+            'facts' => ['sys_descr' => 'Linux host 6.1.0', 'sys_location' => '[-31.95, 115.86]', 'ent_models' => [], 'ent_serials' => []],
+        ]]]);
+
+        $this->assertDatabaseHas('interfaces', ['device_id' => $device->id, 'if_index' => 1, 'name' => 'ether1', 'speed_mbps' => 1000, 'oper_status' => 'up']);
+        $this->assertDatabaseHas('interfaces', ['device_id' => $device->id, 'if_index' => 2, 'oper_status' => 'down']);
+
+        $device->refresh();
+        $this->assertSame('Linux', $device->vendor);
+        $this->assertEqualsWithDelta(-31.95, (float) $device->latitude, 0.001);
+        $this->assertSame('snmp', $device->geo_source);
+    }
+
+    public function test_ingest_discovery_applies_routeros_facts(): void
+    {
+        $agent = Agent::factory()->create();
+        $device = Device::factory()->create(['agent_id' => $agent->id, 'poll_method' => PollMethod::RouterOs]);
+
+        app(IngestAgentResults::class)($agent, ['discovery' => [[
+            'device_id' => $device->id,
+            'interfaces' => [['if_index' => 1, 'name' => 'ether1', 'oper_up' => true]],
+            'routeros_facts' => ['version' => '7.20.8 (stable)', 'model' => 'RB5009', 'serial' => 'ABC123', 'location' => '[-32.1, 116.0]'],
+        ]]]);
+
+        $device->refresh();
+        $this->assertSame('MikroTik', $device->vendor);
+        $this->assertSame('RB5009', $device->model);
+        $this->assertSame('7.20.8', $device->os_version);
+        $this->assertEqualsWithDelta(-32.1, (float) $device->latitude, 0.001);
+    }
+
+    public function test_ingest_discovery_ignores_a_device_not_owned_by_the_agent(): void
+    {
+        $agent = Agent::factory()->create();
+        $central = Device::factory()->create(['agent_id' => null]);
+
+        app(IngestAgentResults::class)($agent, ['discovery' => [[
+            'device_id' => $central->id,
+            'interfaces' => [['if_index' => 1, 'name' => 'ether1', 'oper_up' => true]],
+            'facts' => ['sys_descr' => 'Linux', 'sys_location' => '', 'ent_models' => [], 'ent_serials' => []],
+        ]]]);
+
+        $this->assertDatabaseMissing('interfaces', ['device_id' => $central->id]);
+    }
+
+    public function test_ingest_applies_a_probe_verdict_with_dampening(): void
+    {
+        $agent = Agent::factory()->create();
+        $device = Device::factory()->create(['agent_id' => $agent->id]);
+        $probe = \App\Models\Probe::factory()->create(['device_id' => $device->id, 'fail_threshold' => 1]);
+
+        app(IngestAgentResults::class)($agent, ['probes' => [[
+            'probe_id' => $probe->id, 'up' => true, 'latency_ms' => 12.3, 'message' => 'HTTP 200',
+        ]]]);
+
+        $probe->refresh();
+        $this->assertSame(DeviceStatus::Up, $probe->status);
+        $this->assertEqualsWithDelta(12.3, (float) $probe->latency_ms, 0.01);
+        $this->assertSame('HTTP 200', $probe->message);
+        $this->assertDatabaseHas('probe_samples', ['probe_id' => $probe->id, 'up' => true]);
+    }
 }
