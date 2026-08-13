@@ -40,7 +40,12 @@ export interface Device {
     latitude: number | null; // geo overlay position (the device's own coords)
     longitude: number | null;
     geo_source: 'manual' | 'address' | 'snmp' | null;
-    // Effective coords for the geo map (GitHub #21): own, else inherited from the uplink parent.
+    // Site placement: assigning a site places the device at it without copying coordinates.
+    site_id: number | null;
+    site_name: string | null;
+    site_source: 'manual' | 'import' | 'nearest' | null;
+    // Effective coords for the geo map (GitHub #21): own, else the site's, else inherited from
+    // the uplink parent.
     geo_latitude: number | null;
     geo_longitude: number | null;
     geo_inherited: boolean;
