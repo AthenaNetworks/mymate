@@ -13,6 +13,26 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Sites: place a whole tower at once.** A site (tower, fiber cabinet, POP) carries coordinates
+  once and every device at it inherits them on the geo map, so a few thousand devices on a few
+  hundred towers no longer means dragging a few thousand pins. The site slots into the same
+  coordinate resolution as uplink inheritance: own pin, else site, else uplink ancestor. Sites
+  import from a plain CSV (`php artisan mymate:sites:import`) keyed on an `external_ref` from
+  whatever inventory owns the truth, so a scheduled re-sync corrects coordinates in place;
+  devices are placed either from an authoritative `mgmt_ip,external_ref` mapping or by snapping
+  unplaced devices to the nearest site, and neither pass ever overwrites a placement an operator
+  made by hand. Manage them at `/api/sites`, or assign one device from the device editor.
+- **Geo map: the whole fleet renders smoothly.** Device markers now cluster into count-bubbles
+  that split apart as you zoom, and the map has compact purpose-built feeds (`/geo/devices`,
+  `/geo/backhauls`) so plotting a dot no longer means pulling the full multi-megabyte device
+  payload.
+- **Geo map: backhaul lines.** Site-to-site links (imported alongside sites) draw as solid fiber /
+  dashed wireless lines under the markers, so the map shows the real backbone instead of leaving
+  you to infer it.
+- **Geo map: layer toggles.** Devices and backhauls each have a switch on the map, remembered
+  across reloads (both start on).
+
 ### Fixed
 - **Map: device up/down toasts no longer pile up.** Down toasts were sticky (meant for error
   messages), so a flapping device stacked a fresh "X is down" notification every cycle and the

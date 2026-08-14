@@ -22,9 +22,15 @@ class DeviceResource extends JsonResource
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'geo_source' => $this->geo_source,
-            // Effective coordinates for the geo map (GitHub #21): own coords, else inherited from
-            // the uplink parent. Populated by DeviceGeo::apply on the list; single-device responses
-            // fall back to the device's own coords.
+            // Site placement: a site carries coordinates once and every device at it inherits
+            // them at read time, so assigning a site places a whole tower's worth of gear
+            // without copying coordinates onto each row.
+            'site_id' => $this->site_id,
+            'site_name' => $this->whenLoaded('site', fn () => $this->site?->name),
+            'site_source' => $this->site_source,
+            // Effective coordinates for the geo map (GitHub #21): own coords, else the site's,
+            // else inherited from the uplink parent. Populated by DeviceGeo::apply; responses
+            // that skip it fall back to the device's own coords.
             'geo_latitude' => $this->geo_latitude ?? $this->latitude,
             'geo_longitude' => $this->geo_longitude ?? $this->longitude,
             'geo_inherited' => (bool) ($this->geo_inherited ?? false),

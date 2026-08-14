@@ -60,6 +60,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
         ->middleware('throttle:20,1')->name('update-check');
     // Geo overlay: tile config + a server-side geocoder proxy (GitHub #11).
     Route::get('map-config', [\App\Http\Controllers\Api\GeoController::class, 'config'])->name('map.config');
+    // Compact placed-device feed for the geo map (id/name/status/site/coords only).
+    Route::get('geo/devices', [\App\Http\Controllers\Api\GeoController::class, 'devices'])->name('geo.devices');
+    // Site-to-site backhaul links (coordinate pairs) for the geo map.
+    Route::get('geo/backhauls', [\App\Http\Controllers\Api\GeoController::class, 'backhauls'])->name('geo.backhauls');
     Route::get('geocode', [\App\Http\Controllers\Api\GeoController::class, 'geocode'])
         ->middleware('throttle:30,1')->name('geocode');
     // System status board (db/redis/workers/polling/websockets/backups) for Settings.
@@ -274,6 +278,11 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
         ->middleware('throttle:6,1')->name('alert-transports.test');
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');
     Route::post('alert-events/{alertEvent}/ack', [AlertEventController::class, 'ack'])->name('alert-events.ack');
+
+    // Sites: physical locations (towers, fiber cabinets, POPs) devices sit at. Devices
+    // inherit their site's coordinates on the geo map, so a whole tower places at once.
+    Route::apiResource('sites', \App\Http\Controllers\Api\SiteController::class)
+        ->only(['index', 'show', 'store', 'update', 'destroy']);
 
     // Auto-discovery: authorized scan ranges + the candidate review queue.
     Route::apiResource('subnets', SubnetController::class)->only(['index', 'store', 'update', 'destroy']);
