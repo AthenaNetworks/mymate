@@ -39,7 +39,7 @@ export function ChildLinkEdge({ id, source, target, sourceX, sourceY, targetX, t
             <EdgeLabelRenderer>
                 <div
                     style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-                    className="pointer-events-none absolute rounded-full bg-[#0d0d11]/85 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white/55 ring-1 ring-white/10"
+                    className="pointer-events-none absolute rounded-full bg-surface/85 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white/55 ring-1 ring-white/10"
                 >
                     {d.count} {d.count === 1 ? 'link' : 'links'}
                 </div>

@@ -28,7 +28,7 @@ export function UpdateNotice() {
         <div className="fixed inset-0 z-[70] grid place-items-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={close} />
             <div className="animate-rise relative w-full max-w-sm rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <button onClick={close} className="absolute right-3 top-3 rounded-lg p-1 text-white/40 transition hover:bg-white/5 hover:text-white/80">
                         <X weight="bold" className="h-4 w-4" />
                     </button>

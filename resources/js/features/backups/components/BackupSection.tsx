@@ -32,7 +32,7 @@ function ConfigViewer({ device, onClose }: { device: Device; onClose: () => void
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-[#0d0d11] ring-1 ring-white/10"
+                className="flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-surface ring-1 ring-white/10"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">

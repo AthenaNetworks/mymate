@@ -207,7 +207,7 @@ function VersionPanel({ device }: { device: Device }) {
                 </div>
 
                 {/* Diff / config viewer. */}
-                <div className="min-w-0 flex-1 overflow-hidden rounded-xl bg-[#0b0b0f] ring-1 ring-white/10">
+                <div className="min-w-0 flex-1 overflow-hidden rounded-xl bg-surface-deep ring-1 ring-white/10">
                     {mode === 'config' ? (
                         commit === null ? (
                             <p className="p-4 text-xs text-white/35">No version selected.</p>

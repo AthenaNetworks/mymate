@@ -28,7 +28,7 @@ export function MapBreadcrumb() {
     trail.reverse();
 
     return (
-        <div className="flex items-center gap-0.5 rounded-full bg-[#0d0d11]/80 px-2 py-1.5 text-[11px] ring-1 ring-white/10 backdrop-blur-xl">
+        <div className="flex items-center gap-0.5 rounded-full bg-surface/80 px-2 py-1.5 text-[11px] ring-1 ring-white/10 backdrop-blur-xl">
             {trail.map((m) => (
                 <span key={m.id} className="flex items-center gap-0.5">
                     <button

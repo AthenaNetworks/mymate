@@ -56,7 +56,7 @@ export function ChildMapNode({ data, selected }: NodeProps) {
                 </button>
             )}
 
-            <div className="flex min-w-[10rem] items-center gap-2.5 rounded-[calc(1rem-0.25rem)] bg-[#0d0d11] px-3 py-2.5 ring-1 ring-white/10">
+            <div className="flex min-w-[10rem] items-center gap-2.5 rounded-[calc(1rem-0.25rem)] bg-surface px-3 py-2.5 ring-1 ring-white/10">
                 <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-400/25">
                     <MapTrifold weight="duotone" className="h-5 w-5" />
                 </span>

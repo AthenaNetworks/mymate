@@ -94,7 +94,7 @@ export function MapSwitcher() {
             <div className="relative">
                 <button
                     onClick={() => setOpen((o) => !o)}
-                    className="flex items-center gap-2 rounded-full bg-[#0d0d11]/80 px-3 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:text-white"
+                    className="flex items-center gap-2 rounded-full bg-surface/80 px-3 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:text-white"
                 >
                     <MapTrifold weight="light" className="h-4 w-4 text-emerald-300" />
                     {active?.name ?? 'Map'}
@@ -104,7 +104,7 @@ export function MapSwitcher() {
                 {open && (
                     <>
                         <button aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
-                        <div className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-64 flex-col rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                        <div className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-64 flex-col rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
                             <div className="min-h-0 flex-1 overflow-y-auto">
                             {maps?.map((m) => (
                                 <div key={m.id} className={`group flex items-center gap-0.5 rounded-lg ${m.id === activeId ? 'bg-emerald-500/10' : ''}`}>

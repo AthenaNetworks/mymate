@@ -160,7 +160,7 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
             {selected && (
                 <span className="pointer-events-none absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(16,185,129,0.8)]" />
             )}
-            <div className="min-w-[12.5rem] rounded-[calc(1.25rem-0.25rem)] bg-[#0d0d11] px-3 py-2.5 ring-1 ring-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+            <div className="min-w-[12.5rem] rounded-[calc(1.25rem-0.25rem)] bg-surface px-3 py-2.5 ring-1 ring-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
                 <SideHandles />
 
                 <div className="flex items-center gap-2.5">

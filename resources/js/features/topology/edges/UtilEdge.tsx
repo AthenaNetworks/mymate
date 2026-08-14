@@ -152,7 +152,7 @@ export function UtilEdge({
                         opacity: d.dimmed ? 0.3 : 1,
                         transition: 'opacity 400ms var(--ease-fluid)',
                     }}
-                    className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-[#0d0d11]/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
+                    className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
                 >
                     <span>{label(d)}</span>
                     {/* Hover the label -> a ✕ to remove the link (confirm dialog in MapCanvas). */}
@@ -210,7 +210,7 @@ function CostBadge({ x, y, cost, size, color }: { x: number; y: number; cost: nu
     return (
         <div
             style={{ transform: `translate(-50%, -50%) translate(${x}px, ${y}px)`, color, borderColor: color }}
-            className={`pointer-events-none absolute rounded-full border bg-[#0d0d11]/85 font-semibold tabular-nums shadow-[0_2px_8px_-2px_rgba(0,0,0,0.85)] ${OSPF_SIZE_CLASS[size]}`}
+            className={`pointer-events-none absolute rounded-full border bg-surface/85 font-semibold tabular-nums shadow-[0_2px_8px_-2px_rgba(0,0,0,0.85)] ${OSPF_SIZE_CLASS[size]}`}
             title={`OSPF cost ${cost}`}
         >
             {cost}

@@ -23,7 +23,7 @@ function ModalShell({ icon, title, onClose, children }: { icon?: ReactNode; titl
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             <div className="animate-rise relative w-full max-w-sm rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="max-h-[85vh] overflow-y-auto rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="max-h-[85vh] overflow-y-auto rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <header className="mb-4 flex items-start justify-between">
                         <div className="flex items-center gap-3">
                             {icon && (

@@ -32,7 +32,7 @@ export function GeoStackNode({ data, selected }: NodeProps) {
             type="button"
             onClick={(e) => { e.stopPropagation(); d.onToggle?.(); }}
             title={`${d.count} devices here:\n${d.names.slice(0, 12).join('\n')}${d.names.length > 12 ? '\n...' : ''}`}
-            className={`relative grid place-items-center rounded-2xl bg-[#0d0d11] p-1 ring-1 transition-all duration-200 ${
+            className={`relative grid place-items-center rounded-2xl bg-surface p-1 ring-1 transition-all duration-200 ${
                 selected ? 'z-10 scale-[1.03] ring-2 ring-emerald-400/90' : ring
             }`}
         >
@@ -51,7 +51,7 @@ export function GeoStackNode({ data, selected }: NodeProps) {
                     <div className="text-[11px] text-white/40">{status === 'down' ? `${d.down} down` : 'same site'}</div>
                 </div>
             </div>
-            <span className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-white/90 px-1 text-[9px] font-bold text-[#0d0d11]">
+            <span className="pointer-events-none absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-white/90 px-1 text-[9px] font-bold text-surface">
                 {d.count}
             </span>
         </button>

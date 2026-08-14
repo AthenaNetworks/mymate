@@ -27,7 +27,7 @@ export function LoginScreen() {
                 onSubmit={submit}
                 className="animate-rise w-full max-w-sm rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10"
             >
-                <div className="rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-7 ring-1 ring-white/10">
+                <div className="rounded-[calc(1.5rem-0.25rem)] bg-surface p-7 ring-1 ring-white/10">
                     <div className="mb-6 flex items-center gap-3">
                         <Logomark size={44} className="rounded-2xl shadow-[0_8px_22px_-8px_rgba(16,185,129,0.7)]" />
                         <div>

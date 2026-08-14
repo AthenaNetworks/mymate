@@ -93,7 +93,7 @@ export function MapLinkEdge({
                             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                             borderColor: color,
                         }}
-                        className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-[#0d0d11]/90 px-2 py-0.5 text-[10px] font-medium text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
+                        className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
                     >
                         <span>{text}</span>
                         {d.onRemove && (

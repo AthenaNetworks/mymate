@@ -19,7 +19,7 @@ export function Toaster() {
                 return (
                     <div
                         key={t.id}
-                        className="animate-toast pointer-events-auto flex items-start gap-3 rounded-2xl bg-[#0d0d11]/95 p-3 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl"
+                        className="animate-toast pointer-events-auto flex items-start gap-3 rounded-2xl bg-surface/95 p-3 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl"
                     >
                         <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ring-1 ${tone.chip}`}>
                             <Icon weight="bold" className="h-4 w-4" />

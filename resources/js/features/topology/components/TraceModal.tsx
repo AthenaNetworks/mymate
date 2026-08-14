@@ -80,7 +80,7 @@ function HopTable({ run }: { run: TraceRun }) {
         // sticky header only works against the box that actually scrolls.
         <div className="max-h-[62vh] overflow-auto rounded-xl ring-1 ring-white/[0.06]">
             <table className="w-full min-w-[44rem] text-left text-sm">
-                <thead className="sticky top-0 z-10 bg-[#15151b] text-[10px] uppercase tracking-[0.16em] text-white/35">
+                <thead className="sticky top-0 z-10 bg-surface-2 text-[10px] uppercase tracking-[0.16em] text-white/35">
                     <tr>
                         <th className="w-10 whitespace-nowrap px-3 py-2 text-right font-medium">#</th>
                         <th className="whitespace-nowrap px-3 py-2 font-medium">Host</th>
@@ -251,7 +251,7 @@ export function TraceModal({
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
             <div className="animate-rise relative w-full max-w-4xl rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="relative flex flex-col gap-4 rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="relative flex flex-col gap-4 rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <button
                         onClick={onClose}
                         aria-label="Close"

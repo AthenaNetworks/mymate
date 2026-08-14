@@ -5,6 +5,7 @@ import { StatusCounts } from './StatusCounts';
 import { setView, setNavOpen, setWallboard } from '../../lib/shellStore';
 import { useCurrentUser, useLogout } from '../auth/api/auth';
 import { Logomark } from '../../components/Logomark';
+import { ThemeToggle } from '../../components/ThemeToggle';
 
 const PING_S = 5; // mirrors config/mymate.php (MYMATE_PING_INTERVAL) - cosmetic label
 
@@ -76,6 +77,9 @@ export function TopBar() {
                 <span className="text-white/20">-</span>
                 <span className="text-white/70">{clock}</span>
             </div>
+
+            {/* Light/dark toggle (GitHub #34). */}
+            <ThemeToggle />
 
             {/* Wallboard / TV mode - chrome-free fullscreen for a NOC big screen. */}
             <button

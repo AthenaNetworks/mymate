@@ -73,7 +73,7 @@ export function PortScanTool() {
                     {r.open.length > 0 ? (
                         <div className="mt-3 overflow-hidden rounded-xl ring-1 ring-white/[0.06]">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-[#15151b]">
+                                <thead className="bg-surface-2">
                                     <tr>
                                         <th className={`${th} w-24`}>Port</th>
                                         <th className={th}>Service</th>

@@ -79,7 +79,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
         <>
             {/* Compact inline pill - sm and up. */}
             <div className="relative hidden sm:block">
-                <div className="flex items-center gap-1.5 rounded-full bg-[#0d0d11]/80 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-xl">
+                <div className="flex items-center gap-1.5 rounded-full bg-surface/80 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-xl">
                     <MagnifyingGlass weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/35" />
                     <input
                         ref={inputRef}
@@ -111,7 +111,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
                     <>
                         {/* Click-away - closes the dropdown on any outside click. */}
                         <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-                        <div className="animate-rise absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-[#0d0d11]/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                        <div className="animate-rise absolute left-0 top-full z-20 mt-2 w-56 overflow-hidden rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                             {matchList('px-2.5 py-1.5 text-xs')}
                         </div>
                     </>
@@ -123,7 +123,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
             <button
                 onClick={() => setMobileOpen(true)}
                 title="Find a device"
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#0d0d11]/80 text-white/55 ring-1 ring-white/10 backdrop-blur-xl transition-colors duration-200 hover:text-white sm:hidden"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-surface/80 text-white/55 ring-1 ring-white/10 backdrop-blur-xl transition-colors duration-200 hover:text-white sm:hidden"
             >
                 <MagnifyingGlass weight="bold" className="h-4 w-4" />
             </button>
@@ -134,7 +134,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
                 // colliding with the header instead of appearing near the icon you tapped.
                 <div className="fixed inset-x-0 bottom-0 top-14 z-30 bg-black/60 backdrop-blur-sm sm:hidden" onClick={() => setMobileOpen(false)}>
                     <div
-                        className="animate-rise mx-3 mt-3 overflow-hidden rounded-2xl bg-[#0d0d11]/95 p-2 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10"
+                        className="animate-rise mx-3 mt-3 overflow-hidden rounded-2xl bg-surface/95 p-2 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2.5 ring-1 ring-white/10">

@@ -378,7 +378,7 @@ function InspectorShell({ open, children }: { open: boolean; children: ReactNode
                 onClick={() => setInspectorOpen(false)}
             />
             <aside
-                className={`fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-[#0d0d11]/95 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:w-[22rem] lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
+                className={`fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-surface/95 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:w-[22rem] lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
                     open ? 'translate-x-0' : 'translate-x-full'
                 }`}
             >
@@ -433,13 +433,13 @@ function ClassificationPicker({ device }: { device: Device }) {
                 <DeviceGlyph deviceId={device.id} vendor={device.vendor} model={device.model} type={device.device_type} icon={device.icon} iconColor={device.icon_color} className="h-6 w-6" />
                 <CaretDown
                     weight="bold"
-                    className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-[#0d0d11] text-white/40 group-hover:text-white/70"
+                    className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-surface text-white/40 group-hover:text-white/70"
                 />
             </button>
             {open && (
                 <>
                     <div className="fixed inset-0 z-20" onClick={() => setOpen(false)} />
-                    <div className="absolute left-0 top-full z-30 mt-1.5 w-44 rounded-xl bg-[#0d0d11] p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] ring-1 ring-white/10">
+                    <div className="absolute left-0 top-full z-30 mt-1.5 w-44 rounded-xl bg-surface p-1 shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] ring-1 ring-white/10">
                         {DEVICE_TYPES.map((t) => (
                             <button
                                 key={t.value}

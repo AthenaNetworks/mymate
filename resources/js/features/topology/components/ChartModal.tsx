@@ -124,7 +124,7 @@ export function ChartModal({
             <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
             <div className="relative flex h-full w-full max-w-6xl flex-col rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="relative flex min-h-0 flex-1 flex-col rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="relative flex min-h-0 flex-1 flex-col rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <button
                         onClick={onClose}
                         aria-label="Close"
@@ -236,7 +236,7 @@ export function ChartModal({
                         {/* Tooltip */}
                         {hoverT !== null && (
                             <div
-                                className="pointer-events-none absolute top-2 rounded-xl bg-[#15151b]/95 px-3 py-2 text-xs ring-1 ring-white/10"
+                                className="pointer-events-none absolute top-2 rounded-xl bg-surface-2/95 px-3 py-2 text-xs ring-1 ring-white/10"
                                 style={{ left: `${(x(hoverT) / W) * 100}%`, transform: 'translateX(-50%)' }}
                             >
                                 <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">{fmtTime(hoverT)}</div>

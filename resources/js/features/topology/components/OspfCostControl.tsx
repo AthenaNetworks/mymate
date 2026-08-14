@@ -33,7 +33,7 @@ export function OspfCostControl() {
                 <>
                     {/* Click-away. */}
                     <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-                    <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl bg-[#0d0d11]/95 p-2.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                    <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-44 rounded-2xl bg-surface/95 p-2.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                         <p className="px-0.5 pb-1.5 text-[10px] uppercase tracking-wide text-white/30">OSPF cost label</p>
                         <div className="flex items-center gap-1">
                             {SIZES.map((s) => (

@@ -91,7 +91,7 @@ export function AppShell() {
     // Wallboard: no top bar / nav rail / inspector - just the active view + an exit affordance.
     if (wallboard) {
         return (
-            <div className="relative flex h-screen flex-col overflow-hidden bg-[#060608] text-zinc-100">
+            <div className="relative flex h-screen flex-col overflow-hidden bg-surface-deep text-zinc-100">
                 {meshGlow}
                 <div className="flex min-h-0 flex-1">{mainView}</div>
                 <button
@@ -111,7 +111,7 @@ export function AppShell() {
         // wrapper in app.tsx); defaults to the full viewport on a real instance. Safe-area
         // insets keep the chrome clear of a notch / home indicator (0 in a normal tab, only
         // non-zero when installed to the home screen or in notched landscape).
-        <div className="relative flex h-[calc(100dvh-var(--app-inset-top,0px))] flex-col overflow-hidden bg-[#060608] pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-zinc-100">
+        <div className="relative flex h-[calc(100dvh-var(--app-inset-top,0px))] flex-col overflow-hidden bg-surface-deep pt-[env(safe-area-inset-top)] pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)] text-zinc-100">
             {meshGlow}
 
             <TopBar />

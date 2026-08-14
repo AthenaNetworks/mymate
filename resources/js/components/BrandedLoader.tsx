@@ -4,7 +4,7 @@ import { Logomark } from './Logomark';
  *  demo viewer auto-logs-in). Displays the logo so visitors immediately know the product. */
 export function BrandedLoader({ label = 'Loading...' }: { label?: string }) {
     return (
-        <div className="relative grid min-h-screen place-items-center overflow-hidden bg-[#060608] text-zinc-100">
+        <div className="relative grid min-h-screen place-items-center overflow-hidden bg-surface-deep text-zinc-100">
             <div
                 aria-hidden
                 className="pointer-events-none fixed inset-0"

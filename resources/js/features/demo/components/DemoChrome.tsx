@@ -14,7 +14,7 @@ export function DemoChrome() {
     return (
         <>
             {/* Top marketing bar - sits in the reserved inset above the app console. */}
-            <header className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-3 border-b border-white/10 bg-[#0b0b0f]/85 px-4 backdrop-blur-xl">
+            <header className="fixed inset-x-0 top-0 z-40 flex h-12 items-center gap-3 border-b border-white/10 bg-surface-deep/85 px-4 backdrop-blur-xl">
                 <span className="flex items-center gap-2 font-bold tracking-tight text-white">
                     <span className="grid h-6 w-6 place-items-center rounded-md bg-emerald-500/20 text-[11px] text-emerald-300 ring-1 ring-emerald-400/30">M</span>
                     My Mate
@@ -52,7 +52,7 @@ function Popup({ which, onClose, onNav }: { which: Open; onClose: () => void; on
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
             <div className="animate-rise relative w-full max-w-2xl rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="relative max-h-[80vh] overflow-y-auto rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-7 ring-1 ring-white/10">
+                <div className="relative max-h-[80vh] overflow-y-auto rounded-[calc(1.5rem-0.25rem)] bg-surface p-7 ring-1 ring-white/10">
                     <button
                         onClick={onClose}
                         aria-label="Close"

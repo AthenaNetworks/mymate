@@ -34,7 +34,7 @@ export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: numbe
     return (
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-            <div className="animate-rise relative w-full max-w-lg rounded-2xl bg-[#0d0d11] p-5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+            <div className="animate-rise relative w-full max-w-lg rounded-2xl bg-surface p-5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
                 <div className="mb-4 flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                         <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-400/20">

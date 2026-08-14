@@ -12,7 +12,7 @@ export function MapControls() {
 
     return (
         <Panel position="bottom-left" className="!m-4">
-            <div className="flex flex-col overflow-hidden rounded-full bg-[#0d0d11]/80 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)] ring-1 ring-white/10 backdrop-blur-xl">
+            <div className="flex flex-col overflow-hidden rounded-full bg-surface/80 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.7)] ring-1 ring-white/10 backdrop-blur-xl">
                 <button onClick={() => zoomIn({ duration: 200 })} title="Zoom in" className={btn}>
                     <Plus weight="bold" className="h-4 w-4" />
                 </button>

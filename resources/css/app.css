@@ -10,6 +10,13 @@
         'Segoe UI Emoji', 'Segoe UI Symbol';
     /* Apple/Linear-tier motion curve -> use as `ease-fluid`. */
     --ease-fluid: cubic-bezier(0.32, 0.72, 0, 1);
+
+    /* Themeable surfaces (GitHub #34). The three near-black backgrounds the app hardcoded
+       (#0d0d11 body, #15151b raised, #060608 deepest) become tokens so light mode can flip
+       them: bg-surface / bg-surface-2 / bg-surface-deep. */
+    --color-surface: #0d0d11;
+    --color-surface-2: #15151b;
+    --color-surface-deep: #060608;
 }
 
 /* App tokens. --link-down: grey for down devices/links, distinct from saturated red.
@@ -22,6 +29,21 @@
     color-scheme: dark;
 }
 
+/* Light theme (GitHub #34). The app is written dark-first with ~1800 `white`-based utilities
+   (text-white, bg-white/[x], ring-white/[x]). Overriding Tailwind's `--color-white` here flips
+   all of them at once: white text becomes near-black, and every subtle white overlay becomes a
+   subtle dark tint - the correct inversion. Only the three opaque surface tokens need their own
+   light values. Toggled by setting data-theme="light" on <html> (see lib/theme.ts). */
+:root[data-theme='light'] {
+    --color-white: #18181b; /* was #fff - flips all white-based utilities to dark ink */
+    --color-surface: #f4f4f5;
+    --color-surface-2: #ffffff;
+    --color-surface-deep: #e7e7ea;
+    --link-down: #9ca3af;
+    --link-unknown: #94a3b8;
+    color-scheme: light;
+}
+
 /* Native <select> option popups. The app's controls sit on translucent backgrounds
    (bg-white/[0.03]) which the OS/browser popup surface can't composite - on a
    light-mode OS the list renders white while the options inherit the select's white
@@ -29,11 +51,11 @@
    rows in every engine; they need an explicit SOLID dark surface. */
 select option,
 select optgroup {
-    background-color: #101014;
-    color: #f4f4f5;
+    background-color: var(--color-surface-2);
+    color: var(--color-white);
 }
 select option:disabled {
-    color: #71717a;
+    color: color-mix(in oklab, var(--color-white) 45%, transparent);
 }
 
 html,
@@ -59,8 +81,8 @@ body {
 }
 
 body {
-    background-color: #060608; /* deepest OLED-ish base */
-    color: rgb(244 244 245 / 0.92);
+    background-color: var(--color-surface-deep); /* deepest base (flips in light mode) */
+    color: color-mix(in oklab, var(--color-white) 92%, transparent);
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     /* Mobile app-like feel: no page rubber-band / pull-to-refresh hijacking a map drag,
@@ -79,21 +101,21 @@ label,
     touch-action: manipulation;
 }
 
-/* Near-invisible refined scrollbars. */
+/* Near-invisible refined scrollbars (flip with the theme). */
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+    scrollbar-color: color-mix(in oklab, var(--color-white) 12%, transparent) transparent;
 }
 *::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-    background: rgb(255 255 255 / 0.1);
+    background: color-mix(in oklab, var(--color-white) 10%, transparent);
     border-radius: 9999px;
 }
 *::-webkit-scrollbar-thumb:hover {
-    background: rgb(255 255 255 / 0.18);
+    background: color-mix(in oklab, var(--color-white) 18%, transparent);
 }
 
 ::selection {

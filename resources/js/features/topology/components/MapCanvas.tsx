@@ -665,7 +665,7 @@ export function MapCanvas() {
                 <div className="flex flex-wrap items-center gap-2">
                     <MapBreadcrumb />
                     <MapSwitcher />
-                    <span className="pointer-events-none hidden rounded-full bg-[#0d0d11]/80 px-3 py-1.5 font-mono text-[11px] tabular-nums text-white/50 ring-1 ring-white/10 backdrop-blur-xl sm:inline-block">
+                    <span className="pointer-events-none hidden rounded-full bg-surface/80 px-3 py-1.5 font-mono text-[11px] tabular-nums text-white/50 ring-1 ring-white/10 backdrop-blur-xl sm:inline-block">
                         {mapDevices.length} nodes - {intraLinks.length} links
                     </span>
                     {childDeviceLinks.length > 0 && (
@@ -675,7 +675,7 @@ export function MapCanvas() {
                             className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium ring-1 backdrop-blur-xl transition-colors ${
                                 showChildLinks
                                     ? 'bg-white/10 text-emerald-300 ring-white/15'
-                                    : 'bg-[#0d0d11]/80 text-white/55 ring-white/10 hover:text-white/85'
+                                    : 'bg-surface/80 text-white/55 ring-white/10 hover:text-white/85'
                             }`}
                         >
                             <LineSegment weight="bold" className="h-3.5 w-3.5" />
@@ -756,7 +756,7 @@ export function MapCanvas() {
                             <>
                                 {/* Click-away - closes the menu on any outside click. */}
                                 <div className="fixed inset-0 z-10" onClick={() => setLayoutMenu(false)} />
-                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl bg-[#0d0d11]/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                                     <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
                                     {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
                                         <button
@@ -799,7 +799,7 @@ export function MapCanvas() {
                         {toolsMenu && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setToolsMenu(false)} />
-                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl bg-[#0d0d11]/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                                     <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Links</p>
                                     <div className="flex gap-1 px-1 pb-1.5">
                                         <button onClick={() => { setEdgeStyle('curved'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'curved' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>

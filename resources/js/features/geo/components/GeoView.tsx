@@ -224,7 +224,7 @@ export function GeoView() {
 
     return (
         <div className="relative flex h-full">
-            <div ref={containerRef} className="h-full flex-1 bg-[#0d0d11]" style={{ zIndex: 0 }} />
+            <div ref={containerRef} className="h-full flex-1 bg-surface" style={{ zIndex: 0 }} />
 
             {/* Layer toggles - what's on the map is a matter of what the operator is doing. */}
             <div className="absolute bottom-4 left-3 z-[500] flex gap-1.5">
@@ -234,7 +234,7 @@ export function GeoView() {
 
             {/* Placement panel (admin) - place devices that have no coordinates yet. */}
             {isAdmin && (
-                <div className="absolute right-3 top-3 z-[500] w-72 rounded-2xl bg-[#0d0d11]/95 p-3 ring-1 ring-white/10 backdrop-blur-xl">
+                <div className="absolute right-3 top-3 z-[500] w-72 rounded-2xl bg-surface/95 p-3 ring-1 ring-white/10 backdrop-blur-xl">
                     <div className="flex items-center justify-between px-1">
                         <span className="text-xs font-semibold text-white/80">Place devices</span>
                         <span className="text-[11px] text-white/40">{unplaced.length} unplaced</span>

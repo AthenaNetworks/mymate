@@ -68,6 +68,10 @@ function AuthedApp() {
     return <AppShell />;
 }
 
+import { initTheme } from './lib/theme';
+
+initTheme(); // apply the saved light/dark choice before first paint (GitHub #34)
+
 const el = document.getElementById('app');
 if (el) {
     createRoot(el).render(

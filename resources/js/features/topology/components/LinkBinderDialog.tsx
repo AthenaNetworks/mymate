@@ -95,7 +95,7 @@ export function EndPicker({
                             className="fixed inset-0 z-10 cursor-default"
                             onClick={() => setOpen(false)}
                         />
-                        <ul className="absolute z-20 mt-1.5 max-h-56 w-full overflow-auto rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                        <ul className="absolute z-20 mt-1.5 max-h-56 w-full overflow-auto rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
                             {ifs.data?.map((i) => {
                                 const s = speedLabel(i.speed_mbps);
                                 const isSel = String(i.id) === value;
@@ -176,7 +176,7 @@ function PeerPicker({
                             className="fixed inset-0 z-10 cursor-default"
                             onClick={() => setOpen(false)}
                         />
-                        <div className="absolute z-20 mt-1.5 w-full rounded-xl bg-[#0d0d11] p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                        <div className="absolute z-20 mt-1.5 w-full rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
                             <div className="flex items-center gap-2 px-2 py-1.5">
                                 <MagnifyingGlass weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/40" />
                                 <input
@@ -270,7 +270,7 @@ export function AddLinkDialog({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             <div className="animate-rise relative w-full max-w-md rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <header className="mb-5 flex items-start justify-between">
                         <div className="flex items-center gap-3">
                             <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">
@@ -375,7 +375,7 @@ export function LinkBinderDialog({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             <div className="animate-rise relative w-full max-w-md rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="rounded-[calc(1.5rem-0.25rem)] bg-[#0d0d11] p-6 ring-1 ring-white/10">
+                <div className="rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     <header className="mb-5 flex items-start justify-between">
                         <div className="flex items-center gap-3">
                             <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20">

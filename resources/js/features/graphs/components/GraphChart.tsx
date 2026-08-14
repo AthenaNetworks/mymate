@@ -105,7 +105,7 @@ export function GraphChart({ data }: { data: GraphData }) {
                         <g>
                             <line x1={x(times[hi])} x2={x(times[hi])} y1={PAD.t} y2={H - PAD.b} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
                             {lines.map((l) => (l.values[hi] != null ? (
-                                <circle key={l.key} cx={x(times[hi])} cy={y(l.values[hi] as number)} r={2.6} fill={l.color} stroke="#0d0d11" strokeWidth={1} />
+                                <circle key={l.key} cx={x(times[hi])} cy={y(l.values[hi] as number)} r={2.6} fill={l.color} stroke="var(--color-surface)" strokeWidth={1} />
                             ) : null))}
                         </g>
                     )}
@@ -119,7 +119,7 @@ export function GraphChart({ data }: { data: GraphData }) {
                 )}
 
                 {hi != null && !noData && (
-                    <div className="pointer-events-none absolute top-2 rounded-lg bg-[#0d0d11]/95 px-2.5 py-1.5 text-[11px] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/10"
+                    <div className="pointer-events-none absolute top-2 rounded-lg bg-surface/95 px-2.5 py-1.5 text-[11px] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/10"
                         style={{ left: `${Math.min(72, (x(times[hi]) / W) * 100)}%` }}>
                         <div className="mb-1 font-mono text-[10px] text-white/45">{fmtDate(times[hi])}</div>
                         {lines.map((l) => (

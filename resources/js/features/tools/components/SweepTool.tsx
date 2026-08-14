@@ -82,7 +82,7 @@ export function SweepTool() {
                     {r.hosts.length > 0 ? (
                         <div className="mt-3 max-h-[52vh] overflow-auto rounded-xl ring-1 ring-white/[0.06]">
                             <table className="w-full min-w-[44rem] text-left text-sm">
-                                <thead className="sticky top-0 z-10 bg-[#15151b]">
+                                <thead className="sticky top-0 z-10 bg-surface-2">
                                     <tr>
                                         <th className={th}>Address</th>
                                         <th className={th}>Reverse DNS</th>

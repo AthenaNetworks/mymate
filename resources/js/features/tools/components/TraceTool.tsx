@@ -81,7 +81,7 @@ export function TraceTool() {
             {hops.length > 0 && (
                 <div className="mt-3 max-h-[52vh] overflow-auto rounded-xl ring-1 ring-white/[0.06]">
                     <table className="w-full min-w-[42rem] text-left text-sm">
-                        <thead className="sticky top-0 z-10 bg-[#15151b]">
+                        <thead className="sticky top-0 z-10 bg-surface-2">
                             <tr>
                                 <th className={`${th} w-10 text-right`}>#</th>
                                 <th className={th}>Host</th>
