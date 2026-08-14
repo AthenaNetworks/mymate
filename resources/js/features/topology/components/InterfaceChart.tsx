@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { formatRate } from '../../../lib/formatRate';
+import { parseUtc } from '../../../lib/parseUtc';
 import type { InterfaceSample } from '../../../types';
 
 // Fixed drawing space; the SVG scales to its container (uniform, crisp strokes via
@@ -20,7 +21,7 @@ const KEYS: Record<Mode, { in: keyof InterfaceSample; out: keyof InterfaceSample
 
 function points(samples: InterfaceSample[], key: keyof InterfaceSample): Pt[] {
     return samples
-        .map((s) => ({ t: Date.parse(s.ts), v: s[key] as number | null }))
+        .map((s) => ({ t: parseUtc(s.ts), v: s[key] as number | null }))
         .filter((p): p is Pt => p.v !== null && !Number.isNaN(p.t));
 }
 
@@ -66,7 +67,7 @@ export function InterfaceChart({
     // Throughput auto-scales (bps -> kbps/Mbps/Gbps) via formatRate; util is a 0-100 %.
     const fmtY = (v: number) => (mode === 'util' ? `${v.toFixed(v < 10 ? 1 : 0)}%` : formatRate(v));
 
-    const times = data.map((s) => Date.parse(s.ts)).filter((t) => !Number.isNaN(t));
+    const times = data.map((s) => parseUtc(s.ts)).filter((t) => !Number.isNaN(t));
     const tMin = Math.min(...times);
     const tMax = Math.max(...times);
     const tSpan = Math.max(1, tMax - tMin);

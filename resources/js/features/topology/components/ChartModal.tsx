@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQueries } from '@tanstack/react-query';
 import { Pulse, X } from '@phosphor-icons/react';
 import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
+import { parseUtc } from '../../../lib/parseUtc';
 import { fetchDeviceSamples, deviceSampleKeys } from '../api/getDeviceSamples';
 import { fetchInterfaceSamples, sampleKeys } from '../api/getInterfaceSamples';
 import { formatRate } from '../../../lib/formatRate';
@@ -79,7 +80,7 @@ export function ChartModal({
             key,
             label: src?.label ?? key,
             color: COLORS[sources.findIndex((s) => s.key === key) % COLORS.length],
-            points: samples.map((s) => ({ t: Date.parse(s.ts), v: total(s) })).filter((p) => !Number.isNaN(p.t)),
+            points: samples.map((s) => ({ t: parseUtc(s.ts), v: total(s) })).filter((p) => !Number.isNaN(p.t)),
         };
     });
 

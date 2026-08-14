@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { formatRate } from '../../../lib/formatRate';
+import { parseUtc } from '../../../lib/parseUtc';
 import type { GraphData, GraphSeriesFormat } from '../../../types';
 
 // Same SVG drawing space + conventions as the device-modal interface chart, extended to many
@@ -29,7 +30,7 @@ export function GraphChart({ data }: { data: GraphData }) {
     const [hover, setHover] = useState<number | null>(null);
     const wrap = useRef<HTMLDivElement>(null);
 
-    const times = useMemo(() => data.buckets.map((b) => Date.parse(b.replace(' ', 'T'))), [data.buckets]);
+    const times = useMemo(() => data.buckets.map((b) => parseUtc(b)), [data.buckets]);
 
     // The y-axis format: shared when every series agrees, otherwise fall back to a plain number.
     const dominant = useMemo<{ format: GraphSeriesFormat; unit: string | null }>(() => {
