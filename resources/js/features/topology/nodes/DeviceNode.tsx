@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { DeviceStatus, DeviceType, TileMetric } from '../../../types';
 import { StatusDot } from '../../../components/StatusDot';
@@ -100,7 +101,10 @@ const typeMeta: Record<DeviceType, { abbr: string; tint: string }> = {
     unknown: { abbr: 'DEV', tint: 'bg-white/5 text-white/40 ring-white/10' },
 };
 
-export function DeviceNode({ id, data, selected }: NodeProps) {
+// Memoised: on a big map the parent patches node data on every poll/util tick, and without this
+// every device card re-renders each time (janking the canvas + eating clicks). With memo + the
+// skip-unchanged patches in MapCanvas, only cards whose data actually changed re-render.
+export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeProps) {
     const d = data as unknown as DeviceNodeData;
     const meta = typeMeta[d.device_type] ?? typeMeta.unknown;
     const down = d.status === 'down';
@@ -226,4 +230,4 @@ export function DeviceNode({ id, data, selected }: NodeProps) {
             </div>
         </div>
     );
-}
+});

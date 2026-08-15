@@ -440,8 +440,17 @@ export function MapCanvas() {
     }, [util, statusById, setEdges]);
 
     // Patch each device node\'s busiest-util bar (and bps fallback) in place when live util changes.
+    // Return the SAME node object when nothing changed, so the memoised DeviceNode skips it - on a
+    // big map only the handful of cards that actually moved re-render, not every card every tick.
     useEffect(() => {
-        setNodes((nds) => nds.map((n) => (n.type === 'device' ? { ...n, data: { ...n.data, util: deviceUtil[Number(n.id)] ?? null, load: deviceLoad[Number(n.id)] ?? null } } : n)));
+        setNodes((nds) => nds.map((n) => {
+            if (n.type !== 'device') return n;
+            const util = deviceUtil[Number(n.id)] ?? null;
+            const load = deviceLoad[Number(n.id)] ?? null;
+            const cur = n.data as { util?: number | null; load?: number | null };
+            if (cur.util === util && cur.load === load) return n;
+            return { ...n, data: { ...n.data, util, load } };
+        }));
     }, [deviceUtil, deviceLoad, setNodes]);
 
     // Patch device data (status / metrics / name / model) in place when the devices query
@@ -454,9 +463,18 @@ export function MapCanvas() {
             nds.map((n) => {
                 if (n.type !== 'device') return n;
                 const d = byId.get(Number(n.id));
-                return d
-                    ? { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c, rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms } }
-                    : n;
+                if (!d) return n;
+                // Skip if none of the mirrored fields changed, so a routine poll refetch doesn't
+                // re-render every card (keeps the same ref -> the memoised DeviceNode bails out).
+                const c = n.data as Record<string, unknown>;
+                if (
+                    c.label === d.name && c.status === d.status && c.device_type === d.device_type &&
+                    c.icon === d.icon && c.icon_color === d.icon_color && c.vendor === d.vendor && c.model === d.model &&
+                    c.cpu === d.cpu_pct && c.mem === d.mem_used_pct && c.temp === d.temp_c &&
+                    c.rtt_ms === d.rtt_ms && c.loss_pct === d.loss_pct &&
+                    c.latency_good_ms === d.latency_good_ms && c.latency_bad_ms === d.latency_bad_ms
+                ) return n;
+                return { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c, rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms } };
             }),
         );
     }, [devices, setNodes]);
