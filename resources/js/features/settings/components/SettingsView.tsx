@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, FloppyDisk, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Trash, UsersThree } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree } from '@phosphor-icons/react';
 import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
 import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
@@ -8,6 +8,7 @@ import { useCredentials, useSaveCredential, useDeleteCredential, type Credential
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
 import { useAgents, useEnrolAgent, useDeleteAgent } from '../api/agents';
+import { useApiTokens, useCreateApiToken, useDeleteApiToken, type ApiToken } from '../api/apiTokens';
 import { useFactoryReset } from '../api/factoryReset';
 import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
 import { useMaps } from '../../maps/api/maps';
@@ -1065,6 +1066,141 @@ function AgentsSection() {
     );
 }
 
+/** A short human date, or "never" for a null timestamp (a key that hasn't been used yet). */
+function shortDate(iso: string | null): string {
+    if (!iso) return 'never';
+    return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Personal API keys. An operator mints a bearer token for scripts / integrations; the
+ * plaintext is shown ONCE right after creation (same pattern as agent enrolment). The key
+ * carries the owner's exact access, so a read-only operator's key stays read-only. Self-service:
+ * every operator manages their own keys, admin or not.
+ */
+function ApiKeysSection() {
+    const { data: tokens } = useApiTokens();
+    const create = useCreateApiToken();
+    const del = useDeleteApiToken();
+    const [name, setName] = useState('');
+    const [minted, setMinted] = useState<{ name: string; token: string } | null>(null);
+    const [deleting, setDeleting] = useState<ApiToken | null>(null);
+
+    function submit() {
+        if (create.isPending || name.trim() === '') return;
+        create.mutate(name.trim(), {
+            onSuccess: (r) => {
+                setMinted({ name: r.name, token: r.token });
+                setName('');
+            },
+            onError: () => pushToast({ title: 'Couldn\'t create the key', tone: 'down' }),
+        });
+    }
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <Terminal weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">API keys</h2>
+                    <p className="text-xs text-white/40">Personal bearer tokens for scripts &amp; integrations. A key has your exact access - so a read-only login makes read-only keys.</p>
+                </div>
+            </div>
+
+            {/* Plaintext shown once, right after creation */}
+            {minted && (
+                <div className="mb-3 rounded-xl bg-emerald-500/[0.08] p-3 ring-1 ring-emerald-400/20">
+                    <p className="text-xs font-semibold text-white/80">Key "{minted.name}" created - copy it now (shown once):</p>
+                    <div className="mt-2 flex items-center gap-2">
+                        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/40 px-2 py-1.5 font-mono text-[11px] text-emerald-200/90">{minted.token}</code>
+                        <button
+                            onClick={() => {
+                                navigator.clipboard?.writeText(minted.token);
+                                pushToast({ title: 'Key copied', tone: 'info' });
+                            }}
+                            className="flex shrink-0 items-center gap-1 rounded-lg bg-white/[0.06] px-2 py-1.5 text-xs text-white/70 ring-1 ring-white/10 hover:text-white"
+                        >
+                            <Copy weight="bold" className="h-3.5 w-3.5" /> Copy
+                        </button>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+                        Send it as <code className="text-white/60">Authorization: Bearer &lt;key&gt;</code> to the <code className="text-white/60">/api</code> endpoints.
+                    </p>
+                    <button onClick={() => setMinted(null)} className="mt-2 text-xs font-semibold text-emerald-300/90 hover:underline">Done</button>
+                </div>
+            )}
+
+            {!minted && (
+                <div className="mb-3 flex items-center gap-2">
+                    <input
+                        className={field}
+                        placeholder="Key name (e.g. Grafana, backup script)"
+                        value={name}
+                        maxLength={60}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && submit()}
+                    />
+                    <button
+                        onClick={submit}
+                        disabled={create.isPending || name.trim() === ''}
+                        className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
+                    >
+                        <Plus weight="bold" className="h-3.5 w-3.5" /> {create.isPending ? 'Creating...' : 'Create'}
+                    </button>
+                </div>
+            )}
+
+            <div className="space-y-2">
+                {tokens?.map((t) => (
+                    <div key={t.id} className="flex items-center gap-3 rounded-xl bg-white/[0.02] px-3 py-2 ring-1 ring-white/[0.06]">
+                        <Key weight="light" className="h-4 w-4 shrink-0 text-white/40" />
+                        <span className="min-w-0 flex-1 truncate text-sm text-white/85">
+                            {t.name}
+                            <span className="text-white/30"> - added {shortDate(t.created_at)}</span>
+                            <span className="text-white/30"> - last used {shortDate(t.last_used_at)}</span>
+                        </span>
+                        <button
+                            onClick={() => setDeleting(t)}
+                            title="Revoke key"
+                            className="rounded-md p-1 text-white/40 hover:bg-rose-500/10 hover:text-rose-300"
+                        >
+                            <Trash weight="bold" className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                ))}
+                {tokens && tokens.length === 0 && !minted && (
+                    <p className="text-xs text-white/40">No API keys yet - create one to script against My Mate.</p>
+                )}
+            </div>
+
+            {deleting && (
+                <ConfirmDialog
+                    title="Revoke API key"
+                    icon={<Trash weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Revoke the key <span className="font-semibold text-white/85">{deleting.name}</span>? Anything using it will stop working immediately.
+                        </>
+                    }
+                    confirmLabel="Revoke"
+                    tone="danger"
+                    busy={del.isPending}
+                    onConfirm={() =>
+                        del.mutate(deleting.id, {
+                            onSuccess: () => setDeleting(null),
+                            onError: () => {
+                                pushToast({ title: 'Couldn\'t revoke the key', tone: 'down' });
+                                setDeleting(null);
+                            },
+                        })
+                    }
+                    onClose={() => setDeleting(null)}
+                />
+            )}
+        </section>
+    );
+}
+
 /** Version + whether a newer release is available. */
 const STATUS_DOT: Record<StatusLevel, string> = {
     ok: 'bg-emerald-400',
@@ -1269,10 +1405,56 @@ function DangerZoneSection() {
     );
 }
 
+// A pair of cards side-by-side on wide screens, stacked below lg. items-start keeps
+// each card at its natural height rather than stretching to the tallest in the row.
+function TwoCol({ children }: { children: React.ReactNode }) {
+    return <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-2">{children}</div>;
+}
+
+interface Tab {
+    id: string;
+    label: string;
+    icon: typeof GearSix;
+    adminOnly?: boolean;
+    render: (isAdmin: boolean) => React.ReactNode;
+}
+
+// The settings used to stack into one long scroll; now each concern is a tab so the page
+// stays shallow as we add more. Admin-only tabs are hidden from read-only operators, who
+// keep just their account, the rosters and the API keys.
+const TABS: Tab[] = [
+    { id: 'account', label: 'Account', icon: LockKey, render: () => <TwoCol><AccountSection /><ApiKeysSection /></TwoCol> },
+    { id: 'engine', label: 'Engine', icon: GearSix, adminOnly: true, render: () => <EngineSettings /> },
+    { id: 'mail', label: 'Mail', icon: Envelope, adminOnly: true, render: () => <MailServerSection /> },
+    { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },
+    { id: 'credentials', label: 'Credentials', icon: Key, adminOnly: true, render: () => <CredentialsSection /> },
+    { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
+    { id: 'operators', label: 'Operators', icon: UsersThree, render: () => <UsersSection /> },
+    { id: 'agents', label: 'Agents', icon: Broadcast, render: () => <AgentsSection /> },
+    {
+        id: 'system',
+        label: 'System',
+        icon: Info,
+        render: (isAdmin) => (
+            <div className="space-y-6">
+                <TwoCol>
+                    <AboutSection />
+                    {isAdmin && <SystemStatusSection />}
+                </TwoCol>
+                {isAdmin && <DangerZoneSection />}
+            </div>
+        ),
+    },
+];
+
 export function SettingsView() {
     // Engine cadence, mail server and credentials are admin-only config.
-    // A read-only operator keeps just self-service (change own password) and the roster.
+    // A read-only operator keeps just self-service (change own password), the rosters and API keys.
     const isAdmin = useIsAdmin();
+    const tabs = TABS.filter((t) => isAdmin || !t.adminOnly);
+    const [active, setActive] = useState(tabs[0].id);
+    // If the visible set changes (admin flag resolves late) and the active tab vanished, fall back.
+    const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
     return (
         <div className="h-full overflow-y-auto p-6 lg:p-8">
@@ -1289,34 +1471,29 @@ export function SettingsView() {
                     </div>
                 </header>
 
-                {/* Two columns on wide screens so the sections fill the width instead of
-                    stacking into a long scroll; single column below lg. items-start keeps each
-                    card at its natural height rather than stretching to the tallest in the row. */}
-                <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-2">
-                    {isAdmin && <EngineSettings />}
-                    {isAdmin && <MailServerSection />}
-                    {isAdmin && <BackupEngineSection />}
-                    <AccountSection />
-                    <AboutSection />
-                    {isAdmin && <SystemStatusSection />}
-                    <UsersSection />
-                    <AgentsSection />
-                    {isAdmin && (
-                        <div className="min-w-0 lg:col-span-2">
-                            <CredentialsSection />
-                        </div>
-                    )}
-                    {isAdmin && (
-                        <div className="min-w-0 lg:col-span-2">
-                            <SensorsSection />
-                        </div>
-                    )}
-                    {isAdmin && (
-                        <div className="min-w-0 lg:col-span-2">
-                            <DangerZoneSection />
-                        </div>
-                    )}
+                {/* Tab rail - horizontal, scrolls sideways on narrow screens rather than wrapping
+                    into the content. The active tab gets an emerald underline. */}
+                <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-white/[0.06] px-1">
+                    {tabs.map((t) => {
+                        const on = t.id === current.id;
+                        return (
+                            <button
+                                key={t.id}
+                                onClick={() => setActive(t.id)}
+                                className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
+                                    on
+                                        ? 'border-emerald-400 text-white'
+                                        : 'border-transparent text-white/45 hover:text-white/75'
+                                }`}
+                            >
+                                <t.icon weight={on ? 'fill' : 'light'} className="h-4 w-4" />
+                                {t.label}
+                            </button>
+                        );
+                    })}
                 </div>
+
+                <div className="min-w-0">{current.render(isAdmin)}</div>
             </div>
         </div>
     );
