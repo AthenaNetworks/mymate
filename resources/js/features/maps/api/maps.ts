@@ -162,12 +162,12 @@ export function useCreateMapLink() {
     });
 }
 
-/** Update a manual link's medium / label. */
+/** Update a manual link's medium / label / attachment sides. */
 export function useUpdateMapLink() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, mapLinkId, media_type, label }: { mapId: number; mapLinkId: number; media_type?: LinkMediaType | null; label?: string | null }): Promise<MapLink> => {
-            const { data } = await apiClient.patch<{ data: MapLink }>(`/maps/${mapId}/map-links/${mapLinkId}`, { media_type, label });
+        mutationFn: async ({ mapId, mapLinkId, ...body }: { mapId: number; mapLinkId: number; media_type?: LinkMediaType | null; label?: string | null; a_handle?: string | null; b_handle?: string | null }): Promise<MapLink> => {
+            const { data } = await apiClient.patch<{ data: MapLink }>(`/maps/${mapId}/map-links/${mapLinkId}`, body);
             return data.data;
         },
         onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),

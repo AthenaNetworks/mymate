@@ -13,7 +13,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, Note, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -33,15 +33,16 @@ import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
+import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
 import { useLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
+import { useUpdateLink } from '../api/updateLink';
 import { computeLayout, declump, type LayoutKind } from '../lib/layout';
 import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
-import { selectDevice, setEdgeStyle, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
+import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
@@ -86,6 +87,7 @@ export function MapCanvas() {
     const { data: links } = useLinks();
     const activeMapId = useActiveMapId();
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
+    const edgeAttach = useEdgeAttach(); // 'auto' floats links to the facing side; 'fixed' keeps pinned sides
     const layoutKind = useLayoutKind(); // last-applied auto-layout algorithm
     const selectedDeviceId = useSelectedDeviceId(); // focus its links, fade the rest
     const { data: mapDetail } = useMap(activeMapId); // membership + per-map positions + inter-map links
@@ -94,6 +96,8 @@ export function MapCanvas() {
     const saveChildPosition = useSaveChildMapPosition();
     const removeChildMap = useRemoveChildMap();
     const createMapLink = useCreateMapLink();
+    const updateLink = useUpdateLink();
+    const updateMapLink = useUpdateMapLink();
     const deleteMapLink = useDeleteMapLink();
     const createMapNote = useCreateMapNote();
     const updateMapNote = useUpdateMapNote();
@@ -376,6 +380,7 @@ export function MapCanvas() {
             target: `portal:${il.id}`,
             animated: true,
             deletable: false,
+            reconnectable: false, // portals aren't operator-reconnectable
             style: { stroke: 'rgba(129,140,248,0.55)', strokeDasharray: '6 4' },
         }));
         // Manual device-less links between child-map nodes (GitHub #9), styled by medium.
@@ -398,6 +403,7 @@ export function MapCanvas() {
                 type: 'childLink',
                 selectable: false,
                 deletable: false,
+                reconnectable: false,
                 data: { count: cl.count },
             }))
             : [];
@@ -600,6 +606,28 @@ export function MapCanvas() {
                         setPending({ aDeviceId: Number(c.source), bDeviceId: Number(c.target), aHandle: c.sourceHandle ?? null, bHandle: c.targetHandle ?? null });
                     }
                 }}
+                onReconnect={(oldEdge, conn) => {
+                    // Drag a link's end onto a different side of a card to pin it there. Only a
+                    // side change on the SAME two ends is a "move"; dropping onto another card is
+                    // ignored (that would be a rebind). Pins are honoured when Auto-attach is off.
+                    if (!isAdmin || !conn.source || !conn.target) return;
+                    if (oldEdge.type === 'util') {
+                        const l = intraLinks.find((x) => String(x.id) === String(oldEdge.id));
+                        if (!l || String(l.a_device_id) !== conn.source || String(l.b_device_id) !== conn.target) return;
+                        updateLink.mutate({
+                            id: l.id,
+                            a_device_id: l.a_device_id, a_interface_id: l.a_interface_id ?? null,
+                            b_device_id: l.b_device_id, b_interface_id: l.b_interface_id ?? null,
+                            bw_ab_mbps: l.bw_ab_mbps ?? null, bw_ba_mbps: l.bw_ba_mbps ?? null,
+                            a_handle: conn.sourceHandle ?? null, b_handle: conn.targetHandle ?? null,
+                        });
+                    } else if (oldEdge.type === 'mapLink' && activeMapId !== null) {
+                        const id = Number(String(oldEdge.id).replace('maplink:', ''));
+                        const ml = mapLinks.find((x) => x.id === id);
+                        if (!ml || childNodeId(ml.a_map_id) !== conn.source || childNodeId(ml.b_map_id) !== conn.target) return;
+                        updateMapLink.mutate({ mapId: activeMapId, mapLinkId: id, a_handle: conn.sourceHandle ?? null, b_handle: conn.targetHandle ?? null });
+                    }
+                }}
                 onEdgesDelete={(deleted) => isAdmin && deleted.forEach((e) => {
                     if (e.type === 'util') deleteLink.mutate(Number(e.id));
                     else if (e.type === 'mapLink' && activeMapId !== null) deleteMapLink.mutate({ mapId: activeMapId, mapLinkId: Number(String(e.id).replace('maplink:', '')) });
@@ -700,6 +728,16 @@ export function MapCanvas() {
                         </button>
                         <button onClick={() => setEdgeStyle('straight')} title="Straight links" className={edgeBtn(edgeStyle === 'straight')}>
                             <LineSegment weight="bold" className="h-4 w-4" />
+                        </button>
+                    </div>
+                    {/* Auto-attach: 'auto' floats each link end to the side facing the other card (tidies
+                        as cards move); 'fixed' keeps ends where they were dragged, so you can pin them. */}
+                    <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
+                        <button onClick={() => setEdgeAttach('auto')} title="Auto-attach links to the facing side" className={edgeBtn(edgeAttach === 'auto')}>
+                            <MagnetStraight weight="bold" className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => setEdgeAttach('fixed')} title="Keep links pinned to the side you dragged them to" className={edgeBtn(edgeAttach === 'fixed')}>
+                            <PushPin weight="bold" className="h-4 w-4" />
                         </button>
                     </div>
                     {/* OSPF cost label size/colour - only when this map carries OSPF costs (GitHub #22). */}
@@ -809,6 +847,14 @@ export function MapCanvas() {
                                         </button>
                                         <button onClick={() => { setEdgeStyle('straight'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'straight' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
                                             <LineSegment weight="bold" className="h-4 w-4" /> Straight
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setEdgeAttach('auto'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'auto' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <MagnetStraight weight="bold" className="h-4 w-4" /> Auto
+                                        </button>
+                                        <button onClick={() => { setEdgeAttach('fixed'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'fixed' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <PushPin weight="bold" className="h-4 w-4" /> Pinned
                                         </button>
                                     </div>
                                     {isAdmin && (

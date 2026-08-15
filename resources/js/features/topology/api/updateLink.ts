@@ -12,6 +12,9 @@ export interface UpdateLinkInput {
     // Per-link bandwidth override A->B / B->A; null reverts to the derived speed.
     bw_ab_mbps?: number | null;
     bw_ba_mbps?: number | null;
+    // Node side each end attaches to (s-top/s-left/... ); null = auto-float to the facing side.
+    a_handle?: string | null;
+    b_handle?: string | null;
 }
 
 export function useUpdateLink() {

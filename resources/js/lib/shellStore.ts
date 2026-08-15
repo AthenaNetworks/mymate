@@ -17,6 +17,13 @@ export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
 /** Map link geometry - curved bezier (default) or straight point-to-point. */
 export type EdgeStyle = 'curved' | 'straight';
 
+/**
+ * How a link attaches to the two cards it joins. 'auto' floats each end to whichever side
+ * faces the other card and re-picks as cards move (tidy by default); 'fixed' honours the side
+ * an operator pinned the end to by dragging it there.
+ */
+export type EdgeAttach = 'auto' | 'fixed';
+
 /** OSPF cost badge size on the map - remembered per-browser (GitHub #22 readability). */
 export type OspfCostSize = 'sm' | 'md' | 'lg';
 
@@ -37,6 +44,7 @@ type ShellState = {
     ifaceFilterById: Record<number, IfaceFilter>;
     tileMetricById: Record<number, TileMetric>; // which resource each map tile shows
     edgeStyle: EdgeStyle; // map link geometry - curved (default) or straight
+    edgeAttach: EdgeAttach; // links float to the facing side ('auto') or stay on the pinned side ('fixed')
     ospfCostSize: OspfCostSize; // OSPF cost badge size on links
     ospfCostColor: string; // OSPF cost badge colour (hex)
     layoutKind: LayoutKind; // last-chosen auto-layout algorithm
@@ -87,6 +95,7 @@ type Persisted = Pick<
     | 'ifaceFilterById'
     | 'tileMetricById'
     | 'edgeStyle'
+    | 'edgeAttach'
     | 'ospfCostSize'
     | 'ospfCostColor'
     | 'layoutKind'
@@ -117,6 +126,7 @@ let state: ShellState = {
     ifaceFilterById: saved.ifaceFilterById ?? {},
     tileMetricById: saved.tileMetricById ?? {},
     edgeStyle: saved.edgeStyle ?? 'curved',
+    edgeAttach: saved.edgeAttach ?? 'auto',
     ospfCostSize: saved.ospfCostSize ?? 'md',
     ospfCostColor: saved.ospfCostColor ?? '#a5b4fc', // indigo-300
     layoutKind: saved.layoutKind ?? 'smart',
@@ -131,13 +141,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, ospfCostSize, ospfCostColor, layoutKind, wallboard,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard,
             dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, ospfCostSize, ospfCostColor, layoutKind, wallboard,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard,
                 dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -268,6 +278,18 @@ export function setEdgeStyle(style: EdgeStyle): void {
 
 export function useEdgeStyle(): EdgeStyle {
     return useSyncExternalStore(subscribe, () => state.edgeStyle);
+}
+
+// How links attach to cards: 'auto' floats each end to the facing side (re-picks as cards move),
+// 'fixed' keeps the side an operator pinned by dragging. Global + persisted; UtilEdge reads it.
+export function setEdgeAttach(attach: EdgeAttach): void {
+    if (state.edgeAttach === attach) return;
+    state = { ...state, edgeAttach: attach };
+    emit();
+}
+
+export function useEdgeAttach(): EdgeAttach {
+    return useSyncExternalStore(subscribe, () => state.edgeAttach);
 }
 
 // OSPF cost badge size + colour on map links. Global + persisted; UtilEdge reads them so an

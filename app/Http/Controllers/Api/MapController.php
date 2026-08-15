@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Maps\ExportMap;
+use App\Actions\Maps\ImportMap;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Map\StoreMapRequest;
 use App\Http\Requests\Map\UpdateMapRequest;
@@ -15,11 +17,11 @@ use App\Models\MapLink;
 use App\Models\MapLinkPosition;
 use App\Models\MapNote;
 use App\Support\MapDetail;
-use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /**
  * Multiple maps. `index` is the (flat) map tree; `show` returns one
@@ -186,13 +188,15 @@ class MapController extends Controller
         return (new MapLinkResource($link))->response()->setStatusCode(Response::HTTP_CREATED);
     }
 
-    /** Update a manual link's medium / label. */
+    /** Update a manual link's medium / label / attachment sides. */
     public function updateMapLink(Request $request, Map $map, MapLink $mapLink): MapLinkResource
     {
         abort_unless($mapLink->map_id === $map->id, Response::HTTP_NOT_FOUND);
         $data = $request->validate([
             'media_type' => ['sometimes', 'nullable', Rule::in(MapLink::MEDIA_TYPES)],
             'label' => ['sometimes', 'nullable', 'string', 'max:80'],
+            'a_handle' => ['sometimes', 'nullable', 'string', Rule::in(MapLink::HANDLES)],
+            'b_handle' => ['sometimes', 'nullable', 'string', Rule::in(MapLink::HANDLES)],
         ]);
         $mapLink->update($data);
 
@@ -209,14 +213,14 @@ class MapController extends Controller
     }
 
     /** Export this map's layout to a portable, secret-free JSON snapshot (GitHub #11). */
-    public function export(Map $map, \App\Actions\Maps\ExportMap $export): JsonResponse
+    public function export(Map $map, ExportMap $export): JsonResponse
     {
         return response()->json($export($map))
             ->header('Content-Disposition', 'attachment; filename="map-'.$map->id.'.json"');
     }
 
     /** Rebuild a map from an exported snapshot. Devices are matched by mgmt_ip or created. */
-    public function import(Request $request, \App\Actions\Maps\ImportMap $import): JsonResponse
+    public function import(Request $request, ImportMap $import): JsonResponse
     {
         $data = $request->validate([
             'version' => ['nullable', 'integer'],

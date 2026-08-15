@@ -11,7 +11,7 @@ import { linkColor, linkWidth } from '../lib/linkColor';
 import { getFloatingParams } from '../lib/floatingEdge';
 import { mediaDash } from '../lib/mediaType';
 import { formatMbps } from '../../../lib/formatRate';
-import { useEdgeStyle, useOspfCostSize, useOspfCostColor, type OspfCostSize } from '../../../lib/shellStore';
+import { useEdgeStyle, useEdgeAttach, useOspfCostSize, useOspfCostColor, type OspfCostSize } from '../../../lib/shellStore';
 import type { LinkMediaType } from '../../../types';
 
 export type UtilEdgeData = {
@@ -62,6 +62,7 @@ export function UtilEdge({
 }: EdgeProps) {
     const d = (data ?? { util: null, mbps: null, down: false }) as UtilEdgeData;
     const edgeStyle = useEdgeStyle(); // curved (default) or straight
+    const edgeAttach = useEdgeAttach(); // 'auto' floats every link; 'fixed' honours pinned handles
     const ospfSize = useOspfCostSize(); // OSPF cost badge size (operator pref, GitHub #22)
     const ospfColor = useOspfCostColor();
 
@@ -76,10 +77,10 @@ export function UtilEdge({
         ty = targetY,
         sPos = sourcePosition,
         tPos = targetPosition;
-    // Only float when the link carries no explicit handles. An operator-dragged link
-    // pins each end to the side it was drawn from/to (sourceHandleId/targetHandleId),
-    // so we honour React Flow's handle-derived props instead of floating to the facing side.
-    const pinned = Boolean(sourceHandleId) || Boolean(targetHandleId);
+    // In 'auto' attach mode every link floats to whichever sides face each other and re-picks
+    // as the cards move. In 'fixed' mode a link that was dragged to a specific side stays there
+    // (sourceHandleId/targetHandleId), so we honour React Flow's handle-derived props instead.
+    const pinned = edgeAttach === 'fixed' && (Boolean(sourceHandleId) || Boolean(targetHandleId));
     if (!pinned && sourceNode?.measured?.width && targetNode?.measured?.width) {
         const p = getFloatingParams(sourceNode, targetNode);
         sx = p.sx;

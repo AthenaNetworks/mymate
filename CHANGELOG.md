@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Links tidy themselves up (auto-attach).** A new toolbar toggle lets a link's ends float to
+  whichever side of each card faces the other, re-picking as you drag cards around, so the map
+  stops looking like a plate of spaghetti. On by default. Flip it to "pinned" and you can drag a
+  link's endpoint onto any side of a card to fix it there. Works for device links and the
+  device-less overview links.
 - **API reference on the demo site.** A full, interactive OpenAPI 3.1 reference (rendered with
   Scalar) covering the integration API - devices, interfaces, maps, links, sites, alerts,
   backups, graphs and more - with the bearer API-key auth documented. Served at `/api-docs`,

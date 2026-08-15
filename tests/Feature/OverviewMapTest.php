@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Device;
+use App\Models\DeviceMapPosition;
+use App\Models\Link;
 use App\Models\Map;
 use App\Models\MapLink;
+use App\Models\MapNote;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -97,6 +101,12 @@ class OverviewMapTest extends TestCase
             ->assertJsonPath('data.media_type', 'wireless')
             ->assertJsonPath('data.label', 'PtP 5GHz');
 
+        // Re-pin which side each end attaches to (drag-to-reconnect on the canvas).
+        $this->patchJson("/api/maps/{$canvas->id}/map-links/{$id}", ['a_handle' => 's-left', 'b_handle' => 't-right'])
+            ->assertOk()
+            ->assertJsonPath('data.a_handle', 's-left')
+            ->assertJsonPath('data.b_handle', 't-right');
+
         $this->deleteJson("/api/maps/{$canvas->id}/map-links/{$id}")->assertNoContent();
         $this->assertDatabaseMissing('map_links', ['id' => $id]);
     }
@@ -156,28 +166,28 @@ class OverviewMapTest extends TestCase
     public function test_deleting_a_map_removes_its_notes(): void
     {
         $map = Map::create(['name' => 'Site']);
-        $note = \App\Models\MapNote::create(['map_id' => $map->id, 'text' => 'x']);
+        $note = MapNote::create(['map_id' => $map->id, 'text' => 'x']);
         $map->delete();
         $this->assertDatabaseMissing('map_notes', ['id' => $note->id]);
     }
 
     public function test_overview_reports_aggregated_device_links_between_child_maps(): void
     {
-        $canvas = \App\Models\Map::create(['name' => 'Core']);
-        $north = \App\Models\Map::create(['name' => 'North', 'parent_map_id' => $canvas->id]);
-        $south = \App\Models\Map::create(['name' => 'South', 'parent_map_id' => $canvas->id]);
+        $canvas = Map::create(['name' => 'Core']);
+        $north = Map::create(['name' => 'North', 'parent_map_id' => $canvas->id]);
+        $south = Map::create(['name' => 'South', 'parent_map_id' => $canvas->id]);
 
         // Two devices on North, one on South. Two real links cross North<->South; one link is
         // internal to North (must not count).
-        $n1 = \App\Models\Device::factory()->create();
-        $n2 = \App\Models\Device::factory()->create();
-        $s1 = \App\Models\Device::factory()->create();
-        \App\Models\DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n1->id, 'x' => 0, 'y' => 0]);
-        \App\Models\DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n2->id, 'x' => 0, 'y' => 0]);
-        \App\Models\DeviceMapPosition::create(['map_id' => $south->id, 'device_id' => $s1->id, 'x' => 0, 'y' => 0]);
-        \App\Models\Link::create(['a_device_id' => $n1->id, 'b_device_id' => $s1->id]); // crosses
-        \App\Models\Link::create(['a_device_id' => $n2->id, 'b_device_id' => $s1->id]); // crosses
-        \App\Models\Link::create(['a_device_id' => $n1->id, 'b_device_id' => $n2->id]); // internal to North
+        $n1 = Device::factory()->create();
+        $n2 = Device::factory()->create();
+        $s1 = Device::factory()->create();
+        DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n1->id, 'x' => 0, 'y' => 0]);
+        DeviceMapPosition::create(['map_id' => $north->id, 'device_id' => $n2->id, 'x' => 0, 'y' => 0]);
+        DeviceMapPosition::create(['map_id' => $south->id, 'device_id' => $s1->id, 'x' => 0, 'y' => 0]);
+        Link::create(['a_device_id' => $n1->id, 'b_device_id' => $s1->id]); // crosses
+        Link::create(['a_device_id' => $n2->id, 'b_device_id' => $s1->id]); // crosses
+        Link::create(['a_device_id' => $n1->id, 'b_device_id' => $n2->id]); // internal to North
 
         $this->getJson("/api/maps/{$canvas->id}")
             ->assertOk()
