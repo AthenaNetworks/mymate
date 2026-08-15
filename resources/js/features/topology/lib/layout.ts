@@ -256,22 +256,27 @@ export function smartLayout(devices: Device[], links: Link[], dir: 'TB' | 'LR' =
 export function dependencyLayout(devices: Device[], links: Link[], rootId: number | null, current: PosMap = {}): PosMap {
     if (devices.length === 0) return {};
 
-    // No root chosen: whole-map tidy, topped by the most-north device the operator left up there.
-    if (rootId == null || !devices.some((d) => d.id === rootId)) {
-        let north: number | null = null;
-        let northY = Infinity;
-        for (const d of devices) {
-            const y = current[d.id]?.y ?? 0;
-            if (y < northY) {
-                northY = y;
-                north = d.id;
-            }
+    // The gateway the operator put at the top defines which way is "down". Root the whole
+    // dependency tree at the most-north (min-y) device so downstream always flows south - without
+    // this the tree roots at the busiest node and the hierarchy inverts (Internet ends up at the
+    // bottom). This works off the links alone, so no parent_device_id needs to be set.
+    let northId: number | null = null;
+    let northY = Infinity;
+    for (const d of devices) {
+        const y = current[d.id]?.y ?? 0;
+        if (y < northY) {
+            northY = y;
+            northId = d.id;
         }
-        return smartLayout(devices, links, 'TB', north);
     }
 
-    // Build the map's dependency tree (spanning forest from the natural roots) so every node has a
-    // parent/children relationship - the same BFS smartLayout uses.
+    // No root chosen: whole-map tidy, topped by that north device.
+    if (rootId == null || !devices.some((d) => d.id === rootId)) {
+        return smartLayout(devices, links, 'TB', northId);
+    }
+
+    // Build the map's dependency tree rooted at the north device so every node's "children" are
+    // the ones further from the gateway - i.e. genuinely downstream of it.
     const adj = new Map<number, number[]>();
     for (const d of devices) adj.set(d.id, []);
     for (const [a, b] of buildEdges(devices, links)) {
@@ -283,12 +288,13 @@ export function dependencyLayout(devices: Device[], links: Link[], rootId: numbe
     const children = new Map<number, number[]>();
     const depth = new Map<number, number>();
     const placed = new Set<number>();
+    const north = northId != null ? devices.find((d) => d.id === northId) : undefined;
     const rootOrder = [
-        ...devices.filter((d) => !d.parent_device_id),
-        ...devices.filter((d) => d.parent_device_id),
-    ]
-        .sort((p, q) => degree(q.id) - degree(p.id) || p.id - q.id)
-        .map((d) => d.id);
+        ...(north ? [north] : []),
+        ...[...devices.filter((d) => !d.parent_device_id), ...devices.filter((d) => d.parent_device_id)]
+            .filter((d) => d.id !== northId)
+            .sort((p, q) => degree(q.id) - degree(p.id) || p.id - q.id),
+    ].map((d) => d.id);
     for (const r of rootOrder) {
         if (placed.has(r)) continue;
         placed.add(r);

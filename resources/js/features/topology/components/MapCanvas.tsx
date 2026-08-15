@@ -517,21 +517,27 @@ export function MapCanvas() {
     // Snapshot the current layout server-side first (so every tidy is undoable), then apply the
     // chosen algorithm (overlap-free), persist and frame. No confirm dialog - Undo is the safety net.
     const runLayout = useCallback(
-        (kind: LayoutKind) => {
+        async (kind: LayoutKind) => {
             if (activeMapId === null) return;
             setLayoutMenu(false);
             setToolsMenu(false);
             setLayoutKind(kind);
-            captureSnapshot.mutate({ mapId: activeMapId, note: LAYOUTS.find((l) => l.kind === kind)?.label ?? kind });
-            if (kind === 'dependency') {
-                // Rooted at the selected device (its downstream branch only, root left where it
-                // sits), else the whole map from the north-most device. Auto-attach so the
-                // branch's links float to the facing sides as it fans south.
-                setEdgeAttach('auto');
-                applyPositions(dependencyLayout(mapDevices, intraLinks, selectedDeviceId, currentPositions()));
-            } else {
-                applyPositions(computeLayout(kind, mapDevices, intraLinks, currentPositions()));
+            // Dependency tidy: rooted at the selected device (its downstream branch only, the root
+            // left where it sits), else the whole map from the north-most device. Auto-attach so
+            // the branch's links float to the facing sides as it fans south.
+            if (kind === 'dependency') setEdgeAttach('auto');
+            const positions =
+                kind === 'dependency'
+                    ? dependencyLayout(mapDevices, intraLinks, selectedDeviceId, currentPositions())
+                    : computeLayout(kind, mapDevices, intraLinks, currentPositions());
+            // Snapshot the CURRENT layout and wait for it to land BEFORE moving anything, so the
+            // undo point is the real pre-tidy state - not a half-applied one (the two used to race).
+            try {
+                await captureSnapshot.mutateAsync({ mapId: activeMapId, note: LAYOUTS.find((l) => l.kind === kind)?.label ?? kind });
+            } catch {
+                // Snapshot failed - still apply, just without an undo point for this tidy.
             }
+            applyPositions(positions);
         },
         [activeMapId, mapDevices, intraLinks, selectedDeviceId, applyPositions, currentPositions, captureSnapshot],
     );
@@ -809,7 +815,7 @@ export function MapCanvas() {
                             className="group flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98] disabled:opacity-40"
                         >
                             <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" />
-                            <span className="hidden sm:inline">Undo tidy</span>
+                            <span className="hidden sm:inline">Undo tidy{snapshotCount > 1 ? ` (${snapshotCount})` : ''}</span>
                         </button>
                     )}
                     {isAdmin && (
