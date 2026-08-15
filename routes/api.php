@@ -4,26 +4,43 @@ use App\Http\Controllers\Api\AgentController;
 use App\Http\Controllers\Api\AlertEventController;
 use App\Http\Controllers\Api\AlertPolicyController;
 use App\Http\Controllers\Api\AlertTransportController;
+use App\Http\Controllers\Api\ApiTokenController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupSettingController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\CredentialController;
 use App\Http\Controllers\Api\DeviceBackupController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DeviceIconController;
 use App\Http\Controllers\Api\DiscoverDeviceController;
 use App\Http\Controllers\Api\DiscoveryCandidateController;
 use App\Http\Controllers\Api\FactoryResetController;
+use App\Http\Controllers\Api\GeoController;
+use App\Http\Controllers\Api\GraphController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InterfaceController;
 use App\Http\Controllers\Api\InterfaceSampleController;
+use App\Http\Controllers\Api\LibreNmsImportController;
 use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\MailSettingController;
+use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapController;
+use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
+use App\Http\Controllers\Api\ProbeController;
+use App\Http\Controllers\Api\PublicWallController;
+use App\Http\Controllers\Api\RouterosUpgradeController;
+use App\Http\Controllers\Api\SensorController;
 use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\SiteController;
 use App\Http\Controllers\Api\SubnetController;
+use App\Http\Controllers\Api\SystemStatusController;
+use App\Http\Controllers\Api\Tools\ToolsController;
+use App\Http\Controllers\Api\TraceController;
+use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
 use Illuminate\Support\Facades\Route;
 
@@ -41,10 +58,10 @@ Route::post('contact', [ContactController::class, 'store'])->middleware('throttl
 // whitelist - no addresses or credentials cross this boundary (see PublicWallController).
 Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
     ->where(['token' => '[A-Za-z0-9]+'])->group(function (): void {
-        Route::get('map', [\App\Http\Controllers\Api\PublicWallController::class, 'map'])->name('public.wall.map');
-        Route::get('devices', [\App\Http\Controllers\Api\PublicWallController::class, 'devices'])->name('public.wall.devices');
-        Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\PublicWallController::class, 'icon'])->name('public.wall.icon');
-        Route::get('links', [\App\Http\Controllers\Api\PublicWallController::class, 'links'])->name('public.wall.links');
+        Route::get('map', [PublicWallController::class, 'map'])->name('public.wall.map');
+        Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
+        Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
+        Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
@@ -52,26 +69,34 @@ Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
 // --- Authenticated (everything else) --------------------------------------
 // `RestrictWritesToAdmins` makes non-admin operators read-only across the whole API
 // - GETs pass, any write from a non-admin is 403 (except their own password).
-Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Middleware\RestrictedAccess::class])->group(function (): void {
+Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, RestrictedAccess::class])->group(function (): void {
     Route::get('user', [AuthController::class, 'user'])->name('user');
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
-    Route::get('update-check', \App\Http\Controllers\Api\UpdateCheckController::class)
+    Route::get('update-check', UpdateCheckController::class)
         ->middleware('throttle:20,1')->name('update-check');
     // Geo overlay: tile config + a server-side geocoder proxy (GitHub #11).
-    Route::get('map-config', [\App\Http\Controllers\Api\GeoController::class, 'config'])->name('map.config');
+    Route::get('map-config', [GeoController::class, 'config'])->name('map.config');
     // Compact placed-device feed for the geo map (id/name/status/site/coords only).
-    Route::get('geo/devices', [\App\Http\Controllers\Api\GeoController::class, 'devices'])->name('geo.devices');
+    Route::get('geo/devices', [GeoController::class, 'devices'])->name('geo.devices');
     // Site-to-site backhaul links (coordinate pairs) for the geo map.
-    Route::get('geo/backhauls', [\App\Http\Controllers\Api\GeoController::class, 'backhauls'])->name('geo.backhauls');
-    Route::get('geocode', [\App\Http\Controllers\Api\GeoController::class, 'geocode'])
+    Route::get('geo/backhauls', [GeoController::class, 'backhauls'])->name('geo.backhauls');
+    Route::get('geocode', [GeoController::class, 'geocode'])
         ->middleware('throttle:30,1')->name('geocode');
     // System status board (db/redis/workers/polling/websockets/backups) for Settings.
-    Route::get('system-status', \App\Http\Controllers\Api\SystemStatusController::class)
+    Route::get('system-status', SystemStatusController::class)
         ->middleware('throttle:60,1')->name('system-status');
     // Self-service password change.
     Route::put('account/password', [AuthController::class, 'updatePassword'])
         ->middleware('throttle:6,1')->name('account.password.update');
+
+    // Personal API keys (self-service). A bearer token authenticates as its owner, so it's
+    // scoped to that operator's own access - see ApiTokenController.
+    Route::get('api-tokens', [ApiTokenController::class, 'index'])->name('api-tokens.index');
+    Route::post('api-tokens', [ApiTokenController::class, 'store'])
+        ->middleware('throttle:10,1')->name('api-tokens.store');
+    Route::delete('api-tokens/{id}', [ApiTokenController::class, 'destroy'])
+        ->whereNumber('id')->name('api-tokens.destroy');
 
     // Operator accounts. Any authenticated operator can *view* the roster
     // (the controller shapes the payload by tier - non-admins get no sensitive fields);
@@ -147,18 +172,18 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     // is locked to the device's own IP, so there's nothing here for an operator to break.
     // Throttled like the other operator actions (probes.test) so it can't be looped to flood
     // the trace queue / Redis with runs.
-    Route::post('devices/{device}/trace', [\App\Http\Controllers\Api\TraceController::class, 'start'])
+    Route::post('devices/{device}/trace', [TraceController::class, 'start'])
         ->middleware('throttle:20,1')->name('devices.trace.start');
-    Route::get('devices/{device}/trace/{runId}', [\App\Http\Controllers\Api\TraceController::class, 'show'])
+    Route::get('devices/{device}/trace/{runId}', [TraceController::class, 'show'])
         ->name('devices.trace.show');
-    Route::delete('devices/{device}/trace/{runId}', [\App\Http\Controllers\Api\TraceController::class, 'stop'])
+    Route::delete('devices/{device}/trace/{runId}', [TraceController::class, 'stop'])
         ->name('devices.trace.stop');
     // The Tools page: standalone network diagnostics aimed at an operator-typed target rather
     // than a monitored device. Each start kicks off a streaming job written to the tool-run
     // cache (same live pattern as the device trace) and returns a run id to poll via tools.show;
     // tools.stop cancels it. Starts are throttled so they can't be looped to flood the queue.
     // All are operator-safe (see RestrictWritesToAdmins::OPERATOR_ACTION_ROUTES 'tools.*').
-    Route::prefix('tools')->controller(\App\Http\Controllers\Api\Tools\ToolsController::class)->group(function () {
+    Route::prefix('tools')->controller(ToolsController::class)->group(function () {
         Route::post('ping', 'startPing')->middleware('throttle:30,1')->name('tools.ping.start');
         Route::post('trace', 'startTrace')->middleware('throttle:30,1')->name('tools.trace.start');
         Route::post('sweep', 'startSweep')->middleware('throttle:30,1')->name('tools.sweep.start');
@@ -168,26 +193,26 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
         Route::delete('runs/{runId}', 'stop')->name('tools.stop');
     });
     // Device model icon (MikroTik product photo, fetched + cached on first sighting).
-    Route::get('devices/{device}/icon', [\App\Http\Controllers\Api\DeviceIconController::class, 'show'])
+    Route::get('devices/{device}/icon', [DeviceIconController::class, 'show'])
         ->name('devices.icon');
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
-    Route::get('devices/{device}/sensors', [\App\Http\Controllers\Api\SensorController::class, 'forDevice'])
+    Route::get('devices/{device}/sensors', [SensorController::class, 'forDevice'])
         ->name('devices.sensors');
     // Service probes (HTTP/TCP, GitHub #19): per-device list/create + edit/delete/run/history.
-    Route::get('devices/{device}/probes', [\App\Http\Controllers\Api\ProbeController::class, 'index'])->name('devices.probes.index');
-    Route::post('devices/{device}/probes', [\App\Http\Controllers\Api\ProbeController::class, 'store'])->name('devices.probes.store');
-    Route::put('probes/{probe}', [\App\Http\Controllers\Api\ProbeController::class, 'update'])->name('probes.update');
-    Route::delete('probes/{probe}', [\App\Http\Controllers\Api\ProbeController::class, 'destroy'])->name('probes.destroy');
-    Route::post('probes/{probe}/test', [\App\Http\Controllers\Api\ProbeController::class, 'test'])
+    Route::get('devices/{device}/probes', [ProbeController::class, 'index'])->name('devices.probes.index');
+    Route::post('devices/{device}/probes', [ProbeController::class, 'store'])->name('devices.probes.store');
+    Route::put('probes/{probe}', [ProbeController::class, 'update'])->name('probes.update');
+    Route::delete('probes/{probe}', [ProbeController::class, 'destroy'])->name('probes.destroy');
+    Route::post('probes/{probe}/test', [ProbeController::class, 'test'])
         ->middleware('throttle:20,1')->name('probes.test');
-    Route::get('probes/{probe}/samples', [\App\Http\Controllers\Api\ProbeController::class, 'samples'])->name('probes.samples');
+    Route::get('probes/{probe}/samples', [ProbeController::class, 'samples'])->name('probes.samples');
 
     // Custom graphs (GitHub #28): saved multi-interface charts + their time series.
-    Route::get('graphs', [\App\Http\Controllers\Api\GraphController::class, 'index'])->name('graphs.index');
-    Route::post('graphs', [\App\Http\Controllers\Api\GraphController::class, 'store'])->name('graphs.store');
-    Route::put('graphs/{graph}', [\App\Http\Controllers\Api\GraphController::class, 'update'])->name('graphs.update');
-    Route::delete('graphs/{graph}', [\App\Http\Controllers\Api\GraphController::class, 'destroy'])->name('graphs.destroy');
-    Route::get('graphs/{graph}/data', [\App\Http\Controllers\Api\GraphController::class, 'data'])->name('graphs.data');
+    Route::get('graphs', [GraphController::class, 'index'])->name('graphs.index');
+    Route::post('graphs', [GraphController::class, 'store'])->name('graphs.store');
+    Route::put('graphs/{graph}', [GraphController::class, 'update'])->name('graphs.update');
+    Route::delete('graphs/{graph}', [GraphController::class, 'destroy'])->name('graphs.destroy');
+    Route::get('graphs/{graph}/data', [GraphController::class, 'data'])->name('graphs.data');
     Route::get('devices/{device}/sensors/{sensor}/samples', [InterfaceSampleController::class, 'sensor'])
         ->name('devices.sensor-samples');
     // Recent history: bucketed cpu/mem/temp series for one device (resource chart).
@@ -217,10 +242,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     Route::delete('maps/{map}/notes/{mapNote}', [MapController::class, 'destroyMapNote'])->name('maps.notes.destroy');
     // Public read-only wallboard share links (GitHub #15). Listing is read; minting/revoking are
     // writes, so RestrictWritesToAdmins keeps them admin-only like the rest of the map API.
-    Route::get('maps/{map}/shares', [\App\Http\Controllers\Api\MapShareController::class, 'index'])->name('maps.shares.index');
-    Route::post('maps/{map}/shares', [\App\Http\Controllers\Api\MapShareController::class, 'store'])->name('maps.shares.store');
-    Route::patch('maps/{map}/shares/{share}', [\App\Http\Controllers\Api\MapShareController::class, 'update'])->name('maps.shares.update');
-    Route::delete('maps/{map}/shares/{share}', [\App\Http\Controllers\Api\MapShareController::class, 'destroy'])->name('maps.shares.destroy');
+    Route::get('maps/{map}/shares', [MapShareController::class, 'index'])->name('maps.shares.index');
+    Route::post('maps/{map}/shares', [MapShareController::class, 'store'])->name('maps.shares.store');
+    Route::patch('maps/{map}/shares/{share}', [MapShareController::class, 'update'])->name('maps.shares.update');
+    Route::delete('maps/{map}/shares/{share}', [MapShareController::class, 'destroy'])->name('maps.shares.destroy');
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');
@@ -232,9 +257,9 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     Route::get('imports/{import}', [ImportController::class, 'show'])->name('imports.show');
     Route::post('imports/{import}/cancel', [ImportController::class, 'cancel'])->name('imports.cancel');
     // LibreNMS import: preview then import (MySQL or API).
-    Route::post('imports/librenms/preview', [\App\Http\Controllers\Api\LibreNmsImportController::class, 'preview'])
+    Route::post('imports/librenms/preview', [LibreNmsImportController::class, 'preview'])
         ->middleware('throttle:20,1')->name('imports.librenms.preview');
-    Route::post('imports/librenms', [\App\Http\Controllers\Api\LibreNmsImportController::class, 'import'])
+    Route::post('imports/librenms', [LibreNmsImportController::class, 'import'])
         ->middleware('throttle:10,1')->name('imports.librenms');
 
     // Settings: editable engine tunables + credential management.
@@ -265,15 +290,15 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
     Route::apiResource('alert-policies', AlertPolicyController::class)->only(['index', 'store', 'update', 'destroy']);
     Route::apiResource('alert-transports', AlertTransportController::class)->only(['index', 'store', 'update', 'destroy']);
     // Maintenance windows: scheduled alert suppression for planned work.
-    Route::apiResource('maintenance-windows', \App\Http\Controllers\Api\MaintenanceWindowController::class)
+    Route::apiResource('maintenance-windows', MaintenanceWindowController::class)
         ->only(['index', 'store', 'update', 'destroy']);
     // Custom SNMP sensors (user-defined OIDs).
-    Route::apiResource('sensors', \App\Http\Controllers\Api\SensorController::class)
+    Route::apiResource('sensors', SensorController::class)
         ->only(['index', 'store', 'update', 'destroy']);
     // RouterOS upgrade catalog + package mirror.
-    Route::get('routeros/catalog', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'catalog'])->name('routeros.catalog');
-    Route::post('routeros/packages', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'fetch'])->name('routeros.packages.fetch');
-    Route::delete('routeros/packages/{package}', [\App\Http\Controllers\Api\RouterosUpgradeController::class, 'destroy'])->name('routeros.packages.destroy');
+    Route::get('routeros/catalog', [RouterosUpgradeController::class, 'catalog'])->name('routeros.catalog');
+    Route::post('routeros/packages', [RouterosUpgradeController::class, 'fetch'])->name('routeros.packages.fetch');
+    Route::delete('routeros/packages/{package}', [RouterosUpgradeController::class, 'destroy'])->name('routeros.packages.destroy');
     Route::post('alert-transports/{transport}/test', [AlertTransportController::class, 'test'])
         ->middleware('throttle:6,1')->name('alert-transports.test');
     Route::get('alert-events', [AlertEventController::class, 'index'])->name('alert-events.index');
@@ -281,7 +306,7 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, \App\Http\Midd
 
     // Sites: physical locations (towers, fiber cabinets, POPs) devices sit at. Devices
     // inherit their site's coordinates on the geo map, so a whole tower places at once.
-    Route::apiResource('sites', \App\Http\Controllers\Api\SiteController::class)
+    Route::apiResource('sites', SiteController::class)
         ->only(['index', 'show', 'store', 'update', 'destroy']);
 
     // Auto-discovery: authorized scan ranges + the candidate review queue.
