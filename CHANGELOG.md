@@ -13,16 +13,6 @@ of commit subjects.
 
 ## [Unreleased]
 
-### Fixed
-- **Interface descriptions show in the device inspector.** The operator-set port description
-  (SNMP ifAlias / RouterOS comment) was captured, stored and searchable, but the inspector's
-  interface list only ever rendered the port name, so all that context was invisible. It now
-  shows under the port name when set.
-- **Add/Edit device dialog is reachable on shorter screens.** The dialog had no height cap, so a
-  tall device form (SNMP credential + location + icon grid + colours) ran off the bottom of the
-  viewport with no way to scroll, leaving the Save button unreachable. It now caps at 85% of the
-  screen height and scrolls. The link-history dialog got the same guard.
-
 ## [1.6.0] - 2026-08-15
 
 ### Added
@@ -68,6 +58,14 @@ of commit subjects.
   fleet.
 
 ### Fixed
+- **Interface descriptions show in the device inspector.** The operator-set port description
+  (SNMP ifAlias / RouterOS comment) was captured, stored and searchable, but the inspector's
+  interface list only ever rendered the port name, so all that context was invisible. It now
+  shows under the port name when set.
+- **Add/Edit device dialog is reachable on shorter screens.** The dialog had no height cap, so a
+  tall device form (SNMP credential + location + icon grid + colours) ran off the bottom of the
+  viewport with no way to scroll, leaving the Save button unreachable. It now caps at 85% of the
+  screen height and scrolls. The link-history dialog got the same guard.
 - **Graphs render in local time, not UTC (GitHub #36).** History timestamps came off the bucketed
   query without a zone marker, so charts plotted an hour axis several hours out from the wall
   clock the rest of the UI showed. They now convert to the browser's local time to match.
