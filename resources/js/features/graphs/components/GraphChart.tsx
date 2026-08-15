@@ -32,13 +32,17 @@ export function GraphChart({ data }: { data: GraphData }) {
 
     const times = useMemo(() => data.buckets.map((b) => parseUtc(b)), [data.buckets]);
 
-    // The y-axis format: shared when every series agrees, otherwise fall back to a plain number.
-    const dominant = useMemo<{ format: GraphSeriesFormat; unit: string | null }>(() => {
-        const fmts = new Set(data.series.map((s) => s.format));
+    // The left axis is driven by the traffic/main series (rate/util/value). Latency (ms) series
+    // get their own right-hand scale, so overlaying a 2 ms line on a 25 Mbps one keeps both
+    // readable - and the left axis stays in kbps/Mbps instead of dropping to raw bits to fit both.
+    const leftFmt = useMemo<{ format: GraphSeriesFormat; unit: string | null }>(() => {
+        const main = data.series.filter((s) => s.format !== 'ms');
+        const src = main.length ? main : data.series; // an all-latency graph just uses ms on the left
+        const fmts = new Set(src.map((s) => s.format));
         const format = fmts.size === 1 ? [...fmts][0] : 'value';
-        return { format, unit: data.series.find((s) => s.format === format)?.unit ?? null };
+        return { format, unit: src.find((s) => s.format === format)?.unit ?? null };
     }, [data.series]);
-    const fmtY = (v: number) => fmtValue(v, dominant.format, dominant.unit);
+    const fmtY = (v: number) => fmtValue(v, leftFmt.format, leftFmt.unit);
 
     const lines = useMemo<Line[]>(() => {
         const colorOf = new Map<string, string>();
@@ -47,31 +51,43 @@ export function GraphChart({ data }: { data: GraphData }) {
             key: `${s.group}:${i}`, label: s.label, color: colorOf.get(s.group) ?? PALETTE[0],
             dashed: s.dashed, emphasized: false, format: s.format, unit: s.unit, values: s.values,
         }));
-        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, format: dominant.format, unit: dominant.unit, values: data.total });
+        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, format: leftFmt.format, unit: leftFmt.unit, values: data.total });
         return out;
-    }, [data, dominant]);
+    }, [data, leftFmt]);
+
+    // Latency series get their own scale, but only when there's a traffic series to sit alongside.
+    const msLines = useMemo(() => lines.filter((l) => l.format === 'ms'), [lines]);
+    const mainLines = useMemo(() => lines.filter((l) => l.format !== 'ms'), [lines]);
+    const dualMs = msLines.length > 0 && mainLines.length > 0;
 
     const tMin = times.length ? Math.min(...times) : 0;
     const tMax = times.length ? Math.max(...times) : 1;
     const tSpan = Math.max(1, tMax - tMin);
-    const peak = Math.max(1, ...lines.flatMap((l) => l.values.map((v) => v ?? 0)));
+    const peak = Math.max(1, ...(mainLines.length ? mainLines : lines).flatMap((l) => l.values.map((v) => v ?? 0)));
     const yMax = peak * 1.15;
+    const msPeak = Math.max(1, ...msLines.flatMap((l) => l.values.map((v) => v ?? 0)));
+    const msMax = msPeak * 1.15;
 
-    const x = (t: number) => PAD.l + ((t - tMin) / tSpan) * (W - PAD.l - PAD.r);
-    const y = (v: number) => PAD.t + (1 - v / yMax) * (H - PAD.t - PAD.b);
+    const padR = dualMs ? 46 : PAD.r; // room for the right-hand ms axis labels
+    const x = (t: number) => PAD.l + ((t - tMin) / tSpan) * (W - PAD.l - padR);
+    const y = (v: number) => PAD.t + (1 - v / yMax) * (H - PAD.t - PAD.b); // left/main scale
+    const yMs = (v: number) => PAD.t + (1 - v / msMax) * (H - PAD.t - PAD.b); // right/latency scale
+    const scaleFor = (l: Line) => (dualMs && l.format === 'ms' ? yMs : y);
 
-    const path = (values: (number | null)[]) => {
+    const path = (values: (number | null)[], sc: (v: number) => number) => {
         let d = '';
         let pen = false;
         values.forEach((v, i) => {
             if (v == null || times[i] === undefined) { pen = false; return; }
-            d += `${pen ? 'L' : 'M'}${x(times[i]).toFixed(1)} ${y(v).toFixed(1)} `;
+            d += `${pen ? 'L' : 'M'}${x(times[i]).toFixed(1)} ${sc(v).toFixed(1)} `;
             pen = true;
         });
         return d.trim();
     };
 
-    const ticks = [0, yMax / 2, yMax];
+    // Fractions 0..1; both axes share the plot height (0 at bottom), left labelled in the traffic
+    // unit, right in ms when latency is overlaid.
+    const ticks = [0, 0.5, 1];
     const noData = lines.length === 0 || lines.every((l) => l.values.every((v) => v == null));
 
     function onMove(e: React.MouseEvent) {
@@ -88,15 +104,21 @@ export function GraphChart({ data }: { data: GraphData }) {
         <div className="space-y-2">
             <div ref={wrap} className="relative" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
                 <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Custom graph">
-                    {ticks.map((v, i) => (
-                        <g key={i}>
-                            <line x1={PAD.l} x2={W - PAD.r} y1={y(v)} y2={y(v)} stroke="rgba(255,255,255,0.08)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
-                            <text x={PAD.l - 6} y={y(v) + 3} textAnchor="end" className="fill-white/35" fontSize={10}>{fmtY(v)}</text>
-                        </g>
-                    ))}
+                    {ticks.map((f, i) => {
+                        const yp = PAD.t + (1 - f) * (H - PAD.t - PAD.b);
+                        return (
+                            <g key={i}>
+                                <line x1={PAD.l} x2={W - padR} y1={yp} y2={yp} stroke="rgba(255,255,255,0.08)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                                <text x={PAD.l - 6} y={yp + 3} textAnchor="end" className="fill-white/35" fontSize={10}>{fmtY(yMax * f)}</text>
+                                {dualMs && (
+                                    <text x={W - padR + 6} y={yp + 3} textAnchor="start" className="fill-white/30" fontSize={10}>{fmtValue(msMax * f, 'ms', null)}</text>
+                                )}
+                            </g>
+                        );
+                    })}
 
                     {!noData && lines.map((l) => (
-                        <path key={l.key} d={path(l.values)} fill="none" stroke={l.color}
+                        <path key={l.key} d={path(l.values, scaleFor(l))} fill="none" stroke={l.color}
                             strokeWidth={l.emphasized ? 2.4 : 1.8} strokeDasharray={l.dashed ? '5 3' : undefined}
                             strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity={l.emphasized ? 0.95 : 0.9} />
                     ))}
@@ -105,13 +127,13 @@ export function GraphChart({ data }: { data: GraphData }) {
                         <g>
                             <line x1={x(times[hi])} x2={x(times[hi])} y1={PAD.t} y2={H - PAD.b} stroke="rgba(255,255,255,0.25)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
                             {lines.map((l) => (l.values[hi] != null ? (
-                                <circle key={l.key} cx={x(times[hi])} cy={y(l.values[hi] as number)} r={2.6} fill={l.color} stroke="var(--color-surface)" strokeWidth={1} />
+                                <circle key={l.key} cx={x(times[hi])} cy={scaleFor(l)(l.values[hi] as number)} r={2.6} fill={l.color} stroke="var(--color-surface)" strokeWidth={1} />
                             ) : null))}
                         </g>
                     )}
 
                     <text x={PAD.l} y={H - 6} textAnchor="start" className="fill-white/35" fontSize={10}>{times.length ? fmtTime(tMin) : ''}</text>
-                    <text x={W - PAD.r} y={H - 6} textAnchor="end" className="fill-white/35" fontSize={10}>{times.length ? fmtTime(tMax) : ''}</text>
+                    <text x={W - padR} y={H - 6} textAnchor="end" className="fill-white/35" fontSize={10}>{times.length ? fmtTime(tMax) : ''}</text>
                 </svg>
 
                 {noData && (
