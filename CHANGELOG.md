@@ -13,7 +13,22 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-08-15
+
 ### Added
+- **Remote agents now do the whole job (GitHub #33).** An agent in a customer or out-of-band
+  network no longer just relays pings - interface discovery, fact capture (vendor/model/serial/
+  uptime), service probes and RouterOS device discovery all run *from* the agent and stream back
+  over its outbound tunnel, so a device reachable only from the far side is monitored exactly like
+  a central one. Assign a device to an agent on the device form and every poll type follows it.
+- **Personal API keys.** Mint a bearer token from Settings for scripts, dashboards and
+  integrations. The key authenticates as you through the same guard the web app uses, so it
+  carries your exact access - an admin's key can write, a read-only operator's key stays
+  read-only, a map-restricted operator's key only sees their maps. The token is shown once on
+  creation; revoke it any time.
+- **Light / dark mode toggle (GitHub #34).** A theme switch in the top bar, remembered across
+  reloads, applied everywhere including the topology and wallboard canvases. Defaults to the
+  dark theme you already had.
 - **Sites: place a whole tower at once.** A site (tower, fiber cabinet, POP) carries coordinates
   once and every device at it inherits them on the geo map, so a few thousand devices on a few
   hundred towers no longer means dragging a few thousand pins. The site slots into the same
@@ -33,13 +48,39 @@ of commit subjects.
 - **Geo map: layer toggles.** Devices and backhauls each have a switch on the map, remembered
   across reloads (both start on).
 
+### Changed
+- **Settings moved to a tabbed layout.** The page had grown into one long scroll of stacked
+  cards; each concern is now its own tab (Account, Engine, Mail, Backups, Credentials, Sensors,
+  Operators, Agents, System). Read-only operators see just Account, the rosters and their API
+  keys. Nothing was removed, only reorganised.
+- **A map can set its own up/down ping interval.** Override the global cadence per map, so a
+  latency-sensitive core map can poll faster than a large access map without changing the whole
+  fleet.
+
 ### Fixed
+- **Graphs render in local time, not UTC (GitHub #36).** History timestamps came off the bucketed
+  query without a zone marker, so charts plotted an hour axis several hours out from the wall
+  clock the rest of the UI showed. They now convert to the browser's local time to match.
+- **Light mode: the map and pale chips are readable.** The topology and wallboard canvases stayed
+  black in light mode, muted body text was too faint on white, and the pale status chips
+  (up/down counters, the Operational badge) washed out. The canvases now follow the theme, muted
+  text was firmed up, and the chip text darkens on the light surface.
+- **Alerts carry the device IP, and the global policy stops double-notifying.** A device covered
+  by both a per-map policy and the catch-all global policy fired two notifications per event; the
+  global policy now yields to a more specific one. Alert payloads also include the management IP
+  so a notification says which box, not just its name.
 - **Map: device up/down toasts no longer pile up.** Down toasts were sticky (meant for error
   messages), so a flapping device stacked a fresh "X is down" notification every cycle and the
   pile grew for as long as the page stayed open. Status toasts now auto-dismiss after 10 seconds,
   a repeat flip from the same device replaces its existing toast instead of adding another, and
   the stack is capped at six with the oldest dropped first. Error toasts still stay until
   dismissed.
+- **Outages timeline refreshes the instant a device flips**, instead of waiting for the next
+  periodic refetch to show the change.
+- **RouterOS reads a port's up/down state before its throughput**, so a port that's down is
+  reported down even when the throughput read for it fails.
+- **The package pulls in `ping` and `mtr`** so the Tools page (and path trace) work on a clean
+  install without a manual apt step.
 
 ## [1.5.0] - 2026-08-09
 
@@ -453,7 +494,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/AthenaNetworks/mymate/compare/v1.2.0...v1.3.0
