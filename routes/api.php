@@ -228,6 +228,10 @@ Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, RestrictedAcce
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
+    // Layout undo stack: snapshot before a tidy, roll back from any browser.
+    Route::get('maps/{map}/layout-snapshots', [MapController::class, 'layoutSnapshotCount'])->name('maps.layout.count');
+    Route::post('maps/{map}/layout-snapshots', [MapController::class, 'storeLayoutSnapshot'])->name('maps.layout.snapshot');
+    Route::post('maps/{map}/layout-snapshots/undo', [MapController::class, 'undoLayout'])->name('maps.layout.undo');
     // Child-map nodes on an overview map + manual device-less links between them (GitHub #9).
     Route::get('maps/{map}/export', [MapController::class, 'export'])->name('maps.export');
     Route::post('maps/import', [MapController::class, 'import'])->name('maps.import');

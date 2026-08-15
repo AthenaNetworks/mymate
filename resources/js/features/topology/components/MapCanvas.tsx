@@ -13,7 +13,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -40,7 +40,8 @@ import { useDevices } from '../../devices/api/getDevices';
 import { useLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
-import { computeLayout, declump, type LayoutKind } from '../lib/layout';
+import { computeLayout, dependencyLayout, declump, type LayoutKind } from '../lib/layout';
+import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from '../api/layoutSnapshots';
 import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
@@ -69,6 +70,7 @@ const miniColor: Record<DeviceStatus, string> = {
 // reuses the TreeStructure glyph rotated 90 deg so it reads as a sideways hierarchy.
 const LAYOUTS: { kind: LayoutKind; label: string; Icon: typeof TreeStructure; iconClass?: string }[] = [
     { kind: 'smart', label: 'Smart (recommended)', Icon: Sparkle },
+    { kind: 'dependency', label: 'Dependency (from selected)', Icon: TreeStructure },
     { kind: 'tree-tb', label: 'Vertical tree', Icon: TreeStructure },
     { kind: 'tree-lr', label: 'Horizontal tree', Icon: TreeStructure, iconClass: '-rotate-90' },
     { kind: 'radial', label: 'Radial', Icon: CircleDashed },
@@ -98,6 +100,9 @@ export function MapCanvas() {
     const createMapLink = useCreateMapLink();
     const updateLink = useUpdateLink();
     const updateMapLink = useUpdateMapLink();
+    const captureSnapshot = useCaptureLayoutSnapshot();
+    const undoLayoutMut = useUndoLayout();
+    const { data: snapshotCount = 0 } = useLayoutSnapshotCount(activeMapId);
     const deleteMapLink = useDeleteMapLink();
     const createMapNote = useCreateMapNote();
     const updateMapNote = useUpdateMapNote();
@@ -124,7 +129,6 @@ export function MapCanvas() {
     const [showChildLinks, setShowChildLinks] = useState(true); // toggle the aggregated device links between child maps (GitHub #9)
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
-    const [pendingLayout, setPendingLayout] = useState<LayoutKind | null>(null); // awaiting confirm before it overwrites positions
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
     const requestDelete = useCallback((linkId: number) => setDeleteLinkId(linkId), []);
@@ -510,23 +514,38 @@ export function MapCanvas() {
         return cur;
     }, [nodes]);
 
-    // Auto-arrange is destructive + non-undoable: it overwrites every device\'s saved
-    // position on this map. Confirm first so a stray click can\'t wipe a hand-arranged layout.
-    const requestLayout = useCallback((kind: LayoutKind) => {
-        setLayoutMenu(false);
-        setPendingLayout(kind);
-    }, []);
-
-    // Apply the chosen algorithm (overlap-free), persist, then frame - runs after confirm.
+    // Snapshot the current layout server-side first (so every tidy is undoable), then apply the
+    // chosen algorithm (overlap-free), persist and frame. No confirm dialog - Undo is the safety net.
     const runLayout = useCallback(
         (kind: LayoutKind) => {
             if (activeMapId === null) return;
-            setPendingLayout(null);
+            setLayoutMenu(false);
+            setToolsMenu(false);
             setLayoutKind(kind);
-            applyPositions(computeLayout(kind, mapDevices, intraLinks, currentPositions()));
+            captureSnapshot.mutate({ mapId: activeMapId, note: LAYOUTS.find((l) => l.kind === kind)?.label ?? kind });
+            if (kind === 'dependency') {
+                // Rooted at the selected device (its downstream branch only, root left where it
+                // sits), else the whole map from the north-most device. Auto-attach so the
+                // branch's links float to the facing sides as it fans south.
+                setEdgeAttach('auto');
+                applyPositions(dependencyLayout(mapDevices, intraLinks, selectedDeviceId, currentPositions()));
+            } else {
+                applyPositions(computeLayout(kind, mapDevices, intraLinks, currentPositions()));
+            }
         },
-        [activeMapId, mapDevices, intraLinks, applyPositions, currentPositions],
+        [activeMapId, mapDevices, intraLinks, selectedDeviceId, applyPositions, currentPositions, captureSnapshot],
     );
+
+    // Roll back the last tidy: restore the newest server-side snapshot's positions.
+    const undoLayout = useCallback(() => {
+        if (activeMapId === null || snapshotCount === 0) return;
+        setLayoutMenu(false);
+        setToolsMenu(false);
+        undoLayoutMut.mutate(activeMapId, {
+            onSuccess: (r) => applyPositions(r.positions),
+            onError: () => pushToast({ title: 'Nothing to undo', tone: 'info' }),
+        });
+    }, [activeMapId, snapshotCount, undoLayoutMut, applyPositions]);
 
     // Nudge only the *current* positions apart so no two cards overlap (no relayout).
     const removeOverlaps = useCallback(() => {
@@ -782,6 +801,17 @@ export function MapCanvas() {
                             </button>
                         </div>
                     )}
+                    {isAdmin && snapshotCount > 0 && (
+                        <button
+                            onClick={undoLayout}
+                            disabled={undoLayoutMut.isPending}
+                            title={`Undo the last tidy (${snapshotCount} step${snapshotCount === 1 ? '' : 's'} available)`}
+                            className="group flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs font-medium text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98] disabled:opacity-40"
+                        >
+                            <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" />
+                            <span className="hidden sm:inline">Undo tidy</span>
+                        </button>
+                    )}
                     {isAdmin && (
                     <div className="relative">
                         <button
@@ -801,7 +831,7 @@ export function MapCanvas() {
                                     {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
                                         <button
                                             key={kind}
-                                            onClick={() => requestLayout(kind)}
+                                            onClick={() => runLayout(kind)}
                                             className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors duration-200 ease-fluid hover:bg-white/10 ${
                                                 layoutKind === kind ? 'text-emerald-300' : 'text-white/75'
                                             }`}
@@ -869,7 +899,7 @@ export function MapCanvas() {
                                             <div className="my-1 h-px bg-white/10" />
                                             <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
                                             {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
-                                                <button key={kind} onClick={() => { requestLayout(kind); setToolsMenu(false); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${layoutKind === kind ? 'text-emerald-300' : 'text-white/75'}`}>
+                                                <button key={kind} onClick={() => runLayout(kind)} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${layoutKind === kind ? 'text-emerald-300' : 'text-white/75'}`}>
                                                     <Icon weight="light" className={`h-4 w-4 ${iconClass ?? ''}`} />
                                                     <span className="flex-1">{label}</span>
                                                 </button>
@@ -877,6 +907,11 @@ export function MapCanvas() {
                                             <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
                                                 <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
                                             </button>
+                                            {snapshotCount > 0 && (
+                                                <button onClick={undoLayout} disabled={undoLayoutMut.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
+                                                    <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" /> Undo tidy
+                                                </button>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -964,23 +999,6 @@ export function MapCanvas() {
                         />
                     );
                 })()}
-
-            {/* Auto-layout -> confirm before overwriting every saved position on this map. */}
-            {pendingLayout !== null && (
-                <ConfirmDialog
-                    title="Auto-arrange this map"
-                    icon={<TreeStructure weight="light" className="h-5 w-5" />}
-                    message={
-                        <>
-                            The <span className="font-semibold text-white/85">{LAYOUTS.find((l) => l.kind === pendingLayout)?.label ?? 'chosen'}</span>{' '}
-                            layout will reposition every device on this map and overwrite their saved locations. This can\'t be undone. Continue?
-                        </>
-                    }
-                    confirmLabel="Arrange"
-                    onConfirm={() => runLayout(pendingLayout)}
-                    onClose={() => setPendingLayout(null)}
-                />
-            )}
 
             {/* Place a map as a node on this overview (GitHub #9). */}
             {addChildMap && activeMapId !== null && (

@@ -21,6 +21,13 @@ of commit subjects.
   engine itself was installed and healthy - only the final "point My Mate at it" step was skipped.
 
 ### Added
+- **Dependency tidy + always-undoable layouts.** A new "Dependency (from selected)" tidy: pick a
+  device and only its downstream branch is re-laid-out as a clean tree fanning south, with the
+  selected device left exactly where it is and everything north/unrelated untouched - so you can add
+  gear under a switch later and re-tidy just that branch. With nothing selected it tidies the whole
+  map from the north-most device. Links auto-attach to the facing sides as the tree flows. Every
+  tidy now snapshots the previous layout **server-side first**, so there's an **Undo tidy** button
+  that rolls back from any browser - which is why the old "this can't be undone" confirmation is gone.
 - **Links tidy themselves up (auto-attach).** A new toolbar toggle lets a link's ends float to
   whichever side of each card faces the other, re-picking as you drag cards around, so the map
   stops looking like a plate of spaghetti. On by default. Flip it to "pinned" and you can drag a

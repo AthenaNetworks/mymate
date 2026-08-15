@@ -8,7 +8,7 @@ const NODE_H = 84;
 // Extra breathing room enforced between cards by declump (so they don\'t merely touch).
 const GAP = 28;
 
-export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force';
+export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force' | 'dependency';
 export type Pos = { x: number; y: number };
 export type PosMap = Record<number, Pos>;
 
@@ -180,7 +180,7 @@ function tidySubtree(id: number, children: Map<number, number[]>): Contour {
  *
  * `dir` flows the tree top->bottom (`TB`, default) or left->right (`LR`).
  */
-export function smartLayout(devices: Device[], links: Link[], dir: 'TB' | 'LR' = 'TB'): PosMap {
+export function smartLayout(devices: Device[], links: Link[], dir: 'TB' | 'LR' = 'TB', preferredRootId?: number | null): PosMap {
     if (devices.length === 0) return {};
 
     const adj = new Map<number, number[]>();
@@ -194,11 +194,18 @@ export function smartLayout(devices: Device[], links: Link[], dir: 'TB' | 'LR' =
     const YSTEP = NODE_H + GAP + 64; // rank-to-rank pitch (clear horizontal lanes)
 
     // Roots: unparented devices first (the cores), then any still-unplaced node - each
-    // group busiest-first, id as a stable tiebreak, so the layout is deterministic.
+    // group busiest-first, id as a stable tiebreak, so the layout is deterministic. A
+    // preferred root (e.g. the north-most device) is forced to the front so it tops the tree.
+    const preferred = preferredRootId != null ? devices.find((d) => d.id === preferredRootId) : undefined;
     const rootOrder = [
-        ...devices.filter((d) => !d.parent_device_id),
-        ...devices.filter((d) => d.parent_device_id),
-    ].sort((p, q) => degree(q.id) - degree(p.id) || p.id - q.id);
+        ...(preferred ? [preferred] : []),
+        ...[
+            ...devices.filter((d) => !d.parent_device_id),
+            ...devices.filter((d) => d.parent_device_id),
+        ]
+            .filter((d) => d.id !== preferredRootId)
+            .sort((p, q) => degree(q.id) - degree(p.id) || p.id - q.id),
+    ];
 
     const placed = new Set<number>();
     const pos: PosMap = {};
@@ -237,6 +244,79 @@ export function smartLayout(devices: Device[], links: Link[], dir: 'TB' | 'LR' =
         originX += span + NODE_W + GAP; // clear the whole tree before the next one
     }
     return pos;
+}
+
+/**
+ * Dependency tidy - incremental and rooted. With a `rootId`, it re-lays-out ONLY that device's
+ * downstream branch (its descendants in the map's dependency tree) as a clean top-down tree,
+ * anchored so the root keeps its *current* position - everything north/unrelated is left exactly
+ * where it is. Returns positions for the branch only, so the caller's per-device save touches
+ * nothing else. With no `rootId`, tidies the whole map rooted at the most-north (min-y) device.
+ */
+export function dependencyLayout(devices: Device[], links: Link[], rootId: number | null, current: PosMap = {}): PosMap {
+    if (devices.length === 0) return {};
+
+    // No root chosen: whole-map tidy, topped by the most-north device the operator left up there.
+    if (rootId == null || !devices.some((d) => d.id === rootId)) {
+        let north: number | null = null;
+        let northY = Infinity;
+        for (const d of devices) {
+            const y = current[d.id]?.y ?? 0;
+            if (y < northY) {
+                northY = y;
+                north = d.id;
+            }
+        }
+        return smartLayout(devices, links, 'TB', north);
+    }
+
+    // Build the map's dependency tree (spanning forest from the natural roots) so every node has a
+    // parent/children relationship - the same BFS smartLayout uses.
+    const adj = new Map<number, number[]>();
+    for (const d of devices) adj.set(d.id, []);
+    for (const [a, b] of buildEdges(devices, links)) {
+        adj.get(a)!.push(b);
+        adj.get(b)!.push(a);
+    }
+    const degree = (id: number) => adj.get(id)!.length;
+
+    const children = new Map<number, number[]>();
+    const depth = new Map<number, number>();
+    const placed = new Set<number>();
+    const rootOrder = [
+        ...devices.filter((d) => !d.parent_device_id),
+        ...devices.filter((d) => d.parent_device_id),
+    ]
+        .sort((p, q) => degree(q.id) - degree(p.id) || p.id - q.id)
+        .map((d) => d.id);
+    for (const r of rootOrder) {
+        if (placed.has(r)) continue;
+        placed.add(r);
+        depth.set(r, 0);
+        const queue = [r];
+        while (queue.length) {
+            const cur = queue.shift()!;
+            const kids = (adj.get(cur) ?? []).filter((nb) => !placed.has(nb)).sort((a, b) => degree(b) - degree(a) || a - b);
+            children.set(cur, kids);
+            for (const k of kids) {
+                placed.add(k);
+                depth.set(k, depth.get(cur)! + 1);
+                queue.push(k);
+            }
+        }
+    }
+
+    // Lay out the root's subtree (root + descendants) and translate so the root stays put.
+    const YSTEP = NODE_H + GAP + 64;
+    const { pos: rel } = tidySubtree(rootId, children);
+    const anchor = current[rootId] ?? { x: 0, y: 0 };
+    const rootRelX = rel.get(rootId) ?? 0;
+    const rootDepth = depth.get(rootId) ?? 0;
+    const out: PosMap = {};
+    for (const [id, x] of rel) {
+        out[id] = { x: Math.round(anchor.x + (x - rootRelX)), y: Math.round(anchor.y + (depth.get(id)! - rootDepth) * YSTEP) };
+    }
+    return out;
 }
 
 /**

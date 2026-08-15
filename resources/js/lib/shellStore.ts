@@ -28,7 +28,7 @@ export type EdgeAttach = 'auto' | 'fixed';
 export type OspfCostSize = 'sm' | 'md' | 'lg';
 
 /** Auto-layout algorithm - remembered per-browser; mirrors LayoutKind in lib/layout. */
-export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force';
+export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force' | 'dependency';
 
 type ShellState = {
     view: View;

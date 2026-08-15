@@ -13,6 +13,7 @@ use App\Models\Device;
 use App\Models\DeviceMapPosition;
 use App\Models\Link;
 use App\Models\Map;
+use App\Models\MapLayoutSnapshot;
 use App\Models\MapLink;
 use App\Models\MapLinkPosition;
 use App\Models\MapNote;
@@ -277,6 +278,56 @@ class MapController extends Controller
         $mapNote->delete();
 
         return response()->noContent();
+    }
+
+    // --- Layout undo stack -----------------------------------------------
+
+    /** Snapshot the map's current device positions onto the undo stack (called before a tidy). */
+    public function storeLayoutSnapshot(Request $request, Map $map): JsonResponse
+    {
+        $note = $request->validate(['note' => ['sometimes', 'nullable', 'string', 'max:120']])['note'] ?? null;
+
+        $positions = DeviceMapPosition::where('map_id', $map->id)
+            ->get(['device_id', 'x', 'y'])
+            ->mapWithKeys(fn ($p) => [$p->device_id => ['x' => $p->x, 'y' => $p->y]])
+            ->all();
+
+        MapLayoutSnapshot::create(['map_id' => $map->id, 'positions' => $positions, 'note' => $note]);
+
+        // Keep only the newest few so the stack can't grow without bound.
+        $keep = MapLayoutSnapshot::where('map_id', $map->id)->orderByDesc('id')->limit(20)->pluck('id');
+        MapLayoutSnapshot::where('map_id', $map->id)->whereNotIn('id', $keep)->delete();
+
+        return response()->json(['count' => MapLayoutSnapshot::where('map_id', $map->id)->count()], Response::HTTP_CREATED);
+    }
+
+    /** Roll back: pop the newest snapshot, restore its positions, return them + how many remain. */
+    public function undoLayout(Map $map): JsonResponse
+    {
+        $snap = MapLayoutSnapshot::where('map_id', $map->id)->orderByDesc('id')->first();
+        if ($snap === null) {
+            return response()->json(['message' => 'Nothing to undo on this map.'], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        foreach ($snap->positions as $deviceId => $xy) {
+            DeviceMapPosition::updateOrCreate(
+                ['map_id' => $map->id, 'device_id' => (int) $deviceId],
+                ['x' => $xy['x'], 'y' => $xy['y']],
+            );
+        }
+        $positions = $snap->positions;
+        $snap->delete();
+
+        return response()->json([
+            'positions' => $positions,
+            'remaining' => MapLayoutSnapshot::where('map_id', $map->id)->count(),
+        ]);
+    }
+
+    /** How many undo steps are available for this map (drives the Undo button). */
+    public function layoutSnapshotCount(Map $map): JsonResponse
+    {
+        return response()->json(['count' => MapLayoutSnapshot::where('map_id', $map->id)->count()]);
     }
 
     /** True when $candidate is $map itself or an ancestor of it (cycle guard for nesting). */
