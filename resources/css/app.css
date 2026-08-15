@@ -44,6 +44,20 @@
     --link-down: #9ca3af;
     --link-unknown: #94a3b8;
     color-scheme: light;
+
+    /* Status chips are written dark-first: a pale `-300` text on a faint `-500/10` tint reads
+       well on the dark UI but washes out to near-invisible on the light surface (the tint is
+       barely there and -300 is a pastel). Darkening these text tokens to their -700 shade in
+       light mode restores contrast everywhere they're used (up/down counters, the Operational
+       badge, section-header icons, toasts...) without touching a single call site. The -300
+       shade is only ever used as text here (bar two rose rings, which a darker shade only
+       helps), so flipping the token is safe. Dots/fills use -400/-500 and stay bright. */
+    --color-emerald-300: oklch(0.508 0.118 165.612); /* emerald-700 */
+    --color-rose-300: oklch(0.514 0.222 16.935); /* rose-700 */
+    --color-amber-300: oklch(0.555 0.163 48.998); /* amber-700 */
+    --color-sky-300: oklch(0.5 0.134 242.749); /* sky-700 */
+    --color-indigo-300: oklch(0.457 0.24 277.023); /* indigo-700 */
+    --color-violet-300: oklch(0.491 0.27 292.581); /* violet-700 */
 }
 
 /* Native <select> option popups. The app's controls sit on translucent backgrounds
