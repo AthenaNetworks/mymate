@@ -40,6 +40,11 @@ jobs:
     name: Build Proxmox LXC template
     runs-on: ubuntu-24.04
     continue-on-error: true   # best-effort; the .deb release does not depend on it
+    # The podman --systemd LXC build occasionally hangs on a hosted runner. Without a cap it
+    # sits at GitHub's 6-hour job limit and holds the Publish job (which needs it) hostage that
+    # whole time. Fail it fast instead: continue-on-error means Publish then ships the .deb +
+    # agents straight away, and a stale LXC asset from the prior build is kept.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
