@@ -23,6 +23,7 @@ export interface UserInput {
     is_admin: boolean;
     restricted?: boolean;
     map_ids?: number[];
+    passkey_exempt?: boolean;
 }
 
 export function useSaveUser() {

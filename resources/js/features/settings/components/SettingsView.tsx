@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree } from '@phosphor-icons/react';
+import { Toggle } from '../../../components/Toggle';
+import { usePasskeys, useRegisterPasskey, useDeletePasskey, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
+import { passkeysSupported } from '../../auth/lib/passkey';
 import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
 import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
@@ -664,6 +667,7 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         email: initial?.email ?? '',
         is_admin: initial?.is_admin ?? false,
         restricted: initial?.restricted ?? false,
+        passkey_exempt: initial?.passkey_exempt ?? false,
         map_ids: initial?.map_ids ?? [],
     });
     const { data: allMaps } = useMaps(); // for the per-map access picker (GitHub #28)
@@ -789,6 +793,18 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     )}
                 </>
             )}
+            {/* Exclude from a mandatory-passkey rule - for a wallboard/kiosk that can't do WebAuthn. */}
+            <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
+                <input
+                    type="checkbox"
+                    checked={form.passkey_exempt ?? false}
+                    onChange={(e) => set('passkey_exempt', e.target.checked)}
+                    className="h-4 w-4 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                />
+                <span className="flex items-center gap-1.5">
+                    <Fingerprint weight="bold" className="h-3.5 w-3.5 text-white/40" /> Exclude from mandatory passkey (wallboard / kiosk)
+                </span>
+            </label>
             {error && <p className="text-xs text-rose-400/90">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-1">
                 <button onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-white/55 hover:text-white/90">
@@ -1070,6 +1086,160 @@ function AgentsSection() {
 function shortDate(iso: string | null): string {
     if (!iso) return 'never';
     return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/** A short human date, or "never". */
+function passkeyDate(iso: string | null): string {
+    if (!iso) return 'never';
+    return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+/**
+ * Passkeys (Account tab). Self-service: register a passkey (a fingerprint/face/security key) for
+ * phishing-resistant sign-in, list them, remove them. When an admin makes passkeys mandatory, an
+ * operator with none is forced to add one at their next login.
+ */
+function PasskeysSection() {
+    const { data: passkeys } = usePasskeys();
+    const register = useRegisterPasskey();
+    const del = useDeletePasskey();
+    const [name, setName] = useState('');
+    const [deleting, setDeleting] = useState<Passkey | null>(null);
+    const supported = passkeysSupported();
+
+    async function add() {
+        if (register.isPending) return;
+        try {
+            await register.mutateAsync(name.trim() || 'Passkey');
+            setName('');
+            pushToast({ title: 'Passkey added', tone: 'up' });
+        } catch (e) {
+            const msg = (e as { response?: { data?: { message?: string } }; message?: string });
+            pushToast({ title: 'Couldn\'t add the passkey', detail: msg?.response?.data?.message ?? msg?.message, tone: 'down' });
+        }
+    }
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <Fingerprint weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">Passkeys</h2>
+                    <p className="text-xs text-white/40">A fingerprint, face or security key for phishing-resistant sign-in. Needs HTTPS.</p>
+                </div>
+            </div>
+
+            {!supported ? (
+                <p className="text-xs text-amber-300/90">This browser can't do passkeys - they need a secure origin (HTTPS) and a recent browser.</p>
+            ) : (
+                <div className="mb-3 flex items-center gap-2">
+                    <input
+                        className={field}
+                        placeholder="Name this passkey (e.g. MacBook, YubiKey)"
+                        value={name}
+                        maxLength={60}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && add()}
+                    />
+                    <button
+                        onClick={add}
+                        disabled={register.isPending}
+                        className="flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
+                    >
+                        <Plus weight="bold" className="h-3.5 w-3.5" /> {register.isPending ? 'Waiting...' : 'Add passkey'}
+                    </button>
+                </div>
+            )}
+
+            <div className="space-y-2">
+                {passkeys?.map((p) => (
+                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-white/[0.02] px-3 py-2 ring-1 ring-white/[0.06]">
+                        <Fingerprint weight="light" className="h-4 w-4 shrink-0 text-white/40" />
+                        <span className="min-w-0 flex-1 truncate text-sm text-white/85">
+                            {p.name}
+                            <span className="text-white/30"> - added {passkeyDate(p.created_at)}</span>
+                            <span className="text-white/30"> - last used {passkeyDate(p.last_used_at)}</span>
+                        </span>
+                        <button onClick={() => setDeleting(p)} title="Remove passkey" className="rounded-md p-1 text-white/40 hover:bg-rose-500/10 hover:text-rose-300">
+                            <Trash weight="bold" className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                ))}
+                {passkeys && passkeys.length === 0 && <p className="text-xs text-white/40">No passkeys yet.</p>}
+            </div>
+
+            {deleting && (
+                <ConfirmDialog
+                    title="Remove passkey"
+                    icon={<Trash weight="light" className="h-5 w-5" />}
+                    message={<>Remove <span className="font-semibold text-white/85">{deleting.name}</span>? You won't be able to sign in with it.</>}
+                    confirmLabel="Remove"
+                    tone="danger"
+                    busy={del.isPending}
+                    onConfirm={() => del.mutate(deleting.id, {
+                        onSuccess: () => setDeleting(null),
+                        onError: () => { pushToast({ title: 'Couldn\'t remove the passkey', tone: 'down' }); setDeleting(null); },
+                    })}
+                    onClose={() => setDeleting(null)}
+                />
+            )}
+        </section>
+    );
+}
+
+/**
+ * Security policy (admin): the mandatory-passkey toggle. Turning it ON warns first - every operator
+ * without a passkey (and not exempt) is forced to enrol at their next action, and existing sessions
+ * are bounced. Wallboard/kiosk accounts on TVs are the ones to watch (mark them exempt on the
+ * operator first); public share-link wallboards use unauthenticated tokens and are unaffected.
+ */
+function SecuritySection() {
+    const { data } = useSecuritySettings();
+    const update = useUpdateSecuritySettings();
+    const [confirming, setConfirming] = useState(false);
+    const required = data?.passkey_required ?? false;
+
+    function apply(next: boolean) {
+        update.mutate(next, {
+            onSuccess: () => { setConfirming(false); pushToast({ title: next ? 'Passkeys are now required' : 'Passkey requirement off', tone: 'info' }); },
+            onError: () => { setConfirming(false); pushToast({ title: 'Couldn\'t change the setting', tone: 'down' }); },
+        });
+    }
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <ShieldCheck weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">Sign-in security</h2>
+                    <p className="text-xs text-white/40">Require every operator to use a passkey as a second factor. Needs HTTPS.</p>
+                </div>
+            </div>
+
+            <label className="flex items-center justify-between gap-4">
+                <span className="min-w-0 flex-1 text-sm text-white/70">Require passkeys for all operators</span>
+                <Toggle checked={required} disabled={update.isPending} onChange={(next) => (next ? setConfirming(true) : apply(false))} />
+            </label>
+
+            {confirming && (
+                <ConfirmDialog
+                    title="Require passkeys?"
+                    icon={<Fingerprint weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Every operator without a passkey{data?.affected_operators ? <> (<span className="font-semibold text-white/85">{data.affected_operators}</span> right now)</> : ''} will be
+                            forced to set one up at their next action, and current sessions are signed out.
+                            <span className="mt-2 block text-amber-200/90">Watch out for wallboard/kiosk accounts on TVs - they can't tap a passkey. Mark those operators "exclude from mandatory passkey" first. (Public share-link wallboards are unaffected.)</span>
+                        </>
+                    }
+                    confirmLabel="Require passkeys"
+                    busy={update.isPending}
+                    onConfirm={() => apply(true)}
+                    onClose={() => setConfirming(false)}
+                />
+            )}
+        </section>
+    );
 }
 
 /**
@@ -1423,7 +1593,8 @@ interface Tab {
 // stays shallow as we add more. Admin-only tabs are hidden from read-only operators, who
 // keep just their account, the rosters and the API keys.
 const TABS: Tab[] = [
-    { id: 'account', label: 'Account', icon: LockKey, render: () => <TwoCol><AccountSection /><ApiKeysSection /></TwoCol> },
+    { id: 'account', label: 'Account', icon: LockKey, render: () => <TwoCol><AccountSection /><PasskeysSection /><ApiKeysSection /></TwoCol> },
+    { id: 'security', label: 'Security', icon: ShieldCheck, adminOnly: true, render: () => <SecuritySection /> },
     { id: 'engine', label: 'Engine', icon: GearSix, adminOnly: true, render: () => <EngineSettings /> },
     { id: 'mail', label: 'Mail', icon: Envelope, adminOnly: true, render: () => <MailServerSection /> },
     { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },

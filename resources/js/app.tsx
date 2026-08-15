@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { AppShell } from './features/shell/AppShell';
 import { LoginScreen } from './features/auth/components/LoginScreen';
+import { PasskeyGate } from './features/auth/components/PasskeyGate';
 import { useCurrentUser, useLogin } from './features/auth/api/auth';
 import { Toaster } from './components/Toaster';
 import { BrandedLoader } from './components/BrandedLoader';
@@ -53,6 +54,12 @@ function AuthedApp() {
 
     if (!user) {
         return <LoginScreen />;
+    }
+
+    // Passkey second factor / forced enrolment after a password login. Skipped in demo - the demo
+    // viewer must never be bounced into a WebAuthn ceremony.
+    if (!demo && (user.passkey_stage === 'challenge' || user.passkey_stage === 'enrol')) {
+        return <PasskeyGate stage={user.passkey_stage} />;
     }
 
     // Demo (not wallboard): reserve a top strip for the marketing bar + overlay content.
