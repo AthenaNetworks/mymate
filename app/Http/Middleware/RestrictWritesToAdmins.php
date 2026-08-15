@@ -25,7 +25,7 @@ class RestrictWritesToAdmins
     private const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
     /** Route names a non-admin may still POST/PUT to (self-service only). */
-    private const SELF_SERVICE_ROUTES = ['account.password.update', 'api-tokens.store', 'api-tokens.destroy'];
+    private const SELF_SERVICE_ROUTES = ['account.password.update', 'api-tokens.store', 'api-tokens.destroy', 'passkeys.*'];
 
     /**
      * Route names a non-admin may still POST/DELETE to because the action is harmless:

@@ -29,6 +29,7 @@ class StoreUserRequest extends FormRequest
             'is_admin' => ['sometimes', 'boolean'],
             // Restricted access (GitHub #28): confine the operator to specific maps.
             'restricted' => ['sometimes', 'boolean'],
+            'passkey_exempt' => ['sometimes', 'boolean'],
             'map_ids' => ['sometimes', 'array'],
             'map_ids.*' => ['integer', 'exists:maps,id'],
         ];

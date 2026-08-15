@@ -28,9 +28,11 @@ use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
+use App\Http\Controllers\Api\PasskeyController;
 use App\Http\Controllers\Api\ProbeController;
 use App\Http\Controllers\Api\PublicWallController;
 use App\Http\Controllers\Api\RouterosUpgradeController;
+use App\Http\Controllers\Api\SecuritySettingController;
 use App\Http\Controllers\Api\SensorController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SiteController;
@@ -40,6 +42,7 @@ use App\Http\Controllers\Api\Tools\ToolsController;
 use App\Http\Controllers\Api\TraceController;
 use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\EnsurePasskeyVerified;
 use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
 use Illuminate\Support\Facades\Route;
@@ -69,8 +72,26 @@ Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
 // --- Authenticated (everything else) --------------------------------------
 // `RestrictWritesToAdmins` makes non-admin operators read-only across the whole API
 // - GETs pass, any write from a non-admin is 403 (except their own password).
-Route::middleware(['auth:sanctum', RestrictWritesToAdmins::class, RestrictedAccess::class])->group(function (): void {
+Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesToAdmins::class, RestrictedAccess::class])->group(function (): void {
     Route::get('user', [AuthController::class, 'user'])->name('user');
+
+    // Passkeys (WebAuthn): self-service second factor + management. Allowlisted in
+    // EnsurePasskeyVerified (they're how a not-yet-verified operator gets verified) and exempt from
+    // the read-only rule (every operator manages their own).
+    Route::prefix('passkeys')->middleware('throttle:12,1')->group(function (): void {
+        Route::post('register/options', [PasskeyController::class, 'registerOptions'])->name('passkeys.register.options');
+        Route::post('register', [PasskeyController::class, 'register'])->name('passkeys.register');
+        Route::post('verify/options', [PasskeyController::class, 'verifyOptions'])->name('passkeys.verify.options');
+        Route::post('verify', [PasskeyController::class, 'verify'])->name('passkeys.verify');
+        Route::get('/', [PasskeyController::class, 'index'])->name('passkeys.index');
+        Route::delete('{passkey}', [PasskeyController::class, 'destroy'])->whereNumber('passkey')->name('passkeys.destroy');
+    });
+
+    // Authentication policy (admin): the mandatory-passkey toggle + affected-operator count.
+    Route::middleware('admin')->group(function (): void {
+        Route::get('settings/security', [SecuritySettingController::class, 'show'])->name('settings.security.show');
+        Route::put('settings/security', [SecuritySettingController::class, 'update'])->name('settings.security.update');
+    });
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
     Route::get('update-check', UpdateCheckController::class)

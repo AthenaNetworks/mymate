@@ -132,6 +132,10 @@ class UserController extends Controller
         if ($user->is_admin) {
             $user->restricted = false;
         }
+        // Exclude this operator from a mandatory-passkey rule (wallboard/kiosk). Explicit privilege.
+        if ($request->has('passkey_exempt')) {
+            $user->passkey_exempt = $request->boolean('passkey_exempt');
+        }
     }
 
     /** Sync the operator's granted maps when the payload carries them (admins have no grants). */
@@ -166,6 +170,7 @@ class UserController extends Controller
             ...$base,
             'restricted' => (bool) $user->restricted,
             'map_ids' => $user->restricted ? $user->maps()->withoutGlobalScopes()->pluck('maps.id')->all() : [],
+            'passkey_exempt' => (bool) $user->passkey_exempt,
             'email' => $user->email,
             'created_at' => $user->created_at?->toIso8601String(),
         ];
