@@ -13,7 +13,22 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Passkeys (WebAuthn) with an optional mandatory mode.** Operators can register a passkey
+  (fingerprint / face / security key) as a phishing-resistant second factor from Settings → Account.
+  An admin can flip Settings → Security to require them fleet-wide: everyone without one is forced to
+  enrol at their next action, and existing sessions are bounced (with a warning first, and a
+  per-operator "exclude from mandatory passkey" for wallboard/kiosk accounts that can't do WebAuthn).
+  API keys are never affected. Needs HTTPS (WebAuthn only runs on a secure origin).
+- **Agent up/down alerting.** A new "Remote agent offline" alert condition fires when an agent stops
+  heart-beating. Because its devices go dark when it does, their individual down alerts roll up into
+  the one agent-down alert (gated on the existing suppress-dependent knob) - so you get one clear
+  page naming how many devices are behind it, not a storm or a silent gap.
+
 ### Fixed
+- **A dead session bounces to the login screen instead of erroring.** An expired session used to spray
+  sticky red toasts from every in-flight request; now it drops cleanly to the login screen with a
+  single "your session ended" notice.
 - **Graphs: latency overlaid on traffic keeps a sensible scale.** Adding a ping/probe latency series
   to an interface-throughput graph used to drop the axis to raw bits (to fit both) and flatten the
   latency line to zero. Traffic now drives the left axis in kbps/Mbps as before, and latency rides
