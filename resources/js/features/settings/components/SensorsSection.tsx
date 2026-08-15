@@ -52,12 +52,12 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
             <input className={field} placeholder="Name (e.g. WAN in-errors)" value={form.name} onChange={(e) => set('name', e.target.value)} />
             <input className={`${field} font-mono`} placeholder="OID (e.g. 1.3.6.1.2.1.2.2.1.14.1)" value={form.oid} onChange={(e) => set('oid', e.target.value)} />
             <div className="flex gap-2">
-                <select className={field} value={form.mode ?? 'get'} onChange={(e) => set('mode', e.target.value as SensorInput['mode'])}>
+                <select className={`${field} min-w-0 flex-1`} value={form.mode ?? 'get'} onChange={(e) => set('mode', e.target.value as SensorInput['mode'])}>
                     <option value="get">Read a single value (GET)</option>
                     <option value="walk">Walk a table + reduce</option>
                 </select>
                 {form.mode === 'walk' && (
-                    <select className={`${field} shrink-0`} value={form.agg ?? 'sum'} onChange={(e) => set('agg', e.target.value as SensorInput['agg'])}>
+                    <select className={`${field} min-w-0 flex-1`} value={form.agg ?? 'sum'} onChange={(e) => set('agg', e.target.value as SensorInput['agg'])}>
                         <option value="sum">Sum</option>
                         <option value="avg">Average</option>
                         <option value="max">Max</option>
