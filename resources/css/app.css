@@ -35,7 +35,9 @@
    subtle dark tint - the correct inversion. Only the three opaque surface tokens need their own
    light values. Toggled by setting data-theme="light" on <html> (see lib/theme.ts). */
 :root[data-theme='light'] {
-    --color-white: #18181b; /* was #fff - flips all white-based utilities to dark ink */
+    /* Near-black (not a soft grey) so the pervasive muted opacities - text-white/40, ring-white/10,
+       bg-white/[0.03] - keep enough contrast on white; a lighter base washed them out. */
+    --color-white: #0a0a0b;
     --color-surface: #f4f4f5;
     --color-surface-2: #ffffff;
     --color-surface-deep: #e7e7ea;

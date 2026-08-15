@@ -15,6 +15,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, Note, Plus, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
+import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { ChildMapNode } from '../nodes/ChildMapNode';
@@ -100,6 +101,7 @@ export function MapCanvas() {
     const deleteLink = useDeleteLink();
     const addToMap = useAddDeviceToMap();
     const { fitView, screenToFlowPosition } = useReactFlow();
+    const theme = useTheme();
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -640,19 +642,19 @@ export function MapCanvas() {
                 minZoom={0.1}
                 snapToGrid
                 snapGrid={[16, 16]}
-                colorMode="dark"
+                colorMode={theme === 'light' ? 'light' : 'dark'}
             >
                 {/* Layered "blueprint" grid - a coarse major grid over a fine minor grid, both
                     very faint. Reads as an instrument/graph-paper backdrop rather than the stock
                     React Flow dot field, and gives the canvas depth against the mesh glow. */}
-                <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color="rgba(255,255,255,0.028)" />
-                <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color="rgba(255,255,255,0.05)" />
+                <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color={theme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.028)'} />
+                <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color={theme === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'} />
                 <MapControls />
                 <MiniMap
                     pannable
                     zoomable
                     className="!hidden !rounded-xl !bg-white/[0.03] !ring-1 !ring-white/10 lg:!block"
-                    maskColor="rgba(0,0,0,0.6)"
+                    maskColor={theme === 'light' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'}
                     nodeColor={(n) => miniColor[(n.data as { status?: DeviceStatus }).status ?? 'unknown'] ?? miniColor.unknown}
                 />
             </ReactFlow>

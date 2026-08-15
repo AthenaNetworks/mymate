@@ -9,6 +9,7 @@ import {
     type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../../topology/nodes/DeviceNode';
 import { ChildMapNode } from '../../topology/nodes/ChildMapNode';
 import { MapNoteNode } from '../../topology/nodes/MapNoteNode';
@@ -33,6 +34,7 @@ export function WallCanvas() {
     const { data: devices } = useWallDevices();
     const { data: links } = useWallLinks();
     const { fitView } = useReactFlow();
+    const theme = useTheme();
 
     const posById = useMemo<Record<number, { x: number; y: number }>>(() => {
         const m: Record<number, { x: number; y: number }> = {};
@@ -162,7 +164,7 @@ export function WallCanvas() {
             fitView
             fitViewOptions={{ padding: 0.2 }}
             minZoom={0.1}
-            colorMode="dark"
+            colorMode={theme === 'light' ? 'light' : 'dark'}
         >
             <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color="rgba(255,255,255,0.028)" />
             <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color="rgba(255,255,255,0.05)" />
