@@ -42,6 +42,30 @@ class Agent extends Model
         return $this->hasMany(Subnet::class);
     }
 
+    /** Seconds without a heartbeat after which an agent is treated as down (floor 60s). */
+    public static function offlineAfter(): int
+    {
+        return max(60, (int) config('mymate.agents.offline_after', 90));
+    }
+
+    /**
+     * Is this agent down as far as alerting is concerned? An agent that has never connected
+     * (no `last_seen_at`) is ignored - a freshly enrolled agent that was never wired up
+     * mustn't page anyone. Once it has been heard from we go by the heartbeat: silent for
+     * longer than {@see offlineAfter()} means down. We lean on last_seen_at rather than the
+     * `status` column because the hub only flips `status` on a clean socket close; if the hub
+     * process itself dies, `status` is left stale at 'online' while the heartbeat is the honest
+     * signal. A reconnect bumps last_seen_at to now, which clears the alert.
+     */
+    public function isDown(): bool
+    {
+        if ($this->last_seen_at === null) {
+            return false;
+        }
+
+        return $this->last_seen_at->lt(now()->subSeconds(self::offlineAfter()));
+    }
+
     /**
      * Create an agent and return [model, plaintextToken]. The token is shown once; only its
      * hash is stored. The caller surfaces the plaintext to the operator to configure the agent.

@@ -348,7 +348,8 @@ export type AlertConditionType =
     | 'backup_failed'
     | 'high_metric'
     | 'probe_down'
-    | 'probe_slow';
+    | 'probe_slow'
+    | 'agent_down';
 
 // Service probes (GitHub #19): HTTP/TCP checks attached to a device.
 export type ProbeKind = 'http' | 'tcp';

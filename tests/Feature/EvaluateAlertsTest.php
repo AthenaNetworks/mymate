@@ -3,12 +3,14 @@
 namespace Tests\Feature;
 
 use App\Actions\Alerts\EvaluateAlerts;
+use App\Enums\AgentStatus;
 use App\Enums\AlertCondition;
 use App\Enums\BackupStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\DiscoveryStatus;
 use App\Enums\UpgradeStatus;
+use App\Models\Agent;
 use App\Models\AlertEvent;
 use App\Models\AlertPolicy;
 use App\Models\AlertTransport;
@@ -603,6 +605,82 @@ class EvaluateAlertsTest extends TestCase
         app(EvaluateAlerts::class)();
 
         $this->assertSame(2, AlertEvent::where('status', 'firing')->count());
+    }
+
+    public function test_agent_down_fires_when_an_agent_stops_heart_beating_and_resolves_on_return(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::AgentDown);
+        // Connected once, last heard 5 minutes ago - well past the ~90s heartbeat window.
+        $agent = Agent::factory()->create(['name' => 'DEPOT', 'status' => AgentStatus::Offline, 'last_seen_at' => now()->subMinutes(5)]);
+        Device::factory()->count(2)->create(['agent_id' => $agent->id]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertDatabaseHas('alert_events', [
+            'dedupe_key' => "agent:{$agent->id}", 'status' => 'firing', 'delivered' => true,
+        ]);
+        // The umbrella message names how many devices went dark with it.
+        $this->assertStringContainsString('2 devices', AlertEvent::firstOrFail()->message);
+        Http::assertSentCount(1);
+
+        // Re-run while still silent: dedupe, no second delivery.
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::count());
+        Http::assertSentCount(1);
+
+        // Agent reconnects (fresh heartbeat) -> the alert resolves.
+        $agent->forceFill(['status' => AgentStatus::Online, 'last_seen_at' => now()])->save();
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
+    }
+
+    public function test_a_never_connected_agent_does_not_fire_agent_down(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::AgentDown);
+        // Enrolled but never wired up (no last_seen_at) - must not page anyone.
+        Agent::factory()->create(['status' => AgentStatus::Enrolled, 'last_seen_at' => null]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(0, AlertEvent::count());
+        Http::assertNothingSent();
+    }
+
+    public function test_device_down_behind_a_down_agent_is_suppressed_while_an_unrelated_device_still_alerts(): void
+    {
+        Http::fake();
+        // Both policies live together, the realistic setup: agent-down covers the fleet behind
+        // an offline agent, device-down covers everything else (suppress_dependent defaults on).
+        $this->policyWithSlack(AlertCondition::AgentDown);
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+
+        $agent = Agent::factory()->create(['status' => AgentStatus::Offline, 'last_seen_at' => now()->subMinutes(5)]);
+        $behind = Device::factory()->create(['name' => 'BEHIND', 'status' => DeviceStatus::Down, 'agent_id' => $agent->id]);
+        $unrelated = Device::factory()->create(['name' => 'DIRECT', 'status' => DeviceStatus::Down]);
+
+        app(EvaluateAlerts::class)();
+
+        // The agent's own alert fires...
+        $this->assertDatabaseHas('alert_events', ['dedupe_key' => "agent:{$agent->id}", 'status' => 'firing']);
+        // ...and rolls up the device behind it - no separate device-down storm.
+        $this->assertDatabaseMissing('alert_events', ['dedupe_key' => "device:{$behind->id}"]);
+        // A device not behind the agent is a genuine, unrelated outage - it still alerts.
+        $this->assertDatabaseHas('alert_events', ['dedupe_key' => "device:{$unrelated->id}", 'status' => 'firing']);
+    }
+
+    public function test_device_down_behind_a_down_agent_still_fires_when_suppression_is_off(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown, ['suppress_dependent' => false]);
+        $agent = Agent::factory()->create(['status' => AgentStatus::Offline, 'last_seen_at' => now()->subMinutes(5)]);
+        $behind = Device::factory()->create(['status' => DeviceStatus::Down, 'agent_id' => $agent->id]);
+
+        app(EvaluateAlerts::class)();
+
+        // Suppression off -> the device alerts on its own, agent roll-up disabled.
+        $this->assertDatabaseHas('alert_events', ['dedupe_key' => "device:{$behind->id}", 'status' => 'firing']);
     }
 
     public function test_email_transport_delivers_without_error(): void

@@ -7,6 +7,7 @@ use App\Enums\BackupStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\DiscoveryStatus;
 use App\Enums\UpgradeStatus;
+use App\Models\Agent;
 use App\Models\AlertEvent;
 use App\Models\AlertPolicy;
 use App\Models\Device;
@@ -201,7 +202,39 @@ class EvaluateAlerts
             ),
             AlertCondition::ProbeDown => $this->probesDown($scope),
             AlertCondition::ProbeSlow => $this->slowProbes((float) ($policy->params['threshold'] ?? 1000), $scope),
+            // Agents aren't devices, so the device-scope bag doesn't apply - always fleet-wide,
+            // one event per agent.
+            AlertCondition::AgentDown => $this->downAgents(),
         };
+    }
+
+    /**
+     * Remote agents that have gone offline (stopped heart-beating past the threshold). One
+     * event per agent, keyed `agent:{id}` so it can't collide with device/link/probe keys and
+     * so the device-scoped maintenance + fleet-vs-scoped suppression (both `device:` only)
+     * never touch it. The message carries how many devices sit behind the agent, because those
+     * devices go dark the moment the agent does - the agent-down alert is the umbrella signal
+     * for all of them (see downDevices()).
+     *
+     * @return array<string, string>
+     */
+    private function downAgents(): array
+    {
+        $out = [];
+        // Only agents that have connected at least once can be "down" - isDown() ignores a
+        // never-seen enrolment.
+        $agents = Agent::whereNotNull('last_seen_at')->withCount('devices')->get();
+
+        foreach ($agents as $agent) {
+            if (! $agent->isDown()) {
+                continue;
+            }
+            $n = (int) $agent->devices_count;
+            $behind = $n === 1 ? '1 device' : "{$n} devices";
+            $out["agent:{$agent->id}"] = "Agent \"{$agent->name}\" is offline. {$behind} behind it can't be polled.";
+        }
+
+        return $out;
     }
 
     /**
@@ -326,6 +359,13 @@ class EvaluateAlerts
      * down node on each branch) fire. This is The Dude's anti-storm behaviour: one upstream
      * failure raises one alert, not hundreds for everything behind it.
      *
+     * A remote agent going offline is the same shape of dependency: every device behind a
+     * down agent (`agent_id`) can no longer be polled, so its device-down alerts are collateral
+     * and get rolled up into the single agent-down alert instead. Gated by the same
+     * `$suppressDependent` knob as the parent-chain suppression - opt out and each device alerts
+     * on its own. A device NOT behind a down agent is untouched, so a genuine unrelated outage
+     * still fires.
+     *
      * Targeting: `$scope` (null = all) limits which devices may alert,
      * but ancestor status is still read fleet-wide so an out-of-scope down parent still
      * suppresses an in-scope child.
@@ -335,8 +375,12 @@ class EvaluateAlerts
      */
     private function downDevices(bool $suppressDependent, ?array $scope): array
     {
-        $devices = Device::get(['id', 'name', 'mgmt_ip', 'parent_device_id', 'status']);
+        $devices = Device::get(['id', 'name', 'mgmt_ip', 'parent_device_id', 'status', 'agent_id']);
         $inScope = $scope === null ? null : array_flip($scope);
+        // Devices bound to one of these agents are dark - the agent can't reach them - so a
+        // down reading is unreliable and belongs to the agent-down alert. Only computed when
+        // suppression is on.
+        $downAgentIds = $suppressDependent ? $this->downAgentIds() : [];
 
         /** @var array<int, DeviceStatus> $statusById */
         $statusById = [];
@@ -373,10 +417,32 @@ class EvaluateAlerts
             if ($suppressDependent && $hasDownAncestor($d->id)) {
                 continue;
             }
+            if ($suppressDependent && $d->agent_id !== null && isset($downAgentIds[$d->agent_id])) {
+                continue; // rolled up into the agent-down alert
+            }
             $out["device:{$d->id}"] = 'Device '.self::label($d->name, $d->mgmt_ip).' is down.';
         }
 
         return $out;
+    }
+
+    /**
+     * Set of agent ids currently down (heartbeat stale past the threshold), as an
+     * isset()-friendly map. Used to suppress device-down alerts for devices those agents
+     * poll - one agent-down alert stands in for the storm.
+     *
+     * @return array<int, true>
+     */
+    private function downAgentIds(): array
+    {
+        $ids = [];
+        foreach (Agent::whereNotNull('last_seen_at')->get(['id', 'last_seen_at', 'status']) as $agent) {
+            if ($agent->isDown()) {
+                $ids[$agent->id] = true;
+            }
+        }
+
+        return $ids;
     }
 
     /**

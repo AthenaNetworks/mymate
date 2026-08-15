@@ -18,6 +18,7 @@ enum AlertCondition: string
     case HighMetric = 'high_metric';       // a device metric (cpu/mem/temp) is at/over a threshold
     case ProbeDown = 'probe_down';         // a service probe (HTTP/TCP) is failing
     case ProbeSlow = 'probe_slow';         // a service probe's response time is over a threshold
+    case AgentDown = 'agent_down';         // a remote agent stopped heart-beating (its devices go dark)
 
     public function label(): string
     {
@@ -32,6 +33,7 @@ enum AlertCondition: string
             self::HighMetric => 'High device metric (CPU / memory / temperature)',
             self::ProbeDown => 'Service probe down (HTTP / TCP)',
             self::ProbeSlow => 'Service probe slow (high response time)',
+            self::AgentDown => 'Remote agent offline',
         };
     }
 }
