@@ -189,6 +189,13 @@ return [
         'cache_hours' => (int) env('MYMATE_UPDATE_CACHE_HOURS', 12),
     ],
 
+    // Authentication policy. The default for whether passkeys (WebAuthn) are mandatory; the live
+    // value is operator-editable (App\Support\AuthSettings, overrides this). Passkeys need a secure
+    // origin (HTTPS), so this only makes sense on an HTTPS instance.
+    'auth' => [
+        'passkey_required' => (bool) env('MYMATE_PASSKEY_REQUIRED', false),
+    ],
+
     // Device resource metrics - CPU / memory / temperature. Polled on their own
     // (slower) cadence than throughput; latest values cached on the device row and
     // trend samples appended to device_metric_samples. Off by env if you don't want it.

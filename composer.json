@@ -10,6 +10,7 @@
         "evilfreelancer/routeros-api-php": "^1.7",
         "laravel/framework": "^13.8",
         "laravel/horizon": "^5.47",
+        "laravel/passkeys": "^0.2.1",
         "laravel/reverb": "^1.10",
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^3.0"

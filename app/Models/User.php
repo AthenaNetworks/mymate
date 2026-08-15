@@ -7,17 +7,21 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Passkeys\Contracts\PasskeyUser;
+use Laravel\Passkeys\PasskeyAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
  * An operator account. Auth is Sanctum SPA (stateful cookie session);
  * `HasApiTokens` is kept for optional personal access tokens.  adds a single
  * `is_admin` tier: admins manage operator accounts, normal operators are view-only.
+ * Passkeys (WebAuthn) are supported via PasskeyAuthenticatable - an operator can add one
+ * as a second factor, and an admin can require them fleet-wide (see auth settings).
  */
-class User extends Authenticatable
+class User extends Authenticatable implements PasskeyUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, PasskeyAuthenticatable;
 
     // NOTE: `is_admin` is deliberately NOT fillable - the admin tier is a privilege, so
     // it's set explicitly in the controller *after* the admin gate, never from a mass-
@@ -39,6 +43,9 @@ class User extends Authenticatable
         'is_admin' => 'boolean',
         // Like is_admin, `restricted` is a privilege set explicitly after the admin gate.
         'restricted' => 'boolean',
+        // Excludes this operator from a mandatory-passkey requirement (eg a wallboard/kiosk
+        // account on a TV). Also a privilege - set explicitly after the admin gate, never fillable.
+        'passkey_exempt' => 'boolean',
     ];
 
     /** @var array<int>|null memoised per-request visibility sets */
