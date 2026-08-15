@@ -310,6 +310,14 @@ function InterfacesList({
                                     <SpeedTag iface={i} />
                                     <span className="w-10 shrink-0 text-right font-mono text-[11px] text-white/75">{compactRate(load)}</span>
                                 </div>
+                                {/* Operator-set port description (SNMP ifAlias / RouterOS comment). Only
+                                    shown when set - most ports have none. Sits under the name so you can
+                                    tell what a port is for beyond its ifName. */}
+                                {i.description ? (
+                                    <div className="truncate text-[10px] leading-tight text-white/40" title={i.description}>
+                                        {i.description}
+                                    </div>
+                                ) : null}
                                 <div className="h-1 overflow-hidden rounded-full bg-white/10">
                                     <div
                                         className="h-full rounded-full transition-all duration-500 ease-fluid"

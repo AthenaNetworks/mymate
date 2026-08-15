@@ -14,6 +14,10 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Interface descriptions show in the device inspector.** The operator-set port description
+  (SNMP ifAlias / RouterOS comment) was captured, stored and searchable, but the inspector's
+  interface list only ever rendered the port name, so all that context was invisible. It now
+  shows under the port name when set.
 - **Add/Edit device dialog is reachable on shorter screens.** The dialog had no height cap, so a
   tall device form (SNMP credential + location + icon grid + colours) ran off the bottom of the
   viewport with no way to scroll, leaving the Save button unreachable. It now caps at 85% of the
