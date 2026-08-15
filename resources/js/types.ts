@@ -1,5 +1,8 @@
 // Shared domain types mirroring the API resources (App\Http\Resources\*).
 
+/** What the SPA must do about passkeys right after a password login. */
+export type PasskeyStage = 'verified' | 'challenge' | 'enrol' | 'none';
+
 /** The signed-in operator. */
 export interface AuthUser {
     id: number;
@@ -7,6 +10,10 @@ export interface AuthUser {
     email: string;
     is_admin: boolean;
     restricted?: boolean; // GitHub #28: confined to granted maps
+    passkey_required?: boolean; // passkeys mandatory fleet-wide
+    has_passkey?: boolean;
+    passkey_exempt?: boolean;
+    passkey_stage?: PasskeyStage; // drives the post-login enrol / 2FA gate
 }
 
 /**
@@ -19,6 +26,7 @@ export interface Operator {
     is_admin: boolean;
     restricted?: boolean;
     map_ids?: number[];
+    passkey_exempt?: boolean; // excluded from a mandatory-passkey rule (wallboard/kiosk)
     email?: string;
     created_at?: string;
 }
