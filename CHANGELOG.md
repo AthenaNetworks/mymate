@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Add/Edit device dialog is reachable on shorter screens.** The dialog had no height cap, so a
+  tall device form (SNMP credential + location + icon grid + colours) ran off the bottom of the
+  viewport with no way to scroll, leaving the Save button unreachable. It now caps at 85% of the
+  screen height and scrolls. The link-history dialog got the same guard.
+
 ## [1.6.0] - 2026-08-15
 
 ### Added

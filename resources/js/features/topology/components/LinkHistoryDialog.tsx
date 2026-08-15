@@ -256,7 +256,7 @@ export function LinkHistoryDialog({
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
             <div className="animate-rise relative w-full max-w-xl rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                <div className="relative rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
+                <div className="relative max-h-[85vh] overflow-y-auto rounded-[calc(1.5rem-0.25rem)] bg-surface p-6 ring-1 ring-white/10">
                     {/* Close - pinned to the dialog\'s top-right corner, separate from the
                         tab/time controls so it always reads as "close the dialog". */}
                     <button
