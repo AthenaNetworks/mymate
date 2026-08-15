@@ -25,6 +25,26 @@ DATA=/var/lib/rusted
 SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO=sudo
 say() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 
+# Run a command as the app user. When we're root, $SUDO is empty, so `$SUDO -u user cmd`
+# would leave a dangling `-u` (bash then runs `-u` as a command). Drop privileges with
+# runuser instead; it's from util-linux (always present) but lives in sbin, which isn't
+# always on PATH, so resolve it explicitly. Only reach for sudo -u when we aren't root.
+run_as_app() {
+    if [ -n "$SUDO" ]; then
+        $SUDO -u "$APP_USER" "$@"
+        return
+    fi
+    local ru
+    ru="$(command -v runuser || true)"
+    [ -n "$ru" ] || { for c in /usr/sbin/runuser /sbin/runuser; do [ -x "$c" ] && ru="$c" && break; done; }
+    if [ -n "$ru" ]; then
+        "$ru" -u "$APP_USER" -- "$@"
+    else
+        # Fallback: su with a properly-quoted command string.
+        su -s /bin/sh "$APP_USER" -c "$(printf '%q ' "$@")"
+    fi
+}
+
 # --- 1. binary ---------------------------------------------------------------
 if [ -x "$BIN" ]; then
     say "rusted already installed at $BIN"
@@ -95,7 +115,7 @@ if [ -f "$APP_DIR/artisan" ]; then
     TOKEN="$($SUDO grep -oP '^\s*api_token\s*=\s*"\K[^"]+' "$CONFIG" || true)"
     if [ -n "$TOKEN" ]; then
         say "Configuring My Mate to use it (as ${APP_USER})"
-        $SUDO -u "$APP_USER" php "$APP_DIR/artisan" mymate:backup:configure \
+        run_as_app php "$APP_DIR/artisan" mymate:backup:configure \
             --url "http://${RUSTED_ADDR}" --token "$TOKEN"
     else
         echo "warning: couldn't read api_token from $CONFIG - set it in Settings manually." >&2

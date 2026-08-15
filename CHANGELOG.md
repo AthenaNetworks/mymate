@@ -13,6 +13,13 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Backup engine auto-provisioning no longer fails as root.** The rusted provision script wired
+  My Mate to the engine with `$SUDO -u <app-user> ...`, but on an install running as root `$SUDO`
+  is empty, so the `-u` was left dangling (`line 98: -u: command not found`) and setup bailed with
+  "backup engine setup failed". It now drops to the app user with runuser when already root. The
+  engine itself was installed and healthy - only the final "point My Mate at it" step was skipped.
+
 ### Added
 - **Links tidy themselves up (auto-attach).** A new toolbar toggle lets a link's ends float to
   whichever side of each card faces the other, re-picking as you drag cards around, so the map
