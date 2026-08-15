@@ -321,6 +321,14 @@ return [
         'timeout' => (int) env('MYMATE_ROUTEROS_TIMEOUT', 3), // seconds
     ],
 
+    // Remote agents (probes on a customer's management network). The hub pings each connected
+    // agent every 30s (AgentHubCommand::KEEPALIVE_SECONDS); this is how long we tolerate silence
+    // before the agent_down alert treats one as offline - three missed keepalives by default.
+    // Kept above the keepalive so a single dropped ping doesn't flap the alert. Floor 60s.
+    'agents' => [
+        'offline_after' => (int) env('MYMATE_AGENT_OFFLINE_AFTER', 90),
+    ],
+
     // Firmware upgrades. Ordered upgrades wait for each device to
     // come back online before upgrading its parent, so the path upstream is never cut.
     'upgrade' => [

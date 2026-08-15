@@ -49,6 +49,7 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'backup_failed', label: 'Config backup failed' },
     { value: 'probe_down', label: 'Service probe down (HTTP / TCP)' },
     { value: 'probe_slow', label: 'Service probe slow (high response time)' },
+    { value: 'agent_down', label: 'Remote agent offline' },
     { value: 'new_discovery', label: 'New device discovered' },
 ];
 
@@ -250,6 +251,14 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         down" instead.
                     </p>
                 </>
+            )}
+            {form.condition === 'agent_down' && (
+                <p className="px-1 text-[11px] text-white/35">
+                    Fires when a remote agent stops heart-beating, and resolves when it reconnects. One alert per
+                    agent, fleet-wide. While an agent is offline the devices it polls are rolled up into this alert
+                    rather than each raising its own "device down" (turn off "Suppress dependents" on the Device down
+                    policy to change that).
+                </p>
             )}
             {form.condition === 'backup_failed' && (
                 <p className="px-1 text-[11px] text-white/35">
