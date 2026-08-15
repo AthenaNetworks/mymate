@@ -154,6 +154,15 @@ function GetMyMate({ onNav }: { onNav: (o: Open) => void }) {
                     >
                         Documentation
                     </a>
+                    {/* API reference (Scalar) - a same-origin route, so relative + new tab. */}
+                    <a
+                        href="/api-docs"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl bg-white/[0.06] px-4 py-2.5 text-sm font-semibold text-white/80 ring-1 ring-white/10 transition hover:bg-white/10"
+                    >
+                        API reference
+                    </a>
                 </div>
             </div>
 

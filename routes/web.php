@@ -33,5 +33,27 @@ Route::get('/wall/{token}', function (string $token) {
         ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
 })->where('token', '[A-Za-z0-9]+')->name('wall.show');
 
+// Public API reference (Scalar). Surfaced only on the sales/demo instance - a real monitoring
+// instance 404s both the page and the spec. The spec lives outside public/ and is streamed here
+// so it can't be fetched on a non-demo box. Declared before the SPA catch-all.
+Route::prefix('api-docs')->group(function () {
+    Route::get('/', function () {
+        abort_unless((bool) config('mymate.demo.enabled'), 404);
+
+        return response(view('api-docs'))->header('Cache-Control', 'no-store');
+    })->name('api-docs');
+
+    Route::get('/openapi.yaml', function () {
+        abort_unless((bool) config('mymate.demo.enabled'), 404);
+        $spec = resource_path('api-docs/openapi.yaml');
+        abort_unless(is_file($spec), 404);
+
+        return response(file_get_contents($spec), 200, [
+            'Content-Type' => 'application/yaml; charset=utf-8',
+            'Cache-Control' => 'no-store',
+        ]);
+    })->name('api-docs.spec');
+});
+
 // SPA catch-all: any non-/api path returns the React shell so client-side routing works.
 Route::get('/{any}', $shell)->where('any', '^(?!api).*$');

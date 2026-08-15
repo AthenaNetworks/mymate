@@ -1,0 +1,2967 @@
+openapi: 3.1.0
+info:
+  title: My Mate API
+  version: "1.6.0"
+  summary: Programmatic access to the My Mate network monitor.
+  description: |
+    The **My Mate** REST API drives the same data the web console uses: devices, interfaces,
+    maps, links, alerts, backups, history and more. Anything you can do in the UI you can do
+    over this API.
+
+    ## Authentication
+
+    Send a **personal API key** as a bearer token:
+
+    ```http
+    Authorization: Bearer <your-api-key>
+    ```
+
+    Create a key in the console under **Settings → Account → API keys**. The plaintext key is
+    shown **once** on creation - store it then; only its hash is kept. Revoke a key any time.
+
+    A key authenticates *as the operator who created it*, so it inherits that operator's exact
+    access:
+
+    - an **admin** key can read and write everything;
+    - a **read-only operator** key can read but every write returns `403`;
+    - a **map-restricted operator** key only sees the maps and devices it was granted.
+
+    The browser SPA authenticates with a session cookie instead; both hit the same endpoints.
+
+    ## Permissions
+
+    All reads (`GET`) are open to any authenticated operator. Writes (`POST`/`PUT`/`PATCH`/`DELETE`)
+    are **admin-only**, except two self-service actions any operator may call: managing their own
+    **API keys** and changing their own **password**. A non-admin write returns:
+
+    ```json
+    { "message": "Read-only operator - an administrator must make this change." }
+    ```
+
+    ## Responses
+
+    Most endpoints wrap their payload in a `data` envelope - `{ "data": { ... } }` for a single
+    record, `{ "data": [ ... ] }` for a collection. A few hand-rolled endpoints return a bare
+    object; those are noted on the endpoint.
+
+    **Secrets are write-only.** Passwords, SNMP communities, API tokens and private keys are
+    accepted on write but never returned - a blank value on update keeps the stored secret.
+    Two endpoints return a plaintext secret exactly once: creating an **API key** and enrolling
+    an **agent**.
+
+    ## Errors
+
+    Standard HTTP status codes. `422` carries Laravel validation details:
+
+    ```json
+    { "message": "The mgmt ip field is required.", "errors": { "mgmt_ip": ["The mgmt ip field is required."] } }
+    ```
+
+    Some actions are rate-limited (noted per endpoint) and answer `429` when exceeded.
+  contact:
+    name: Athena Networks
+    url: https://github.com/AthenaNetworks/mymate
+  license:
+    name: MIT
+    url: https://github.com/AthenaNetworks/mymate/blob/main/LICENSE
+
+servers:
+  - url: /api
+    description: This instance
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Devices
+    description: The monitored fleet - create, poll, discover, upgrade.
+  - name: Interfaces
+    description: Per-port throughput and utilisation.
+  - name: History
+    description: Time-series samples for graphs.
+  - name: Probes
+    description: Per-device HTTP/TCP service checks.
+  - name: Sensors
+    description: Custom SNMP OID sensors.
+  - name: Backups
+    description: Device config backups (via the Rusted engine).
+  - name: Discovery
+    description: Auto-discovered devices awaiting review.
+  - name: Imports
+    description: Bulk import from The Dude or LibreNMS.
+  - name: Maps
+    description: Topology maps, placements, notes and shares.
+  - name: Links
+    description: Links between device interfaces.
+  - name: Sites
+    description: Physical locations devices sit at.
+  - name: Geo
+    description: Geographic map feeds.
+  - name: Alerts
+    description: Alert policies, events and delivery transports.
+  - name: Maintenance
+    description: Maintenance windows that mute alerting.
+  - name: Outages
+    description: Historical up/down outage records.
+  - name: Agents
+    description: Remote polling agents (probes).
+  - name: Credentials
+    description: SNMP / RouterOS / SSH logins (secrets write-only).
+  - name: Graphs
+    description: Saved multi-series charts.
+  - name: API keys
+    description: Personal bearer tokens (self-service).
+  - name: Account
+    description: Your own operator login.
+  - name: Settings
+    description: Engine, mail and backup-engine configuration.
+  - name: RouterOS
+    description: RouterOS upgrade package cache.
+  - name: System
+    description: Health and contact.
+
+x-tagGroups:
+  - name: Inventory
+    tags: [Devices, Interfaces, Sites]
+  - name: Topology
+    tags: [Maps, Links, Geo]
+  - name: Metrics & history
+    tags: [History, Probes, Sensors, Graphs]
+  - name: Alerting
+    tags: [Alerts, Maintenance, Outages]
+  - name: Operations
+    tags: [Backups, Discovery, Imports, RouterOS, Agents]
+  - name: Configuration
+    tags: [Credentials, Settings]
+  - name: Access
+    tags: ["API keys", Account]
+  - name: System
+    tags: [System]
+
+paths:
+  # ------------------------------------------------------------------ Devices
+  /devices:
+    get:
+      tags: [Devices]
+      summary: List devices
+      description: Every device, ordered by name, with effective geo coordinates resolved (own → site → uplink parent).
+      responses:
+        "200":
+          description: The fleet.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Device" }
+    post:
+      tags: [Devices]
+      summary: Create a device
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceCreate" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /devices/{device}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Devices]
+      summary: Show a device
+      responses:
+        "200":
+          description: The device.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Devices]
+      summary: Update a device
+      description: Admin only. All fields optional; send only what changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    patch:
+      tags: [Devices]
+      summary: Update a device
+      description: Alias of PUT; same body.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceUpdate" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+    delete:
+      tags: [Devices]
+      summary: Delete a device
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /devices/{device}/position:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    patch:
+      tags: [Devices]
+      summary: Save map position
+      description: Admin only. Updates the device's x/y on the topology map.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [map_x, map_y]
+              properties:
+                map_x: { type: number }
+                map_y: { type: number }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+  /devices/{device}/interfaces:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Interfaces]
+      summary: List a device's interfaces
+      responses:
+        "200":
+          description: Interfaces, ordered by ifIndex.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Interface" }
+  /devices/{device}/discover:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    post:
+      tags: [Devices]
+      summary: Queue interface discovery
+      description: Admin only. Dispatches an SNMP/RouterOS interface walk. Rate limited (10/min).
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /devices/{device}/provision-ssh-key:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    post:
+      tags: [Devices]
+      summary: Install an SSH key on a MikroTik
+      description: >
+        Admin only. Over the RouterOS API, installs a generated SSH key, stores it as the
+        device's SSH credential and switches backups to SSH. Rate limited (6/min).
+      responses:
+        "200":
+          description: Provisioned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  device: { $ref: "#/components/schemas/DeviceEnvelope" }
+                  ssh_port: { type: integer }
+                  ssh_enabled: { type: boolean }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /devices/{device}/trace:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    post:
+      tags: [Devices]
+      summary: Start a live MTR trace
+      description: Any operator. Traces to the device's own mgmt IP. Rate limited (20/min).
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rounds: { type: integer, minimum: 5, maximum: 120, default: 60 }
+      responses:
+        "202":
+          description: Trace started.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id: { type: string, format: uuid }
+                  status: { type: string, example: running }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /devices/{device}/trace/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Devices]
+      summary: Get a trace snapshot
+      responses:
+        "200":
+          description: Current hops.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TraceSnapshot" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Devices]
+      summary: Stop a trace
+      description: The operator who started it, or an admin.
+      responses:
+        "204": { description: Stopped. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /devices/{device}/icon:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Devices]
+      summary: Device product image
+      description: Cached MikroTik product photo (webp). 404 for non-MikroTik or unknown model.
+      responses:
+        "200":
+          description: Image.
+          content:
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /devices/upgrade/preflight:
+    post:
+      tags: [Devices]
+      summary: Dry-run an upgrade plan
+      description: Admin only. Returns downstream-first order and a per-device upgrade/skip decision, changing nothing. Rate limited (10/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpgradeRequest" }
+      responses:
+        "200":
+          description: The plan.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpgradePlan" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /devices/upgrade:
+    post:
+      tags: [Devices]
+      summary: Queue a firmware upgrade
+      description: Admin only. Marks the selected devices queued and dispatches the upgrade. Rate limited (10/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpgradeRequest" }
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queued: { type: integer }
+                  ordered: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ------------------------------------------------------------------ History
+  /interfaces/{interface}/samples:
+    parameters:
+      - name: interface
+        in: path
+        required: true
+        schema: { type: integer }
+      - $ref: "#/components/parameters/From"
+      - $ref: "#/components/parameters/To"
+    get:
+      tags: [History]
+      summary: Interface throughput series
+      responses:
+        "200":
+          description: Bucketed samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ThroughputSample" }
+  /devices/{device}/samples:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - $ref: "#/components/parameters/From"
+      - $ref: "#/components/parameters/To"
+    get:
+      tags: [History]
+      summary: Device total throughput series
+      responses:
+        "200":
+          description: Bucketed samples (summed across interfaces).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ThroughputSample" }
+  /devices/{device}/ping-samples:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - $ref: "#/components/parameters/From"
+      - $ref: "#/components/parameters/To"
+    get:
+      tags: [History]
+      summary: Device ping series (RTT / loss / jitter)
+      responses:
+        "200":
+          description: Bucketed ping samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PingSample" }
+  /devices/{device}/metric-samples:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - $ref: "#/components/parameters/From"
+      - $ref: "#/components/parameters/To"
+    get:
+      tags: [History]
+      summary: Device CPU / memory / temperature / wireless series
+      responses:
+        "200":
+          description: Bucketed metric samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MetricSample" }
+  /devices/{device}/sensors:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Sensors]
+      summary: Current sensor readings for a device
+      responses:
+        "200":
+          description: Latest value of each enabled sensor with a reading.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sensor_id: { type: integer }
+                        name: { type: string }
+                        unit: { type: string, nullable: true }
+                        value: { type: number, nullable: true }
+                        read_at: { type: string }
+  /devices/{device}/sensors/{sensor}/samples:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - name: sensor
+        in: path
+        required: true
+        schema: { type: integer }
+      - $ref: "#/components/parameters/From"
+      - $ref: "#/components/parameters/To"
+    get:
+      tags: [Sensors]
+      summary: Custom sensor series
+      responses:
+        "200":
+          description: Bucketed sensor samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts: { type: string }
+                        value: { type: number, nullable: true }
+
+  # ------------------------------------------------------------------ Probes
+  /devices/{device}/probes:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Probes]
+      summary: List a device's probes
+      responses:
+        "200":
+          description: Probes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Probe" }
+    post:
+      tags: [Probes]
+      summary: Create a probe
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProbeWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Probe" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /probes/{probe}:
+    parameters:
+      - name: probe
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [Probes]
+      summary: Update a probe
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProbeWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Probe" } }
+    delete:
+      tags: [Probes]
+      summary: Delete a probe
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /probes/{probe}/test:
+    parameters: [ { name: probe, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Probes]
+      summary: Run a probe once now
+      description: Admin only. Runs the check immediately and stores the result. Rate limited (20/min).
+      responses:
+        "200":
+          description: Result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      up: { type: boolean }
+                      latency_ms: { type: number, nullable: true }
+                      message: { type: string, nullable: true }
+                      cert_expires_at: { type: string, nullable: true }
+  /probes/{probe}/samples:
+    parameters: [ { name: probe, in: path, required: true, schema: { type: integer } } ]
+    get:
+      tags: [Probes]
+      summary: Probe status/latency history (24h)
+      responses:
+        "200":
+          description: Samples.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ts: { type: string }
+                        up: { type: boolean }
+                        latency_ms: { type: number, nullable: true }
+
+  # ------------------------------------------------------------------ Sensors
+  /sensors:
+    get:
+      tags: [Sensors]
+      summary: List sensors
+      responses:
+        "200":
+          description: Sensors.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Sensor" }
+    post:
+      tags: [Sensors]
+      summary: Create a sensor
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SensorWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Sensor" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /sensors/{sensor}:
+    parameters: [ { name: sensor, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Sensors]
+      summary: Update a sensor
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SensorWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Sensor" } }
+    delete:
+      tags: [Sensors]
+      summary: Delete a sensor
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+
+  # ------------------------------------------------------------------ Backups
+  /devices/{device}/backup-config:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    put:
+      tags: [Backups]
+      summary: Enable/disable device backups
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [backup_enabled]
+              properties:
+                backup_enabled: { type: boolean }
+                backup_driver: { type: string, nullable: true, description: "Rusted driver; auto-resolved when null." }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /devices/{device}/backups:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Backups]
+      summary: Backup history
+      description: Proxied live from the Rusted engine, newest first; empty when unconfigured.
+      responses:
+        "200":
+          description: History.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+    post:
+      tags: [Backups]
+      summary: Back up this device now
+      description: Admin only. Rate limited (10/min).
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /devices/{device}/backups/latest:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Backups]
+      summary: Latest stored config text
+      responses:
+        "200":
+          description: Config.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties: { config: { type: string, nullable: true } }
+  /devices/{device}/backups/versions:
+    parameters: [ { $ref: "#/components/parameters/DeviceId" } ]
+    get:
+      tags: [Backups]
+      summary: Config version history (git log)
+      responses:
+        "200":
+          description: Versions, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { type: object } }
+  /devices/{device}/backups/config:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - name: commit
+        in: query
+        schema: { type: string }
+        description: Commit hash; omit for the latest.
+    get:
+      tags: [Backups]
+      summary: Config at a commit
+      responses:
+        "200":
+          description: Config.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties: { config: { type: string, nullable: true } }
+  /devices/{device}/backups/diff:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - name: from
+        in: query
+        schema: { type: string }
+        description: Commit hash. Alone, shows what that backup changed.
+      - name: to
+        in: query
+        schema: { type: string }
+    get:
+      tags: [Backups]
+      summary: Config diff
+      responses:
+        "200":
+          description: Unified diff.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties: { diff: { type: string, nullable: true } }
+  /backups/run-all:
+    post:
+      tags: [Backups]
+      summary: Queue backups for every enabled device
+      description: Admin only. Rate limited (6/min).
+      responses:
+        "202":
+          description: Queued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { queued: { type: integer } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # ------------------------------------------------------------------ Discovery
+  /discovery-candidates:
+    get:
+      tags: [Discovery]
+      summary: List discovery candidates
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [new, approved, ignored] }
+      responses:
+        "200":
+          description: Candidates, newest-seen first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/DiscoveryCandidate" }
+  /discovery-candidates/{candidate}/approve:
+    parameters: [ { name: candidate, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Discovery]
+      summary: Approve a candidate into a device
+      description: Admin only.
+      responses:
+        "201":
+          description: The new device.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceEnvelope" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /discovery-candidates/{candidate}/ignore:
+    parameters: [ { name: candidate, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Discovery]
+      summary: Ignore a candidate
+      description: Admin only.
+      responses:
+        "200":
+          description: Updated candidate.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/DiscoveryCandidate" } }
+
+  # ------------------------------------------------------------------ Imports
+  /imports:
+    get:
+      tags: [Imports]
+      summary: List import runs
+      responses:
+        "200":
+          description: 25 most recent runs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ImportRun" }
+    post:
+      tags: [Imports]
+      summary: Upload a dude.db and start an import
+      description: Admin only. Multipart upload of a MikroTik "The Dude" SQLite database.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [database, mode]
+              properties:
+                database: { type: string, format: binary }
+                mode: { type: string, enum: [upsert, fresh] }
+                include_history: { type: boolean, default: true }
+                extract_timeout: { type: integer, minimum: 60, maximum: 14400, nullable: true }
+      responses:
+        "200":
+          description: The run (poll it for progress).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/ImportRun" } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /imports/{import}:
+    parameters: [ { name: import, in: path, required: true, schema: { type: integer } } ]
+    get:
+      tags: [Imports]
+      summary: Show an import run (poll progress)
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/ImportRun" } }
+  /imports/{import}/cancel:
+    parameters: [ { name: import, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Imports]
+      summary: Cancel an import
+      description: Admin only.
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/ImportRun" } }
+  /imports/librenms/preview:
+    post:
+      tags: [Imports]
+      summary: Preview a LibreNMS import
+      description: Admin only. Dry-runs the connection and returns the devices/maps found. Rate limited (20/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LibreNmsConnection" }
+      responses:
+        "200":
+          description: Preview.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      driver: { type: string }
+                      device_count: { type: integer }
+                      with_community: { type: integer }
+                      devices: { type: array, items: { type: object } }
+                      maps:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            node_count: { type: integer }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /imports/librenms:
+    post:
+      tags: [Imports]
+      summary: Run a LibreNMS import
+      description: Admin only. Creates devices and optionally maps/credentials. Rate limited (10/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/LibreNmsConnection"
+                - type: object
+                  properties:
+                    import_credentials: { type: boolean }
+                    import_maps: { type: boolean }
+                    include_disabled: { type: boolean }
+                    credential_id: { type: integer, nullable: true }
+      responses:
+        "200":
+          description: Import summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: object } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # ------------------------------------------------------------------ Maps
+  /maps:
+    get:
+      tags: [Maps]
+      summary: List maps
+      responses:
+        "200":
+          description: Maps, each with a device_count.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Map" } }
+    post:
+      tags: [Maps]
+      summary: Create a map
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MapWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Map" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /maps/{map}:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    get:
+      tags: [Maps]
+      summary: Map render payload
+      description: Placements, inter-map portals, child maps, links and notes.
+      responses:
+        "200":
+          description: The map detail.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MapDetail" } }
+    put:
+      tags: [Maps]
+      summary: Update a map
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MapWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Map" } }
+    delete:
+      tags: [Maps]
+      summary: Delete a map
+      description: Admin only. The default map cannot be deleted (422).
+      responses:
+        "204": { description: Deleted. }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /maps/import:
+    post:
+      tags: [Maps]
+      summary: Rebuild a map from an exported snapshot
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [map]
+              properties:
+                version: { type: integer, nullable: true }
+                map:
+                  type: object
+                  required: [name]
+                  properties: { name: { type: string } }
+                devices: { type: array, items: { type: object } }
+                links: { type: array, items: { type: object } }
+                notes: { type: array, items: { type: object } }
+                child_maps: { type: array, items: { type: object } }
+                map_links: { type: array, items: { type: object } }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+  /maps/{map}/export:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    get:
+      tags: [Maps]
+      summary: Export a map as a portable JSON snapshot
+      description: Secret-free; served as a file download. Bare object (no data envelope).
+      responses:
+        "200":
+          description: The snapshot.
+          content:
+            application/json:
+              schema: { type: object }
+  /maps/{map}/devices:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    post:
+      tags: [Maps]
+      summary: Place a device on a map
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id]
+              properties:
+                device_id: { type: integer }
+                x: { type: number, default: 0 }
+                y: { type: number, default: 0 }
+      responses:
+        "201":
+          description: Placed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+  /maps/{map}/devices/{device}:
+    parameters:
+      - $ref: "#/components/parameters/MapId"
+      - $ref: "#/components/parameters/DeviceId"
+    delete:
+      tags: [Maps]
+      summary: Remove a device from a map
+      description: Admin only.
+      responses:
+        "204": { description: Removed. }
+  /maps/{map}/positions/{device}:
+    parameters:
+      - $ref: "#/components/parameters/MapId"
+      - $ref: "#/components/parameters/DeviceId"
+    patch:
+      tags: [Maps]
+      summary: Save a device's position on a map
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [x, y]
+              properties: { x: { type: number }, y: { type: number } }
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+  /maps/{map}/notes:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    post:
+      tags: [Maps]
+      summary: Add a note to a map
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MapNoteWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MapNote" } }
+  /maps/{map}/notes/{mapNote}:
+    parameters:
+      - $ref: "#/components/parameters/MapId"
+      - name: mapNote
+        in: path
+        required: true
+        schema: { type: integer }
+    patch:
+      tags: [Maps]
+      summary: Update a note
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MapNoteWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MapNote" } }
+    delete:
+      tags: [Maps]
+      summary: Delete a note
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /maps/{map}/shares:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    get:
+      tags: [Maps]
+      summary: List public wallboard share links
+      responses:
+        "200":
+          description: Shares.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Share" } }
+    post:
+      tags: [Maps]
+      summary: Mint a wallboard share link
+      description: Admin only. Returns a no-login, read-only URL for this map.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { label: { type: string, nullable: true, maxLength: 120 } }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Share" } }
+  /maps/{map}/shares/{share}:
+    parameters:
+      - $ref: "#/components/parameters/MapId"
+      - name: share
+        in: path
+        required: true
+        schema: { type: integer }
+    patch:
+      tags: [Maps]
+      summary: Enable/disable or relabel a share
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label: { type: string, nullable: true, maxLength: 120 }
+                enabled: { type: boolean }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Share" } }
+    delete:
+      tags: [Maps]
+      summary: Revoke a share
+      description: Admin only.
+      responses:
+        "204": { description: Revoked. }
+  /map-config:
+    get:
+      tags: [Maps]
+      summary: Geo tile / map configuration
+      responses:
+        "200":
+          description: Config.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      enabled: { type: boolean }
+                      tile_url: { type: string }
+                      attribution: { type: string }
+                      geocoder_enabled: { type: boolean }
+
+  # ------------------------------------------------------------------ Links
+  /links:
+    get:
+      tags: [Links]
+      summary: List links
+      responses:
+        "200":
+          description: Links, with nested interfaces.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Link" } }
+    post:
+      tags: [Links]
+      summary: Create a link
+      description: Admin only. A link joins two devices, optionally on specific interfaces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LinkWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Link" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /links/{link}:
+    parameters: [ { name: link, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Links]
+      summary: Update / re-bind a link
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LinkWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Link" } }
+    delete:
+      tags: [Links]
+      summary: Delete a link
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+
+  # ------------------------------------------------------------------ Sites
+  /sites:
+    get:
+      tags: [Sites]
+      summary: List sites
+      responses:
+        "200":
+          description: Sites, with device counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Site" } }
+    post:
+      tags: [Sites]
+      summary: Create a site
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteWrite" }
+      responses:
+        "200":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: "#/components/schemas/Site" }
+                  created: { type: boolean, example: true }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /sites/{site}:
+    parameters: [ { name: site, in: path, required: true, schema: { type: integer } } ]
+    get:
+      tags: [Sites]
+      summary: Show a site
+      responses:
+        "200":
+          description: The site.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Site" } }
+    put:
+      tags: [Sites]
+      summary: Update a site
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SiteWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Site" } }
+    delete:
+      tags: [Sites]
+      summary: Delete a site
+      description: Admin only. Devices keep their own pins; their site link is cleared.
+      responses:
+        "204": { description: Deleted. }
+
+  # ------------------------------------------------------------------ Geo
+  /geo/devices:
+    get:
+      tags: [Geo]
+      summary: Placed-device feed
+      description: Compact feed of monitored, geo-placed devices.
+      responses:
+        "200":
+          description: Devices.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/GeoDevice" }
+  /geo/backhauls:
+    get:
+      tags: [Geo]
+      summary: Site-to-site backhaul feed
+      responses:
+        "200":
+          description: Backhauls. Coordinates are [lng, lat].
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/GeoBackhaul" }
+  /geocode:
+    get:
+      tags: [Geo]
+      summary: Geocode an address
+      description: Rate limited (30/min).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Best match, or null.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    nullable: true
+                    properties:
+                      lat: { type: number }
+                      lng: { type: number }
+                      label: { type: string }
+
+  # ------------------------------------------------------------------ Alerts
+  /alert-policies:
+    get:
+      tags: [Alerts]
+      summary: List alert policies
+      responses:
+        "200":
+          description: Policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AlertPolicy" } }
+    post:
+      tags: [Alerts]
+      summary: Create an alert policy
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertPolicyWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/AlertPolicy" } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /alert-policies/{alert_policy}:
+    parameters: [ { name: alert_policy, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Alerts]
+      summary: Update an alert policy
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertPolicyWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/AlertPolicy" } }
+    delete:
+      tags: [Alerts]
+      summary: Delete an alert policy
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /alert-events:
+    get:
+      tags: [Alerts]
+      summary: Recent alert events
+      description: Up to 200 fired/resolved events, newest first.
+      responses:
+        "200":
+          description: Events.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AlertEvent" } }
+  /alert-events/{alertEvent}/ack:
+    parameters: [ { name: alertEvent, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Alerts]
+      summary: Toggle acknowledgement
+      description: Admin only. Acks an event, or clears the ack if already acked.
+      responses:
+        "200":
+          description: The event.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/AlertEvent" } }
+  /alert-transports:
+    get:
+      tags: [Alerts]
+      summary: List alert transports
+      responses:
+        "200":
+          description: Transports (config/secrets never returned).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AlertTransport" } }
+    post:
+      tags: [Alerts]
+      summary: Create an alert transport
+      description: Admin only. The type-specific fields are stored encrypted and never returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertTransportWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/AlertTransport" } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /alert-transports/{alert_transport}:
+    parameters: [ { name: alert_transport, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Alerts]
+      summary: Update an alert transport
+      description: Admin only. Blank secret fields keep the stored config.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AlertTransportWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/AlertTransport" } }
+    delete:
+      tags: [Alerts]
+      summary: Delete an alert transport
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /alert-transports/{transport}/test:
+    parameters: [ { name: transport, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Alerts]
+      summary: Send a test alert
+      description: Admin only. Rate limited (6/min).
+      responses:
+        "200":
+          description: Delivered.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "422":
+          description: Delivery failed.
+
+  # ------------------------------------------------------------ Maintenance
+  /maintenance-windows:
+    get:
+      tags: [Maintenance]
+      summary: List maintenance windows
+      responses:
+        "200":
+          description: Windows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/MaintenanceWindow" } }
+    post:
+      tags: [Maintenance]
+      summary: Create a maintenance window
+      description: Admin only. Mutes alerting for the scoped devices during the window.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaintenanceWindowWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MaintenanceWindow" } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /maintenance-windows/{maintenance_window}:
+    parameters: [ { name: maintenance_window, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Maintenance]
+      summary: Update a maintenance window
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MaintenanceWindowWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MaintenanceWindow" } }
+    delete:
+      tags: [Maintenance]
+      summary: Delete a maintenance window
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /outages:
+    get:
+      tags: [Outages]
+      summary: Outage timeline
+      description: Up to 500 outages, newest first.
+      parameters:
+        - name: device_id
+          in: query
+          schema: { type: integer }
+        - name: state
+          in: query
+          schema: { type: string, enum: [open, closed] }
+      responses:
+        "200":
+          description: Outages.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Outage" } }
+
+  # ------------------------------------------------------------------ Agents
+  /agents:
+    get:
+      tags: [Agents]
+      summary: List remote agents
+      responses:
+        "200":
+          description: Agents, with device/subnet counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Agent" } }
+    post:
+      tags: [Agents]
+      summary: Enrol a remote agent
+      description: Admin only. Returns the plaintext connection token exactly once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string, maxLength: 255 } }
+      responses:
+        "201":
+          description: Enrolled.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent:
+                    type: object
+                    properties: { data: { $ref: "#/components/schemas/Agent" } }
+                  token: { type: string, description: "Plaintext, shown once." }
+  /agents/{agent}:
+    parameters: [ { name: agent, in: path, required: true, schema: { type: integer } } ]
+    delete:
+      tags: [Agents]
+      summary: Remove an agent
+      description: Admin only. Its devices revert to central polling.
+      responses:
+        "204": { description: Removed. }
+
+  # ------------------------------------------------------------ Credentials
+  /credentials:
+    get:
+      tags: [Credentials]
+      summary: List credentials
+      description: Secrets are never returned - only has_secret / has_private_key.
+      responses:
+        "200":
+          description: Credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Credential" } }
+    post:
+      tags: [Credentials]
+      summary: Create a credential
+      description: Admin only. Secret fields depend on type.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Credential" } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /credentials/{credential}:
+    parameters: [ { name: credential, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Credentials]
+      summary: Update a credential
+      description: Admin only. Blank secret fields keep the stored value.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CredentialWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Credential" } }
+    delete:
+      tags: [Credentials]
+      summary: Delete a credential
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+
+  # ------------------------------------------------------------------ Graphs
+  /graphs:
+    get:
+      tags: [Graphs]
+      summary: List saved graphs
+      responses:
+        "200":
+          description: Graphs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Graph" } }
+    post:
+      tags: [Graphs]
+      summary: Create a graph
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GraphWrite" }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Graph" } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /graphs/{graph}:
+    parameters: [ { name: graph, in: path, required: true, schema: { type: integer } } ]
+    put:
+      tags: [Graphs]
+      summary: Update a graph
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GraphWrite" }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/Graph" } }
+    delete:
+      tags: [Graphs]
+      summary: Delete a graph
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+  /graphs/{graph}/data:
+    parameters:
+      - name: graph
+        in: path
+        required: true
+        schema: { type: integer }
+      - name: range
+        in: query
+        schema: { type: string, enum: ["1h", "6h", "24h", "7d", "30d"], default: "24h" }
+    get:
+      tags: [Graphs]
+      summary: Graph time series
+      responses:
+        "200":
+          description: Aligned per-series data.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      buckets: { type: array, items: { type: string } }
+                      metric: { type: string, enum: [rate, util] }
+                      series: { type: array, items: { type: object } }
+                      total: { type: object, nullable: true }
+
+  # ----------------------------------------------------------------- API keys
+  /api-tokens:
+    get:
+      tags: [API keys]
+      summary: List my API keys
+      description: Your own keys, metadata only. Self-service.
+      responses:
+        "200":
+          description: Keys (bare array, no data envelope).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ApiToken" }
+    post:
+      tags: [API keys]
+      summary: Create an API key
+      description: Self-service. Returns the plaintext key exactly once. Rate limited (10/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string, maxLength: 60 } }
+      responses:
+        "201":
+          description: Created - copy the token now.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  token: { type: string, description: "Plaintext, shown once." }
+  /api-tokens/{id}:
+    parameters: [ { name: id, in: path, required: true, schema: { type: integer } } ]
+    delete:
+      tags: [API keys]
+      summary: Revoke an API key
+      description: Self-service; scoped to your own keys.
+      responses:
+        "204": { description: Revoked. }
+
+  # ------------------------------------------------------------------ Account
+  /account/password:
+    put:
+      tags: [Account]
+      summary: Change my password
+      description: Self-service. Rate limited (6/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, password, password_confirmation]
+              properties:
+                current_password: { type: string, format: password }
+                password: { type: string, format: password, description: "10+ chars, mixed case, a number." }
+                password_confirmation: { type: string, format: password }
+      responses:
+        "204": { description: Changed. }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # ----------------------------------------------------------------- Settings
+  /settings:
+    get:
+      tags: [Settings]
+      summary: Get engine tunables
+      responses:
+        "200":
+          description: Tunables with their allowed ranges.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        value: { type: integer }
+                        label: { type: string }
+                        min: { type: integer }
+                        max: { type: integer }
+    put:
+      tags: [Settings]
+      summary: Update engine tunables
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [settings]
+              properties:
+                settings:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [key, value]
+                    properties:
+                      key: { type: string, enum: ["ping.interval", "poll.interval", "poll.discover_interval", "discovery.check_interval", "history.retention_days"] }
+                      value: { type: integer }
+      responses:
+        "200":
+          description: Effective settings.
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /settings/mail:
+    get:
+      tags: [Settings]
+      summary: Get SMTP settings
+      responses:
+        "200":
+          description: Settings (password never returned).
+    put:
+      tags: [Settings]
+      summary: Update SMTP settings
+      description: Admin only. Blank password keeps the stored one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [host, port, encryption, from_address]
+              properties:
+                host: { type: string }
+                port: { type: integer, minimum: 1, maximum: 65535 }
+                encryption: { type: string, enum: [tls, ssl, none] }
+                username: { type: string, nullable: true }
+                password: { type: string, format: password, nullable: true }
+                from_address: { type: string, format: email }
+                from_name: { type: string, nullable: true }
+      responses:
+        "200": { description: Updated. }
+  /settings/mail/test:
+    post:
+      tags: [Settings]
+      summary: Send a test email
+      description: Admin only. Rate limited (6/min).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties: { to: { type: string, format: email } }
+      responses:
+        "200":
+          description: Sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+        "422": { description: Send failed. }
+  /settings/backup:
+    get:
+      tags: [Settings]
+      summary: Get backup-engine settings
+      responses:
+        "200": { description: Settings (token/password never returned). }
+    put:
+      tags: [Settings]
+      summary: Update backup-engine settings
+      description: Admin only. Blank secrets keep stored values.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [api_url]
+              properties:
+                api_url: { type: string, format: uri }
+                timeout: { type: integer, minimum: 5, maximum: 600, nullable: true }
+                api_token: { type: string, nullable: true }
+                ssh_username: { type: string, nullable: true }
+                ssh_password: { type: string, format: password, nullable: true }
+      responses:
+        "200": { description: Updated. }
+  /settings/backup/test:
+    post:
+      tags: [Settings]
+      summary: Test backup-engine reachability
+      description: Admin only. Rate limited (6/min).
+      responses:
+        "200":
+          description: Reachability.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean } }
+        "422": { description: Not configured. }
+  /settings/backup-schedule:
+    get:
+      tags: [Settings]
+      summary: Get the backup schedule
+      responses:
+        "200": { description: Schedule. }
+    put:
+      tags: [Settings]
+      summary: Update the backup schedule
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [enabled, frequency, hour, weekday]
+              properties:
+                enabled: { type: boolean }
+                frequency: { type: string, enum: [hourly, every_6h, every_12h, daily, weekly] }
+                hour: { type: integer, minimum: 0, maximum: 23 }
+                weekday: { type: integer, minimum: 0, maximum: 6, description: "0 = Sunday." }
+      responses:
+        "200": { description: Updated. }
+
+  # ----------------------------------------------------------------- RouterOS
+  /routeros/catalog:
+    get:
+      tags: [RouterOS]
+      summary: RouterOS upgrade catalog
+      responses:
+        "200":
+          description: Channels, arches, retention and cached packages.
+  /routeros/packages:
+    post:
+      tags: [RouterOS]
+      summary: Cache a RouterOS package
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version, arch]
+              properties:
+                version: { type: string, pattern: '^\d+\.\d+(\.\d+)?$' }
+                arch: { type: string }
+                channel: { type: string, nullable: true }
+      responses:
+        "202":
+          description: Caching.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/RouterosPackage" } }
+  /routeros/packages/{package}:
+    parameters: [ { name: package, in: path, required: true, schema: { type: integer } } ]
+    delete:
+      tags: [RouterOS]
+      summary: Delete a cached package
+      description: Admin only.
+      responses:
+        "204": { description: Deleted. }
+
+  # ------------------------------------------------------------------ System
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness / readiness probe
+      description: No auth required. Checks Postgres and Redis.
+      security: []
+      responses:
+        "200":
+          description: Healthy.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "503":
+          description: Degraded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+  /contact:
+    post:
+      tags: [System]
+      summary: Contact sales
+      description: No auth required. Logs a lead and best-effort emails the sales address. Rate limited (5/min).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, message]
+              properties:
+                name: { type: string, maxLength: 120 }
+                email: { type: string, format: email, maxLength: 190 }
+                company: { type: string, nullable: true, maxLength: 190 }
+                message: { type: string, maxLength: 4000 }
+      responses:
+        "200":
+          description: Received.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ok" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Personal API key. Create one under Settings → Account → API keys.
+
+  parameters:
+    DeviceId:
+      name: device
+      in: path
+      required: true
+      description: Device id.
+      schema: { type: integer }
+    MapId:
+      name: map
+      in: path
+      required: true
+      description: Map id.
+      schema: { type: integer }
+    From:
+      name: from
+      in: query
+      description: Start of the window (ISO 8601). Defaults to one hour before `to`.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      description: End of the window (ISO 8601). Defaults to now.
+      schema: { type: string, format: date-time }
+
+  responses:
+    Forbidden:
+      description: Read-only operator - an admin must make this change.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Validation failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+    ValidationError:
+      type: object
+      properties:
+        message: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    Ok:
+      type: object
+      properties:
+        ok: { type: boolean, example: true }
+
+    Device:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        mgmt_ip: { type: string, nullable: true }
+        poll_method: { type: string, enum: [snmp, routeros, none] }
+        monitored: { type: boolean }
+        status: { type: string, enum: [up, down, unknown] }
+        last_change: { type: string, format: date-time, nullable: true }
+        map_x: { type: number, nullable: true }
+        map_y: { type: number, nullable: true }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+        geo_source: { type: string, nullable: true, enum: [manual, address, snmp, null] }
+        site_id: { type: integer, nullable: true }
+        site_name: { type: string, nullable: true }
+        geo_latitude: { type: number, nullable: true }
+        geo_longitude: { type: number, nullable: true }
+        geo_inherited: { type: boolean }
+        credential_id: { type: integer, nullable: true }
+        ssh_credential_id: { type: integer, nullable: true }
+        routeros_credential_id: { type: integer, nullable: true }
+        agent_id: { type: integer, nullable: true }
+        device_type: { type: string, enum: [router, switch, ap, server, internet, unknown] }
+        icon: { type: string, nullable: true }
+        icon_color: { type: string, nullable: true }
+        parent_device_id: { type: integer, nullable: true }
+        parent_name: { type: string, nullable: true }
+        vendor: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        serial: { type: string, nullable: true }
+        os_version: { type: string, nullable: true }
+        latest_version: { type: string, nullable: true }
+        up_to_date: { type: boolean }
+        upgrade_status: { type: string, nullable: true }
+        uptime_seconds: { type: integer, nullable: true }
+        cpu_pct: { type: number, nullable: true }
+        mem_used_pct: { type: number, nullable: true }
+        temp_c: { type: number, nullable: true }
+        signal_dbm: { type: number, nullable: true }
+        snr_db: { type: number, nullable: true }
+        wireless_clients: { type: integer, nullable: true }
+        ospf_neighbors: { type: integer, nullable: true }
+        rtt_ms: { type: number, nullable: true }
+        loss_pct: { type: number, nullable: true }
+        ping_at: { type: string, format: date-time, nullable: true }
+        backup_enabled: { type: boolean }
+        backup_driver: { type: string, nullable: true }
+        backup_status: { type: string, nullable: true, enum: [pending, ok, unchanged, failed, null] }
+        backup_at: { type: string, format: date-time, nullable: true }
+        discovery_error: { type: string, nullable: true }
+        discovered_at: { type: string, format: date-time, nullable: true }
+    DeviceEnvelope:
+      type: object
+      properties:
+        data: { $ref: "#/components/schemas/Device" }
+    DeviceCreate:
+      type: object
+      required: [name, mgmt_ip, poll_method]
+      properties:
+        name: { type: string, maxLength: 255 }
+        mgmt_ip: { type: string, maxLength: 45, description: "Unique, valid IP." }
+        poll_method: { type: string, enum: [snmp, routeros, none] }
+        credential_id: { type: integer, nullable: true }
+        ssh_credential_id: { type: integer, nullable: true }
+        routeros_credential_id: { type: integer, nullable: true }
+        agent_id: { type: integer, nullable: true }
+        device_type: { type: string, enum: [router, switch, ap, server, internet, unknown] }
+        parent_device_id: { type: integer, nullable: true }
+        map_x: { type: number, nullable: true }
+        map_y: { type: number, nullable: true }
+    DeviceUpdate:
+      type: object
+      description: All fields optional.
+      properties:
+        name: { type: string, maxLength: 255 }
+        mgmt_ip: { type: string, maxLength: 45 }
+        poll_method: { type: string, enum: [snmp, routeros, none] }
+        monitored: { type: boolean }
+        credential_id: { type: integer, nullable: true }
+        ssh_credential_id: { type: integer, nullable: true }
+        routeros_credential_id: { type: integer, nullable: true }
+        agent_id: { type: integer, nullable: true }
+        device_type: { type: string, enum: [router, switch, ap, server, internet, unknown] }
+        icon: { type: string, nullable: true, maxLength: 40 }
+        icon_color: { type: string, nullable: true, pattern: '^#[0-9a-fA-F]{6}$' }
+        vendor: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        site_id: { type: integer, nullable: true }
+        latitude: { type: number, nullable: true, minimum: -90, maximum: 90 }
+        longitude: { type: number, nullable: true, minimum: -180, maximum: 180 }
+        parent_device_id: { type: integer, nullable: true }
+        latency_good_ms: { type: integer, nullable: true }
+        latency_bad_ms: { type: integer, nullable: true }
+
+    Interface:
+      type: object
+      properties:
+        id: { type: integer }
+        device_id: { type: integer }
+        if_index: { type: integer, nullable: true }
+        name: { type: string }
+        description: { type: string, nullable: true, description: "Operator-set port description (SNMP ifAlias / RouterOS comment)." }
+        speed_mbps: { type: integer, nullable: true }
+        ospf_cost: { type: integer, nullable: true }
+        util_in: { type: number, nullable: true }
+        util_out: { type: number, nullable: true }
+        bps_in: { type: integer, nullable: true }
+        bps_out: { type: integer, nullable: true }
+
+    ThroughputSample:
+      type: object
+      properties:
+        ts: { type: string }
+        util_in: { type: number, nullable: true }
+        util_out: { type: number, nullable: true }
+        bps_in: { type: number, nullable: true }
+        bps_out: { type: number, nullable: true }
+    PingSample:
+      type: object
+      properties:
+        ts: { type: string }
+        rtt_ms: { type: number, nullable: true }
+        loss_pct: { type: number, nullable: true }
+        jitter_ms: { type: number, nullable: true }
+    MetricSample:
+      type: object
+      properties:
+        ts: { type: string }
+        cpu_pct: { type: number, nullable: true }
+        mem_used_pct: { type: number, nullable: true }
+        temp_c: { type: number, nullable: true }
+        signal_dbm: { type: number, nullable: true }
+        snr_db: { type: number, nullable: true }
+        ccq_pct: { type: number, nullable: true }
+        wireless_clients: { type: number, nullable: true }
+        ospf_neighbors: { type: number, nullable: true }
+
+    TraceSnapshot:
+      type: object
+      properties:
+        run_id: { type: string }
+        status: { type: string }
+        target: { type: string }
+        rounds_total: { type: integer }
+        rounds_done: { type: integer }
+        error: { type: string, nullable: true }
+        hops: { type: array, items: { type: object } }
+
+    UpgradeRequest:
+      type: object
+      required: [device_ids]
+      properties:
+        device_ids: { type: array, minItems: 1, items: { type: integer } }
+        ordered: { type: boolean }
+        explicit_order: { type: boolean }
+        preserve_order: { type: boolean }
+        version: { type: string, nullable: true, pattern: '^\d+\.\d+(\.\d+)?$' }
+        source: { type: string, enum: [mikrotik, mirror] }
+    UpgradePlan:
+      type: object
+      properties:
+        order: { type: array, items: { type: integer } }
+        upgrade: { type: array, items: { type: integer } }
+        plan:
+          type: array
+          items:
+            type: object
+            properties:
+              device_id: { type: integer }
+              name: { type: string }
+              action: { type: string, enum: [upgrade, skip] }
+              reason: { type: string, nullable: true }
+              status: { type: string }
+              depth: { type: integer }
+              os_version: { type: string, nullable: true }
+              latest_version: { type: string, nullable: true }
+              parent_name: { type: string, nullable: true }
+              neighbours: { type: array, items: { type: string } }
+
+    Probe:
+      type: object
+      properties:
+        id: { type: integer }
+        device_id: { type: integer }
+        name: { type: string }
+        kind: { type: string, enum: [http, tcp] }
+        enabled: { type: boolean }
+        interval_s: { type: integer }
+        timeout_ms: { type: integer }
+        fail_threshold: { type: integer }
+        config: { type: object }
+        status: { type: string, enum: [up, down, unknown] }
+        latency_ms: { type: number, nullable: true }
+        message: { type: string, nullable: true }
+        cert_expires_at: { type: string, format: date-time, nullable: true }
+        checked_at: { type: string, format: date-time, nullable: true }
+    ProbeWrite:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, maxLength: 120 }
+        kind: { type: string, enum: [http, tcp] }
+        enabled: { type: boolean }
+        interval_s: { type: integer, minimum: 5, maximum: 86400 }
+        timeout_ms: { type: integer, minimum: 500, maximum: 60000 }
+        fail_threshold: { type: integer, minimum: 1, maximum: 10 }
+        config:
+          type: object
+          properties:
+            url: { type: string, format: uri, description: "Required for kind=http." }
+            method: { type: string, enum: [GET, HEAD, POST] }
+            expect_status: { type: string }
+            expect_body: { type: string }
+            verify_tls: { type: boolean }
+            host: { type: string }
+            port: { type: integer, minimum: 1, maximum: 65535, description: "Required for kind=tcp." }
+
+    Sensor:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        oid: { type: string }
+        mode: { type: string, enum: [get, walk] }
+        agg: { type: string, nullable: true, enum: [sum, avg, max, min, count, null] }
+        unit: { type: string, nullable: true }
+        divisor: { type: number, nullable: true }
+        scope: { $ref: "#/components/schemas/Scope" }
+        enabled: { type: boolean }
+    SensorWrite:
+      type: object
+      required: [name, oid]
+      properties:
+        name: { type: string, maxLength: 255 }
+        oid: { type: string, pattern: '^\.?\d+(\.\d+)*$' }
+        mode: { type: string, enum: [get, walk] }
+        agg: { type: string, nullable: true, enum: [sum, avg, max, min, count], description: "Required for mode=walk." }
+        unit: { type: string, nullable: true, maxLength: 16 }
+        divisor: { type: number, nullable: true }
+        enabled: { type: boolean }
+        scope: { $ref: "#/components/schemas/Scope" }
+
+    DiscoveryCandidate:
+      type: object
+      properties:
+        id: { type: integer }
+        ip: { type: string }
+        status: { type: string, enum: [new, approved, ignored] }
+        sysname: { type: string, nullable: true }
+        detected_method: { type: string, nullable: true, enum: [snmp, routeros, none, null] }
+        matched_credential_id: { type: integer, nullable: true }
+        matched_credentials:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              type: { type: string }
+        first_seen: { type: string, format: date-time, nullable: true }
+        last_seen: { type: string, format: date-time, nullable: true }
+
+    ImportRun:
+      type: object
+      properties:
+        id: { type: integer }
+        original_filename: { type: string }
+        mode: { type: string, enum: [upsert, fresh] }
+        include_history: { type: boolean }
+        status: { type: string, enum: [pending, extracting, importing, completed, failed, cancelled] }
+        stage: { type: string, nullable: true }
+        progress: { type: number, nullable: true }
+        cancel_requested: { type: boolean }
+        summary: { type: object, nullable: true }
+        error: { type: string, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+    LibreNmsConnection:
+      type: object
+      required: [driver]
+      properties:
+        driver: { type: string, enum: [mysql, api] }
+        host: { type: string, description: "Required for mysql." }
+        port: { type: integer, nullable: true, default: 3306 }
+        database: { type: string, description: "Required for mysql." }
+        username: { type: string, description: "Required for mysql." }
+        password: { type: string, format: password, nullable: true }
+        base_url: { type: string, format: uri, description: "Required for api." }
+        token: { type: string, description: "Required for api." }
+
+    Map:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        parent_map_id: { type: integer, nullable: true }
+        is_default: { type: boolean }
+        position: { type: integer }
+        node_x: { type: number, nullable: true }
+        node_y: { type: number, nullable: true }
+        leaflet_enabled: { type: boolean }
+        ping_interval: { type: integer, nullable: true, description: "Per-map ping cadence; null = global." }
+        device_count: { type: integer }
+    MapWrite:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 255 }
+        parent_map_id: { type: integer, nullable: true }
+        leaflet_enabled: { type: boolean }
+        ping_interval: { type: integer, nullable: true, minimum: 1, maximum: 3600 }
+        position: { type: integer, nullable: true }
+    MapDetail:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        parent_map_id: { type: integer, nullable: true }
+        leaflet_enabled: { type: boolean }
+        positions:
+          type: array
+          items:
+            type: object
+            properties: { device_id: { type: integer }, x: { type: number }, y: { type: number } }
+        inter_map_links: { type: array, items: { type: object } }
+        child_maps: { type: array, items: { type: object } }
+        child_device_links: { type: array, items: { type: object } }
+        map_links: { type: array, items: { $ref: "#/components/schemas/MapLink" } }
+        map_notes: { type: array, items: { $ref: "#/components/schemas/MapNote" } }
+    MapLink:
+      type: object
+      properties:
+        id: { type: integer }
+        map_id: { type: integer }
+        a_map_id: { type: integer }
+        b_map_id: { type: integer }
+        a_handle: { type: string, nullable: true }
+        b_handle: { type: string, nullable: true }
+        media_type: { type: string, nullable: true, enum: [fiber, ethernet, wireless, other, null] }
+        label: { type: string, nullable: true }
+    MapNote:
+      type: object
+      properties:
+        id: { type: integer }
+        map_id: { type: integer }
+        text: { type: string }
+        x: { type: number }
+        y: { type: number }
+        color: { type: string, nullable: true }
+    MapNoteWrite:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 500 }
+        x: { type: number, default: 0 }
+        y: { type: number, default: 0 }
+        color: { type: string, nullable: true, pattern: '^#[0-9a-fA-F]{6}$' }
+    Share:
+      type: object
+      properties:
+        id: { type: integer }
+        label: { type: string, nullable: true }
+        enabled: { type: boolean }
+        url: { type: string }
+        last_viewed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Link:
+      type: object
+      properties:
+        id: { type: integer }
+        a_device_id: { type: integer }
+        a_interface_id: { type: integer, nullable: true }
+        a_handle: { type: string, nullable: true }
+        b_device_id: { type: integer }
+        b_interface_id: { type: integer, nullable: true }
+        b_handle: { type: string, nullable: true }
+        media_type: { type: string, nullable: true, enum: [fiber, ethernet, wireless, other, null] }
+        bw_ab_mbps: { type: integer, nullable: true }
+        bw_ba_mbps: { type: integer, nullable: true }
+        eff_ab_mbps: { type: integer, nullable: true }
+        eff_ba_mbps: { type: integer, nullable: true }
+        a_interface: { $ref: "#/components/schemas/Interface" }
+        b_interface: { $ref: "#/components/schemas/Interface" }
+    LinkWrite:
+      type: object
+      required: [a_device_id, b_device_id]
+      properties:
+        a_device_id: { type: integer }
+        b_device_id: { type: integer }
+        a_interface_id: { type: integer, nullable: true }
+        b_interface_id: { type: integer, nullable: true }
+        a_handle: { type: string, nullable: true, enum: [s-top, s-bottom, s-left, s-right, t-top, t-bottom, t-left, t-right] }
+        b_handle: { type: string, nullable: true, enum: [s-top, s-bottom, s-left, s-right, t-top, t-bottom, t-left, t-right] }
+        media_type: { type: string, nullable: true, enum: [fiber, ethernet, wireless, other] }
+        bw_ab_mbps: { type: integer, nullable: true, minimum: 1 }
+        bw_ba_mbps: { type: integer, nullable: true, minimum: 1 }
+
+    Site:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        kind: { type: string, enum: [tower, cabinet, pop, other] }
+        latitude: { type: number, nullable: true }
+        longitude: { type: number, nullable: true }
+        address: { type: string, nullable: true }
+        external_ref: { type: string, nullable: true }
+        note: { type: string, nullable: true }
+        device_count: { type: integer }
+        devices_down: { type: integer }
+    SiteWrite:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 255 }
+        kind: { type: string, enum: [tower, cabinet, pop, other] }
+        latitude: { type: number, nullable: true, minimum: -90, maximum: 90 }
+        longitude: { type: number, nullable: true, minimum: -180, maximum: 180 }
+        address: { type: string, nullable: true, maxLength: 255 }
+        external_ref: { type: string, nullable: true, maxLength: 255, description: "Unique key from your inventory." }
+        note: { type: string, nullable: true, maxLength: 5000 }
+
+    GeoDevice:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        status: { type: string, enum: [up, down, unknown] }
+        site_id: { type: integer, nullable: true }
+        lat: { type: number }
+        lng: { type: number }
+        down_since: { type: string, format: date-time, nullable: true }
+    GeoBackhaul:
+      type: object
+      properties:
+        id: { type: integer }
+        media_type: { type: string, nullable: true }
+        a: { type: array, items: { type: number }, description: "[lng, lat]" }
+        b: { type: array, items: { type: number }, description: "[lng, lat]" }
+
+    AlertPolicy:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        condition: { type: string }
+        condition_label: { type: string }
+        params: { type: object }
+        scope: { $ref: "#/components/schemas/Scope" }
+        enabled: { type: boolean }
+        transport_ids: { type: array, items: { type: integer } }
+    AlertPolicyWrite:
+      type: object
+      required: [name, condition]
+      properties:
+        name: { type: string, maxLength: 255 }
+        condition:
+          type: string
+          enum: [device_down, high_util, low_throughput, interface_down, upgrade_failed, new_discovery, backup_failed, high_metric, probe_down, probe_slow]
+        params:
+          type: object
+          properties:
+            threshold: { type: number, minimum: 0, maximum: 10000 }
+            metric: { type: string, enum: [cpu, mem, temp, latency, loss] }
+            duration_minutes: { type: integer, minimum: 0, maximum: 1440 }
+            suppress_dependent: { type: boolean }
+        scope: { $ref: "#/components/schemas/Scope" }
+        enabled: { type: boolean }
+        transport_ids: { type: array, items: { type: integer } }
+    AlertEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        policy_id: { type: integer }
+        policy_name: { type: string, nullable: true }
+        condition: { type: string, nullable: true }
+        status: { type: string }
+        message: { type: string, nullable: true }
+        delivered: { type: boolean }
+        fired_at: { type: string, format: date-time, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        acknowledged_at: { type: string, format: date-time, nullable: true }
+        acknowledged_by_name: { type: string, nullable: true }
+    AlertTransport:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty] }
+        enabled: { type: boolean }
+    AlertTransportWrite:
+      type: object
+      required: [name, type]
+      description: Type-specific fields are write-only and stored encrypted.
+      properties:
+        name: { type: string, maxLength: 255 }
+        type: { type: string, enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty] }
+        enabled: { type: boolean }
+        email: { type: string, format: email, description: "Required for type=email." }
+        webhook_url: { type: string, format: uri, description: "Required for slack/teams/messenger/webhook/discord." }
+        telegram_token: { type: string, description: "Required for type=telegram." }
+        telegram_chat_id: { type: string, description: "Required for type=telegram." }
+        pagerduty_key: { type: string, description: "Required for type=pagerduty." }
+
+    MaintenanceWindow:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        scope: { $ref: "#/components/schemas/Scope" }
+        enabled: { type: boolean }
+        active: { type: boolean }
+    MaintenanceWindowWrite:
+      type: object
+      required: [name, starts_at, ends_at]
+      properties:
+        name: { type: string, maxLength: 255 }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, description: "After starts_at." }
+        enabled: { type: boolean }
+        scope: { $ref: "#/components/schemas/Scope" }
+    Outage:
+      type: object
+      properties:
+        id: { type: integer }
+        device_id: { type: integer }
+        device_name: { type: string, nullable: true }
+        started_at: { type: string, format: date-time }
+        ended_at: { type: string, format: date-time, nullable: true }
+        duration_s: { type: integer, nullable: true }
+        ongoing: { type: boolean }
+        cause: { type: string, nullable: true }
+
+    Agent:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        status: { type: string, enum: [enrolled, online, offline] }
+        last_seen_at: { type: string, format: date-time, nullable: true }
+        version: { type: string, nullable: true }
+        platform: { type: string, nullable: true }
+        device_count: { type: integer }
+        subnet_count: { type: integer }
+
+    Credential:
+      type: object
+      description: Secrets are never returned.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [snmp, routeros, ssh] }
+        api_port: { type: integer, nullable: true }
+        snmp_version: { type: string, nullable: true, enum: ["1", "2c", "3", null] }
+        snmp_sec_name: { type: string, nullable: true }
+        snmp_sec_level: { type: string, nullable: true }
+        snmp_auth_protocol: { type: string, nullable: true }
+        snmp_priv_protocol: { type: string, nullable: true }
+        has_secret: { type: boolean }
+        has_private_key: { type: boolean }
+        device_count: { type: integer }
+    CredentialWrite:
+      type: object
+      required: [name, type]
+      description: Secret fields are write-only; which are required depends on type/version.
+      properties:
+        name: { type: string, maxLength: 255 }
+        type: { type: string, enum: [snmp, routeros, ssh] }
+        api_port: { type: integer, minimum: 1, maximum: 65535 }
+        snmp_version: { type: string, enum: ["1", "2c", "3"] }
+        snmp_community: { type: string, description: "SNMP v1/v2c community (write-only)." }
+        snmp_sec_name: { type: string, description: "SNMPv3 security name." }
+        snmp_sec_level: { type: string, enum: [noAuthNoPriv, authNoPriv, authPriv] }
+        snmp_auth_protocol: { type: string, enum: [MD5, SHA, SHA-224, SHA-256, SHA-384, SHA-512] }
+        snmp_auth_passphrase: { type: string, description: "Write-only." }
+        snmp_priv_protocol: { type: string, enum: [DES, AES, AES-192, AES-256] }
+        snmp_priv_passphrase: { type: string, description: "Write-only." }
+        username: { type: string, description: "For routeros/ssh." }
+        password: { type: string, format: password, description: "Write-only." }
+        private_key: { type: string, description: "SSH PEM/OpenSSH key (write-only)." }
+
+    Graph:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        config: { $ref: "#/components/schemas/GraphConfig" }
+    GraphWrite:
+      type: object
+      required: [name, config]
+      properties:
+        name: { type: string, maxLength: 120 }
+        config: { $ref: "#/components/schemas/GraphConfig" }
+    GraphConfig:
+      type: object
+      properties:
+        metric: { type: string, enum: [rate, util] }
+        show_total: { type: boolean }
+        series:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            properties:
+              source: { type: string, enum: [interface, sensor, ping, probe] }
+              interface_id: { type: integer }
+              direction: { type: string, enum: [in, out] }
+              sensor_id: { type: integer }
+              device_id: { type: integer }
+              probe_id: { type: integer }
+              label: { type: string, nullable: true }
+
+    ApiToken:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    RouterosPackage:
+      type: object
+      properties:
+        id: { type: integer }
+        version: { type: string }
+        arch: { type: string }
+        channel: { type: string, nullable: true }
+        status: { type: string }
+        size_bytes: { type: integer, nullable: true }
+        error: { type: string, nullable: true }
+        fetched_at: { type: string, format: date-time, nullable: true }
+        download_url: { type: string, nullable: true }
+
+    Health:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        checks:
+          type: object
+          properties:
+            database: { type: boolean }
+            redis: { type: boolean }
+        time: { type: string, format: date-time }
+
+    Scope:
+      type: object
+      description: Targeting rule shared by alert policies, sensors and maintenance windows.
+      properties:
+        type: { type: string, enum: [all, device_type, map, devices] }
+        device_type: { type: string, enum: [router, switch, ap, server, internet, unknown], description: "When type=device_type." }
+        map_id: { type: integer, description: "When type=map." }
+        device_ids: { type: array, items: { type: integer }, description: "When type=devices." }

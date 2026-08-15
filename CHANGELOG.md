@@ -13,6 +13,13 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **API reference on the demo site.** A full, interactive OpenAPI 3.1 reference (rendered with
+  Scalar) covering the integration API - devices, interfaces, maps, links, sites, alerts,
+  backups, graphs and more - with the bearer API-key auth documented. Served at `/api-docs`,
+  surfaced only on the sales/demo instance and linked from its chrome; a real monitoring
+  instance 404s it.
+
 ## [1.6.0] - 2026-08-15
 
 ### Added
