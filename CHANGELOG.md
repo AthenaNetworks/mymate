@@ -58,6 +58,9 @@ of commit subjects.
   fleet.
 
 ### Fixed
+- **`ping`/`mtr` are Recommends, not hard Depends.** They only power the Tools traceroute/ping,
+  so a bare `dpkg -i` no longer fails when they're absent - it installs and those two tools are
+  simply unavailable until added. `apt install ./mymate.deb` still pulls them automatically.
 - **Interface descriptions show in the device inspector.** The operator-set port description
   (SNMP ifAlias / RouterOS comment) was captured, stored and searchable, but the inspector's
   interface list only ever rendered the port name, so all that context was invisible. It now
