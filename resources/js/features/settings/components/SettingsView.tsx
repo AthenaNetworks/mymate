@@ -971,7 +971,7 @@ function AgentsSection() {
                 <div className="mb-3 rounded-xl bg-emerald-500/[0.08] p-3 ring-1 ring-emerald-400/20">
                     <p className="text-xs font-semibold text-white/80">Agent "{token.name}" enrolled - copy its token now (shown once):</p>
                     <div className="mt-2 flex items-center gap-2">
-                        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/40 px-2 py-1.5 font-mono text-[11px] text-emerald-200/90">{token.token}</code>
+                        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/40 px-2 py-1.5 font-mono text-[11px] text-[#a7f3d0]/90">{token.token}</code>
                         <button
                             onClick={() => {
                                 navigator.clipboard?.writeText(token.token);
@@ -1112,7 +1112,7 @@ function ApiKeysSection() {
                 <div className="mb-3 rounded-xl bg-emerald-500/[0.08] p-3 ring-1 ring-emerald-400/20">
                     <p className="text-xs font-semibold text-white/80">Key "{minted.name}" created - copy it now (shown once):</p>
                     <div className="mt-2 flex items-center gap-2">
-                        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/40 px-2 py-1.5 font-mono text-[11px] text-emerald-200/90">{minted.token}</code>
+                        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/40 px-2 py-1.5 font-mono text-[11px] text-[#a7f3d0]/90">{minted.token}</code>
                         <button
                             onClick={() => {
                                 navigator.clipboard?.writeText(minted.token);

@@ -58,6 +58,16 @@
     --color-sky-300: oklch(0.5 0.134 242.749); /* sky-700 */
     --color-indigo-300: oklch(0.457 0.24 277.023); /* indigo-700 */
     --color-violet-300: oklch(0.491 0.27 292.581); /* violet-700 */
+
+    /* The paler `-200` shade is used the same way - text on a faint tint (e.g. the "Cache" button,
+       the Discovery/Dashboard toggles, the icon picker) - and washes out even worse on light. Darken
+       it to -700 too. The ONLY -200 text on a genuinely dark surface is the one-time token reveal
+       boxes (bg-black/40 in Settings), which pin their own fixed bright green so this can't dim them. */
+    --color-emerald-200: oklch(0.508 0.118 165.612); /* emerald-700 */
+    --color-amber-200: oklch(0.555 0.163 48.998); /* amber-700 */
+    --color-rose-200: oklch(0.514 0.222 16.935); /* rose-700 */
+    --color-sky-200: oklch(0.5 0.134 242.749); /* sky-700 */
+    --color-indigo-200: oklch(0.457 0.24 277.023); /* indigo-700 */
 }
 
 /* Native <select> option popups. The app's controls sit on translucent backgrounds
