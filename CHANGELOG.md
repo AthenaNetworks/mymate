@@ -14,6 +14,14 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Graphs: latency overlaid on traffic keeps a sensible scale.** Adding a ping/probe latency series
+  to an interface-throughput graph used to drop the axis to raw bits (to fit both) and flatten the
+  latency line to zero. Traffic now drives the left axis in kbps/Mbps as before, and latency rides
+  its own right-hand ms axis - so both stay readable.
+- **RouterOS upgrades: CHR fetches the right package.** A CHR reports its architecture as `x86_64`, so
+  the cache tried `routeros-<v>-x86_64.npk`, which doesn't exist on MikroTik and 404'd. RouterOS 7
+  serves x86 and CHR from a single arch-less `routeros-<v>.npk`; we now use that for both, and
+  `x86_64` is a recognised architecture.
 - **Backup engine auto-provisioning no longer fails as root.** The rusted provision script wired
   My Mate to the engine with `$SUDO -u <app-user> ...`, but on an install running as root `$SUDO`
   is empty, so the `-u` was left dangling (`line 98: -u: command not found`) and setup bailed with

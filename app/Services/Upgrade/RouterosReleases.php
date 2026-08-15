@@ -13,8 +13,12 @@ use Illuminate\Support\Facades\Http;
  */
 class RouterosReleases
 {
-    /** RouterOS CPU architectures we can target (from /system/resource architecture-name). */
-    public const ARCHES = ['arm', 'arm64', 'mipsbe', 'mmips', 'smips', 'tile', 'ppc', 'x86', 'e500'];
+    /**
+     * RouterOS CPU architectures we can target (from /system/resource architecture-name).
+     * `x86_64` is what a CHR (Cloud Hosted Router) reports; RouterOS 7 serves it - and physical
+     * x86 - from the single arch-less package (see packageFilename).
+     */
+    public const ARCHES = ['arm', 'arm64', 'mipsbe', 'mmips', 'smips', 'tile', 'ppc', 'x86', 'x86_64', 'e500'];
 
     private function base(): string
     {
@@ -69,14 +73,25 @@ class RouterosReleases
         }
     }
 
-    /** The .npk filename for a version + arch. RouterOS 7 orders it version-first, 6 arch-first. */
+    /**
+     * The .npk filename for a version + arch. RouterOS 7 orders it version-first, 6 arch-first.
+     *
+     * RouterOS 7 ships x86 AND CHR (which reports its architecture as `x86_64`) as one arch-LESS
+     * package - there is no `routeros-<v>-x86.npk` or `-x86_64.npk`, only `routeros-<v>.npk`. Every
+     * other architecture is suffixed as normal. This is why a CHR upgrade fetches a different file
+     * than, say, an arm64 device.
+     */
     public function packageFilename(string $version, string $arch): string
     {
         $major = (int) $version;
 
-        return $major >= 7
-            ? "routeros-{$version}-{$arch}.npk"
-            : "routeros-{$arch}-{$version}.npk";
+        if ($major >= 7) {
+            return in_array($arch, ['x86', 'x86_64'], true)
+                ? "routeros-{$version}.npk"
+                : "routeros-{$version}-{$arch}.npk";
+        }
+
+        return "routeros-{$arch}-{$version}.npk";
     }
 
     /** Full MikroTik download URL for a version + arch. */

@@ -24,6 +24,12 @@ class RouterosPackageTest extends TestCase
         $this->assertSame('routeros-7.15.3-arm.npk', $r->packageFilename('7.15.3', 'arm'));
         $this->assertSame('routeros-mipsbe-6.49.10.npk', $r->packageFilename('6.49.10', 'mipsbe'));
         $this->assertStringEndsWith('/7.15.3/routeros-7.15.3-arm.npk', $r->packageUrl('7.15.3', 'arm'));
+
+        // RouterOS 7 x86 AND CHR (which reports arch x86_64) both use the single arch-less package -
+        // there is no routeros-<v>-x86.npk / -x86_64.npk on MikroTik.
+        $this->assertSame('routeros-7.16.npk', $r->packageFilename('7.16', 'x86_64'));
+        $this->assertSame('routeros-7.16.npk', $r->packageFilename('7.16', 'x86'));
+        $this->assertTrue(RouterosReleases::isValidArch('x86_64'));
     }
 
     public function test_channels_parse_newest_files_and_skip_empty(): void
