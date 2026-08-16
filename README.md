@@ -172,7 +172,7 @@ with [BUILD.md](BUILD.md).
 
 - [@JoshFinlayAU](https://github.com/JoshFinlayAU) - Josh
 - [@genuwin14](https://github.com/genuwin14) - Kristian
-- [@marki1212](https://github.com/marki1212) - Mark
+- [@kram994](https://github.com/kram994) - Mark
 
 ## License
 
