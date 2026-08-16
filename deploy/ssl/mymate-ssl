@@ -42,9 +42,24 @@ preflight() {
 }
 
 # Run artisan as the account that owns .env (the php-fpm pool user: 'mymate' on a
-# packaged install), so the .env rewrite keeps the right ownership.
+# packaged install), so the .env rewrite keeps the right ownership. We're root here
+# (preflight enforces it), so drop privileges with runuser - `sudo` is NOT a package
+# dependency and is often absent on a minimal box, which used to abort SSL setup mid-install.
+# It lives in sbin, which may be off PATH, so resolve it; fall back to su, then sudo.
 APP_USER="$(stat -c '%U' "$APP_DIR/.env" 2>/dev/null || echo root)"
-artisan() { sudo -u "$APP_USER" php "$APP_DIR/artisan" "$@"; }
+artisan() {
+    if [ "$(id -u)" != 0 ]; then
+        sudo -u "$APP_USER" php "$APP_DIR/artisan" "$@"
+        return
+    fi
+    local ru; ru="$(command -v runuser 2>/dev/null || true)"
+    [ -n "$ru" ] || for cand in /usr/sbin/runuser /sbin/runuser; do [ -x "$cand" ] && ru="$cand" && break; done
+    if [ -n "$ru" ]; then
+        "$ru" -u "$APP_USER" -- php "$APP_DIR/artisan" "$@"
+    else
+        su -s /bin/sh "$APP_USER" -c "php $APP_DIR/artisan $(printf '%q ' "$@")"
+    fi
+}
 
 # Tolerant of nginx not yet running (first-boot ordering): a good config is reloaded, or
 # started if the daemon is down. A BAD config is a hard error.
