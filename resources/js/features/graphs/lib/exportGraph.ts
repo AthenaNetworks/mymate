@@ -61,7 +61,10 @@ export function downloadGraphSvg(svg: SVGSVGElement, name: string): void {
 /** Rasterise the standalone SVG onto a canvas at `scale`x for a crisp PNG. */
 export function downloadGraphPng(svg: SVGSVGElement, name: string, scale = 2): Promise<void> {
     const { node, width, height } = standaloneSvg(svg);
-    const url = URL.createObjectURL(new Blob([serialize(node)], { type: 'image/svg+xml;charset=utf-8' }));
+    // Load the SVG through a data: URL, NOT a blob: one: the app's CSP is `img-src 'self' data:`
+    // (no blob:), so a blob image would be blocked and the rasterisation would fail. data: is
+    // allowed, and a self-contained SVG (no external refs) doesn't taint the canvas.
+    const src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialize(node))}`;
 
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -71,22 +74,17 @@ export function downloadGraphPng(svg: SVGSVGElement, name: string, scale = 2): P
             canvas.height = height * scale;
             const ctx = canvas.getContext('2d');
             if (!ctx) {
-                URL.revokeObjectURL(url);
                 reject(new Error('no 2d context'));
                 return;
             }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            URL.revokeObjectURL(url);
             canvas.toBlob((b) => {
                 if (b) download(b, `${name}.png`);
                 resolve();
             }, 'image/png');
         };
-        img.onerror = () => {
-            URL.revokeObjectURL(url);
-            reject(new Error('svg render failed'));
-        };
-        img.src = url;
+        img.onerror = () => reject(new Error('svg render failed'));
+        img.src = src;
     });
 }
 

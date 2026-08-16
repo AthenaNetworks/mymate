@@ -13,6 +13,11 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- Graph PNG export failed under the app's Content-Security-Policy (it rasterised through a `blob:`
+  image, which `img-src` doesn't allow). It now loads through a `data:` URL instead. SVG and CSV
+  export were unaffected.
+
 ## [1.7.0] - 2026-08-16
 
 ### Added
