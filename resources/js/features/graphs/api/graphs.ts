@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { Graph, GraphConfig, GraphData } from '../../../types';
+import type { Graph, GraphConfig, GraphData, GraphStyleDefaults } from '../../../types';
 
 // Saved custom graphs (GitHub #28).
 
@@ -13,7 +13,35 @@ export interface GraphInput {
 const graphKeys = {
     all: ['graphs'] as const,
     data: (id: number, range: string) => ['graphs', id, 'data', range] as const,
+    styleDefaults: ['graphs', 'style-defaults'] as const,
 };
+
+/** The house default graph style + palette, inherited by any graph without its own config.style. */
+export function useGraphStyleDefaults() {
+    return useQuery({
+        queryKey: graphKeys.styleDefaults,
+        queryFn: async (): Promise<GraphStyleDefaults> => {
+            const { data } = await apiClient.get<{ data: GraphStyleDefaults }>('/settings/graph-style');
+            return data.data;
+        },
+        staleTime: 60_000,
+    });
+}
+
+export function useUpdateGraphStyleDefaults() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (style: GraphStyleDefaults): Promise<GraphStyleDefaults> => {
+            const { data } = await apiClient.put<{ data: GraphStyleDefaults }>('/settings/graph-style', style);
+            return data.data;
+        },
+        onSuccess: (style) => {
+            qc.setQueryData(graphKeys.styleDefaults, style);
+            // Inheriting graphs re-render against the new default.
+            qc.invalidateQueries({ queryKey: graphKeys.all });
+        },
+    });
+}
 
 export function useGraphs() {
     return useQuery({

@@ -146,11 +146,18 @@ class OverviewMapTest extends TestCase
 
         $this->getJson("/api/maps/{$map->id}")->assertOk()->assertJsonPath('data.map_notes.0.id', $id);
 
-        $this->patchJson("/api/maps/{$map->id}/notes/{$id}", ['text' => 'Fibre ring - 10G', 'color' => '#22d3ee', 'x' => 99, 'y' => 88])
+        $this->patchJson("/api/maps/{$map->id}/notes/{$id}", ['text' => 'Fibre ring - 10G', 'color' => '#22d3ee', 'background' => '#101828', 'size' => 'lg', 'x' => 99, 'y' => 88])
             ->assertOk()
             ->assertJsonPath('data.text', 'Fibre ring - 10G')
-            ->assertJsonPath('data.color', '#22d3ee');
+            ->assertJsonPath('data.color', '#22d3ee')
+            ->assertJsonPath('data.background', '#101828')
+            ->assertJsonPath('data.size', 'lg');
         $this->assertDatabaseHas('map_notes', ['id' => $id, 'x' => 99, 'y' => 88]);
+
+        // The style fields come back on the map detail too, so the canvas can render them.
+        $this->getJson("/api/maps/{$map->id}")->assertOk()
+            ->assertJsonPath('data.map_notes.0.background', '#101828')
+            ->assertJsonPath('data.map_notes.0.size', 'lg');
 
         $this->deleteJson("/api/maps/{$map->id}/notes/{$id}")->assertNoContent();
         $this->assertDatabaseMissing('map_notes', ['id' => $id]);
@@ -161,6 +168,8 @@ class OverviewMapTest extends TestCase
         $map = Map::create(['name' => 'Site']);
         $this->postJson("/api/maps/{$map->id}/notes", ['text' => ''])->assertJsonValidationErrors('text');
         $this->postJson("/api/maps/{$map->id}/notes", ['text' => 'ok', 'color' => 'blue'])->assertJsonValidationErrors('color');
+        $this->postJson("/api/maps/{$map->id}/notes", ['text' => 'ok', 'background' => 'red'])->assertJsonValidationErrors('background');
+        $this->postJson("/api/maps/{$map->id}/notes", ['text' => 'ok', 'size' => 'huge'])->assertJsonValidationErrors('size');
     }
 
     public function test_deleting_a_map_removes_its_notes(): void

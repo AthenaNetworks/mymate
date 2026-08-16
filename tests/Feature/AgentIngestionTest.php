@@ -27,17 +27,39 @@ class AgentIngestionTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_ingest_applies_up_down_and_records_an_outage(): void
+    public function test_ingest_applies_up_down_with_flap_dampening_and_records_an_outage(): void
     {
         Event::fake([DeviceStatusChanged::class]);
         $agent = Agent::factory()->create();
         $device = Device::factory()->create(['agent_id' => $agent->id, 'status' => DeviceStatus::Up]);
 
-        app(IngestAgentResults::class)($agent, ['pings' => [['device_id' => $device->id, 'up' => false]]]);
+        // Same dampening as the central sweep: a device only flips down after `threshold`
+        // consecutive missed reports, so a single dropped reply doesn't alarm.
+        $threshold = max(1, (int) config('mymate.ping.fail_threshold', 3));
+        for ($i = 0; $i < $threshold; $i++) {
+            app(IngestAgentResults::class)($agent, ['pings' => [['device_id' => $device->id, 'up' => false]]]);
+            $expected = $i + 1 >= $threshold ? DeviceStatus::Down : DeviceStatus::Up;
+            $this->assertSame($expected, $device->fresh()->status);
+        }
 
-        $this->assertSame(DeviceStatus::Down, $device->fresh()->status);
         $this->assertTrue(Outage::where('device_id', $device->id)->whereNull('ended_at')->exists());
         Event::assertDispatched(DeviceStatusChanged::class);
+    }
+
+    public function test_ingest_records_agent_reported_latency(): void
+    {
+        $agent = Agent::factory()->create();
+        $device = Device::factory()->create(['agent_id' => $agent->id, 'status' => DeviceStatus::Up]);
+
+        app(IngestAgentResults::class)($agent, ['pings' => [
+            ['device_id' => $device->id, 'up' => true, 'rtt_ms' => 12.5, 'loss_pct' => 0.0, 'jitter_ms' => 1.2],
+        ]]);
+
+        $device->refresh();
+        $this->assertEqualsWithDelta(12.5, (float) $device->rtt_ms, 0.01);
+        $this->assertNotNull($device->ping_at);
+        // The trend sample lands in ping_samples, same as the central latency path.
+        $this->assertDatabaseHas('ping_samples', ['device_id' => $device->id]);
     }
 
     public function test_ingest_ignores_devices_not_owned_by_the_agent(): void

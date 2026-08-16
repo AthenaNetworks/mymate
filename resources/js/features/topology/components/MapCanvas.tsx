@@ -19,7 +19,7 @@ import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { ChildMapNode } from '../nodes/ChildMapNode';
-import { MapNoteNode } from '../nodes/MapNoteNode';
+import { MapNoteNode, type MapNoteStylePatch } from '../nodes/MapNoteNode';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
 import { MapLinkEdge } from '../edges/MapLinkEdge';
 import { ChildLinkEdge } from '../edges/ChildLinkEdge';
@@ -285,7 +285,7 @@ export function MapCanvas() {
             '#' +
             childMaps.map((c) => `${c.id}@${Math.round(c.node_x ?? 0)},${Math.round(c.node_y ?? 0)}`).join('|') +
             '#' +
-            mapNotes.map((n) => `${n.id}@${Math.round(n.x)},${Math.round(n.y)}:${n.color ?? ''}:${n.text}`).join('|'),
+            mapNotes.map((n) => `${n.id}@${Math.round(n.x)},${Math.round(n.y)}:${n.color ?? ''}:${n.background ?? ''}:${n.size ?? ''}:${n.text}`).join('|'),
         [mapDevices, posById, interMapLinks, childMaps, mapNotes],
     );
 
@@ -355,8 +355,9 @@ export function MapCanvas() {
             type: 'note',
             position: { x: n.x, y: n.y },
             data: {
-                noteId: n.id, text: n.text, color: n.color, editable: isAdmin,
+                noteId: n.id, text: n.text, color: n.color, background: n.background, size: n.size, editable: isAdmin,
                 onSave: isAdmin ? (text: string) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, text }); } : undefined,
+                onSaveStyle: isAdmin ? (patch: MapNoteStylePatch) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, ...patch }); } : undefined,
                 onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapNote.mutate({ mapId: m, noteId: n.id }); } : undefined,
             },
             draggable: isAdmin,

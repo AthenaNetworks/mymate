@@ -247,13 +247,16 @@ class MapController extends Controller
             'x' => ['nullable', 'numeric'],
             'y' => ['nullable', 'numeric'],
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'background' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'size' => ['sometimes', 'nullable', 'in:sm,md,lg'],
         ]);
 
         $note = $map->mapNotes()->create([
-            'text' => $data['text'], 'x' => $data['x'] ?? 0, 'y' => $data['y'] ?? 0, 'color' => $data['color'] ?? null,
+            'text' => $data['text'], 'x' => $data['x'] ?? 0, 'y' => $data['y'] ?? 0,
+            'color' => $data['color'] ?? null, 'background' => $data['background'] ?? null, 'size' => $data['size'] ?? null,
         ]);
 
-        return response()->json(['data' => $note->only('id', 'map_id', 'text', 'x', 'y', 'color')], Response::HTTP_CREATED);
+        return response()->json(['data' => $note->only('id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size')], Response::HTTP_CREATED);
     }
 
     /** Update a note's text / position / colour. */
@@ -265,10 +268,12 @@ class MapController extends Controller
             'x' => ['sometimes', 'numeric'],
             'y' => ['sometimes', 'numeric'],
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'background' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'size' => ['sometimes', 'nullable', 'in:sm,md,lg'],
         ]);
         $mapNote->update($data);
 
-        return response()->json(['data' => $mapNote->only('id', 'map_id', 'text', 'x', 'y', 'color')]);
+        return response()->json(['data' => $mapNote->only('id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size')]);
     }
 
     /** Delete a note. */

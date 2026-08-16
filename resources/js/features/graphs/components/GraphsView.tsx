@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { ChartLine, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
-import { useGraphs, useDeleteGraph, useGraphData } from '../api/graphs';
+import { useEffect, useRef, useState } from 'react';
+import { ChartLine, DownloadSimple, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
+import { useGraphs, useDeleteGraph, useGraphData, useGraphStyleDefaults } from '../api/graphs';
 import { GraphChart } from './GraphChart';
 import { GraphEditor } from './GraphEditor';
+import { downloadGraphCsv, downloadGraphPng, downloadGraphSvg, graphFileBase } from '../lib/exportGraph';
 import { useIsAdmin } from '../../auth/api/auth';
 import { pushToast } from '../../../lib/toast';
 import type { Graph } from '../../../types';
@@ -25,6 +26,8 @@ export function GraphsView() {
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [range, setRange] = useState('24h');
     const [editing, setEditing] = useState<Graph | 'new' | null>(null);
+    const [exportOpen, setExportOpen] = useState(false);
+    const svgRef = useRef<SVGSVGElement>(null);
 
     // Default to the first graph once they load.
     useEffect(() => {
@@ -33,6 +36,28 @@ export function GraphsView() {
 
     const selected = graphs?.find((g) => g.id === selectedId) ?? null;
     const { data: graphData, isLoading } = useGraphData(editing ? null : selectedId, range);
+    const { data: styleDefaults } = useGraphStyleDefaults();
+    // A graph draws with its own fill/stacking if it has any, otherwise the house default. The
+    // palette is always the house default (a series pins its own colour in the editor instead).
+    const base = selected?.config.style ?? styleDefaults ?? null;
+    const style = base
+        ? { fill: base.fill, stacked: base.stacked, color_mode: base.color_mode ?? styleDefaults?.color_mode, palette: styleDefaults?.palette }
+        : null;
+
+    function exportGraph(kind: 'png' | 'svg' | 'csv') {
+        setExportOpen(false);
+        const name = graphFileBase(selected?.name ?? 'graph', range);
+        try {
+            if (kind === 'csv') {
+                if (graphData) downloadGraphCsv(graphData, name);
+            } else if (svgRef.current) {
+                if (kind === 'svg') downloadGraphSvg(svgRef.current, name);
+                else downloadGraphPng(svgRef.current, name).catch(() => pushToast({ title: "Couldn't export the image", tone: 'down' }));
+            }
+        } catch {
+            pushToast({ title: "Couldn't export the graph", tone: 'down' });
+        }
+    }
 
     if (editing) {
         return (
@@ -96,6 +121,21 @@ export function GraphsView() {
                                             <button key={r.key} onClick={() => setRange(r.key)} className={pill(range === r.key)}>{r.label}</button>
                                         ))}
                                     </div>
+                                    {graphData && (
+                                        <div className="relative">
+                                            <button onClick={() => setExportOpen((o) => !o)} title="Export" className="rounded-lg p-1.5 text-white/45 hover:bg-white/5 hover:text-white/85"><DownloadSimple weight="bold" className="h-4 w-4" /></button>
+                                            {exportOpen && (
+                                                <>
+                                                    <button aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setExportOpen(false)} />
+                                                    <div className="absolute right-0 z-20 mt-1 w-32 overflow-hidden rounded-lg bg-surface/95 py-1 text-sm shadow-[0_8px_24px_-8px_rgba(0,0,0,0.8)] ring-1 ring-white/10">
+                                                        <button onClick={() => exportGraph('png')} className="block w-full px-3 py-1.5 text-left text-white/75 hover:bg-white/5 hover:text-white">PNG image</button>
+                                                        <button onClick={() => exportGraph('svg')} className="block w-full px-3 py-1.5 text-left text-white/75 hover:bg-white/5 hover:text-white">SVG vector</button>
+                                                        <button onClick={() => exportGraph('csv')} className="block w-full px-3 py-1.5 text-left text-white/75 hover:bg-white/5 hover:text-white">CSV data</button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                     {isAdmin && (
                                         <>
                                             <button onClick={() => setEditing(selected)} title="Edit" className="rounded-lg p-1.5 text-white/45 hover:bg-white/5 hover:text-white/85"><PencilSimple weight="bold" className="h-4 w-4" /></button>
@@ -109,7 +149,7 @@ export function GraphsView() {
                             {isLoading ? (
                                 <div className="grid h-[260px] place-items-center text-sm text-white/40">Loading...</div>
                             ) : graphData ? (
-                                <GraphChart data={graphData} />
+                                <GraphChart data={graphData} style={style} svgRef={svgRef} />
                             ) : null}
                         </div>
                     ) : (

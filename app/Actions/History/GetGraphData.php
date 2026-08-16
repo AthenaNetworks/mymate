@@ -64,6 +64,14 @@ class GetGraphData
                 default => $this->interfaceSeries($s, $metric, $ifaceData, $ifaces, $blank),
             };
             if ($built !== null) {
+                // Optional per-series colour override; the chart falls back to the palette on null.
+                $color = $s['color'] ?? null;
+                $built['color'] = is_string($color) && preg_match('/^#[0-9a-fA-F]{6}$/', $color) ? strtolower($color) : null;
+                // Optional custom name overrides the computed label.
+                $name = $s['name'] ?? null;
+                if (is_string($name) && trim($name) !== '') {
+                    $built['label'] = trim($name);
+                }
                 $series[] = $built;
             }
         }

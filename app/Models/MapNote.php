@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class MapNote extends Model
 {
-    protected $fillable = ['map_id', 'text', 'x', 'y', 'color'];
+    protected $fillable = ['map_id', 'text', 'x', 'y', 'color', 'background', 'size'];
 
     protected $casts = [
         'x' => 'float',

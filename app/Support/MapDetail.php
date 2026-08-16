@@ -87,7 +87,7 @@ class MapDetail
                 'device_count' => $c->positions_count,
             ])->all();
         $mapLinks = MapLinkResource::collection($map->mapLinks()->get())->resolve();
-        $mapNotes = $map->mapNotes()->get(['id', 'map_id', 'text', 'x', 'y', 'color'])->all();
+        $mapNotes = $map->mapNotes()->get(['id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size'])->all();
 
         return [
             'id' => $map->id,

@@ -118,4 +118,67 @@ class GraphApiTest extends TestCase
         $viewer = User::factory()->create(['is_admin' => false]);
         $this->actingAs($viewer)->postJson('/api/graphs', ['name' => 'x', 'config' => ['series' => []]])->assertForbidden();
     }
+
+    public function test_a_graph_persists_its_style_and_series_colour(): void
+    {
+        $this->actingAsUser();
+        $if = $this->iface();
+
+        $id = $this->postJson('/api/graphs', [
+            'name' => 'Filled',
+            'config' => [
+                'metric' => 'rate', 'show_total' => false,
+                'series' => [['interface_id' => $if->id, 'direction' => 'in', 'color' => '#3987e5', 'name' => 'WAN in']],
+                'style' => ['fill' => true, 'stacked' => true, 'color_mode' => 'series'],
+            ],
+        ])->assertCreated()->json('data.id');
+
+        $this->getJson('/api/graphs')->assertOk()
+            ->assertJsonPath('data.0.config.style.stacked', true)
+            ->assertJsonPath('data.0.config.style.color_mode', 'series')
+            ->assertJsonPath('data.0.config.series.0.color', '#3987e5');
+
+        // The resolved data carries the per-series colour and the custom name (overriding the label).
+        $this->getJson("/api/graphs/{$id}/data?range=24h")->assertOk()
+            ->assertJsonPath('data.series.0.color', '#3987e5')
+            ->assertJsonPath('data.series.0.label', 'WAN in');
+
+        // A malformed colour is rejected rather than silently stored.
+        $this->putJson("/api/graphs/{$id}", ['config' => ['series' => [['interface_id' => $if->id, 'direction' => 'in', 'color' => 'blue']]]])
+            ->assertStatus(422)->assertJsonValidationErrors('config.series.0.color');
+    }
+
+    public function test_graph_style_default_is_readable_and_admin_writable(): void
+    {
+        $this->actingAsUser();
+
+        // Ships the config default (incl. the categorical palette + colour mode) until set.
+        $this->getJson('/api/settings/graph-style')->assertOk()
+            ->assertJsonPath('data.fill', false)
+            ->assertJsonPath('data.stacked', false)
+            ->assertJsonPath('data.color_mode', 'group')
+            ->assertJsonPath('data.palette.0', '#3987e5');
+
+        $this->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'series', 'palette' => ['#112233', '#AABBCC']])
+            ->assertOk()->assertJsonPath('data.fill', true)
+            ->assertJsonPath('data.color_mode', 'series')
+            ->assertJsonPath('data.palette', ['#112233', '#aabbcc']); // lowercased
+
+        $this->getJson('/api/settings/graph-style')->assertOk()->assertJsonPath('data.palette.1', '#aabbcc');
+
+        // A bad colour in the palette, an empty palette, and a bad colour mode are all rejected.
+        $this->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'group', 'palette' => ['#112233', 'red']])
+            ->assertStatus(422)->assertJsonValidationErrors('palette.1');
+        $this->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'group', 'palette' => []])
+            ->assertStatus(422)->assertJsonValidationErrors('palette');
+        $this->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'rainbow', 'palette' => ['#112233']])
+            ->assertStatus(422)->assertJsonValidationErrors('color_mode');
+    }
+
+    public function test_non_admin_can_read_but_not_change_graph_default(): void
+    {
+        $viewer = User::factory()->create(['is_admin' => false]);
+        $this->actingAs($viewer)->getJson('/api/settings/graph-style')->assertOk();
+        $this->actingAs($viewer)->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'group', 'palette' => ['#112233']])->assertForbidden();
+    }
 }

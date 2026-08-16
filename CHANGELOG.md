@@ -13,6 +13,33 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-08-16
+
+### Added
+- **Graph styling.** Custom graphs can now be drawn as filled areas or stacked (same-scale series
+  pile up to their combined total), each series takes its own line/fill colour and a custom name, and
+  a colour mode chooses whether an interface's in + out share a colour (out dashed) or every series
+  gets its own. Settings → Graphs sets the house default for fill/stacking/colour-mode plus a
+  series-colour palette of any length (assigned in order, wrapping when a graph has more series than
+  colours); graphs override those per-graph. Gridlines and the total line now use theme-aware ink,
+  so they stay legible in light mode instead of washing out to invisible white.
+- **Latency from remote agents.** Agents now measure round-trip time, loss and jitter (not just
+  up/down) and the server folds them into the same trend + live tiles central polling uses, so a
+  device monitored through an agent shows latency graphs like any other. Agent up/down also gets the
+  same flap dampening as the central sweep. (Agents must be updated to the new build to report it.)
+- **Agents page shows version + latency.** Settings → Agents now lists each agent's version and its
+  current link latency (measured from the hub keepalive), with an "update" badge when an agent is
+  behind the server version.
+- **Map note styling.** Notes take a text colour, background colour and size (S/M/L) from a toolbar
+  on the selected note. Their default colours are now theme-aware, so an unstyled note reads on the
+  light theme instead of showing as invisible white-on-white.
+- **Export a graph.** Any custom graph can be saved as a PNG or SVG image, or a CSV of its
+  time/value points, from an export menu on the graph.
+
+### Security
+- Bumped guzzlehttp/guzzle (7.12.3 -> 7.15.3) and league/commonmark (2.8.2 -> 2.10.0) past a run of
+  2026 CVEs. Both are transitive via Laravel, not app code; updated within Laravel's constraints.
+
 ## [1.6.1] - 2026-08-16
 
 ### Added
@@ -561,7 +588,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.6.1...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/AthenaNetworks/mymate/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...v1.5.0

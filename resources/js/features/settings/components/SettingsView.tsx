@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -12,13 +12,15 @@ import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsI
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
 import { useAgents, useEnrolAgent, useDeleteAgent } from '../api/agents';
 import { useApiTokens, useCreateApiToken, useDeleteApiToken, type ApiToken } from '../api/apiTokens';
+import { useGraphStyleDefaults, useUpdateGraphStyleDefaults } from '../../graphs/api/graphs';
+import { GRAPH_PALETTE } from '../../graphs/components/GraphChart';
 import { useFactoryReset } from '../api/factoryReset';
 import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
 import { useMaps } from '../../maps/api/maps';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
-import type { Credential, Operator } from '../../../types';
+import type { Credential, GraphColorMode, Operator } from '../../../types';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -1033,7 +1035,16 @@ function AgentsSection() {
                             <span className="min-w-0 flex-1 truncate text-sm text-white/85">
                                 {a.name}
                                 <span className={`text-xs ${st.text}`}> - {st.label}</span>
+                                {a.latency_ms != null && <span className="text-white/30"> - {a.latency_ms < 10 ? a.latency_ms.toFixed(1) : Math.round(a.latency_ms)} ms</span>}
                                 {a.platform && <span className="text-white/30"> - {a.platform}</span>}
+                                {a.version && (
+                                    <span className="text-white/30"> - v{a.version.replace(/^v/, '')}</span>
+                                )}
+                                {a.outdated && (
+                                    <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 align-middle text-[10px] font-medium text-amber-300 ring-1 ring-amber-400/25" title="A newer version is available - update this agent to match the server">
+                                        <ArrowsClockwise weight="bold" className="h-2.5 w-2.5" /> update
+                                    </span>
+                                )}
                                 {a.device_count > 0 && <span className="text-white/30"> - {a.device_count} device(s)</span>}
                             </span>
                             {isAdmin && (
@@ -1238,6 +1249,104 @@ function SecuritySection() {
                     onClose={() => setConfirming(false)}
                 />
             )}
+        </section>
+    );
+}
+
+/**
+ * The house default look for custom graphs (admin): area fill, stacking, and the series colour
+ * palette. Every graph without its own style inherits fill/stacking; the palette is assigned to
+ * series in order and wraps when a graph has more series than colours. A series can still pin its
+ * own colour in the graph editor.
+ */
+function GraphDefaultsSection() {
+    const { data } = useGraphStyleDefaults();
+    const update = useUpdateGraphStyleDefaults();
+    const [fill, setFill] = useState(false);
+    const [stacked, setStacked] = useState(false);
+    const [colorMode, setColorMode] = useState<GraphColorMode>('group');
+    const [palette, setPalette] = useState<string[]>([]);
+
+    // Seed the controls once the saved default loads.
+    useEffect(() => {
+        if (!data) return;
+        setFill(data.fill);
+        setStacked(data.stacked);
+        setColorMode(data.color_mode);
+        setPalette(data.palette);
+    }, [data]);
+
+    const setColor = (i: number, v: string) => setPalette((p) => p.map((c, j) => (j === i ? v : c)));
+    const removeColor = (i: number) => setPalette((p) => p.filter((_, j) => j !== i));
+    // A fresh colour continues around the default ramp so a new swatch isn't a duplicate.
+    const addColor = () => setPalette((p) => [...p, GRAPH_PALETTE[p.length % GRAPH_PALETTE.length]]);
+
+    function save() {
+        if (palette.length === 0) { pushToast({ title: 'Add at least one colour', tone: 'down' }); return; }
+        update.mutate({ fill, stacked, color_mode: colorMode, palette }, {
+            onSuccess: () => pushToast({ title: 'Graph defaults saved', tone: 'up' }),
+            onError: () => pushToast({ title: "Couldn't save graph defaults", tone: 'down' }),
+        });
+    }
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <ChartLine weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">Graph defaults</h2>
+                    <p className="text-xs text-white/40">The default look for custom graphs. Each graph can override this in its editor.</p>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">Stack series<span className="block text-xs text-white/40">Same-scale series pile up to their combined total.</span></span>
+                    <Toggle checked={stacked} onChange={setStacked} />
+                </label>
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">Fill under lines<span className="block text-xs text-white/40">Shade the area beneath each series{stacked ? ' (always on when stacked)' : ''}.</span></span>
+                    <Toggle checked={fill || stacked} disabled={stacked} onChange={setFill} />
+                </label>
+
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">Colour mode<span className="block text-xs text-white/40">Shared: an interface's in + out share a colour (out dashed). Distinct: every series its own colour.</span></span>
+                    <select
+                        value={colorMode}
+                        onChange={(e) => setColorMode(e.target.value as GraphColorMode)}
+                        className="w-48 shrink-0 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white outline-none ring-1 ring-white/10 [color-scheme:dark] focus:ring-2 focus:ring-emerald-400/60"
+                    >
+                        <option value="group">Shared per interface</option>
+                        <option value="series">Distinct per series</option>
+                    </select>
+                </label>
+
+                <div className="border-t border-white/5 pt-3">
+                    <p className="text-sm text-white/70">Series colours<span className="block text-xs text-white/40">Assigned to series in order. Add as many as you like; graphs with more series than colours wrap around.</span></p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                        {palette.map((c, i) => (
+                            <div key={i} className="group relative">
+                                <label className="block cursor-pointer" title={`Colour ${i + 1}`}>
+                                    <span className="block h-8 w-8 rounded-lg ring-1 ring-white/15" style={{ backgroundColor: c }} />
+                                    <input type="color" value={c} onChange={(e) => setColor(i, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={`Colour ${i + 1}`} />
+                                </label>
+                                {palette.length > 1 && (
+                                    <button onClick={() => removeColor(i)} title="Remove colour" className="absolute -right-1.5 -top-1.5 hidden h-4 w-4 place-items-center rounded-full bg-surface text-white/60 ring-1 ring-white/20 hover:text-rose-300 group-hover:grid">
+                                        <X weight="bold" className="h-2.5 w-2.5" />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                        <button onClick={addColor} title="Add colour" className="grid h-8 w-8 place-items-center rounded-lg text-white/40 ring-1 ring-dashed ring-white/25 hover:text-white/70 hover:ring-white/45">
+                            <Plus weight="bold" className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+                <button onClick={save} disabled={update.isPending} className="rounded-lg bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-40">Save defaults</button>
+            </div>
         </section>
     );
 }
@@ -1600,6 +1709,7 @@ const TABS: Tab[] = [
     { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },
     { id: 'credentials', label: 'Credentials', icon: Key, adminOnly: true, render: () => <CredentialsSection /> },
     { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
+    { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },
     { id: 'operators', label: 'Operators', icon: UsersThree, render: () => <UsersSection /> },
     { id: 'agents', label: 'Agents', icon: Broadcast, render: () => <AgentsSection /> },
     {

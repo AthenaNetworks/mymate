@@ -256,6 +256,8 @@ export interface Agent {
     last_seen_at: string | null;
     version: string | null;
     platform: string | null;
+    latency_ms: number | null; // current link latency (hub keepalive RTT); null when not live
+    outdated: boolean; // agent version is behind the server (agent tracks the server version)
     device_count: number;
     subnet_count: number;
 }
@@ -316,13 +318,16 @@ export interface MapLink {
 }
 
 // A free-text note / label placed on a map.
+export type MapNoteSize = 'sm' | 'md' | 'lg';
 export interface MapNote {
     id: number;
     map_id: number;
     text: string;
     x: number;
     y: number;
-    color: string | null;
+    color: string | null; // text colour; null = theme default
+    background: string | null; // panel colour; null = theme default
+    size: MapNoteSize | null; // null = md
 }
 
 // Aggregated count of real device links crossing between two child maps on an overview.
@@ -408,13 +413,33 @@ export interface GraphSeriesDef {
     sensor_id?: number;
     device_id?: number;
     probe_id?: number;
-    label?: string; // editor display label (the chart computes its own)
+    label?: string; // editor display label (the chart computes its own when no `name` override)
+    name?: string | null; // custom series name shown on the chart; null = the computed label
+    color?: string | null; // optional line/fill colour; null = the palette default
+}
+
+// How a graph is drawn. Any graph without a `style` inherits the house default (settings/graph-style).
+// color_mode: 'group' shares one palette colour across an interface's in + out (out drawn dashed),
+// 'series' gives every series its own colour so none hide under another.
+export type GraphColorMode = 'group' | 'series';
+export interface GraphStyle {
+    fill: boolean;
+    stacked: boolean;
+    color_mode: GraphColorMode;
+}
+
+// The house default style, plus the series colour palette (assigned in order, wraps when a graph
+// has more series than colours). The palette lives only at the house level; per-graph a series
+// pins its own colour via GraphSeriesDef.color.
+export interface GraphStyleDefaults extends GraphStyle {
+    palette: string[];
 }
 
 export interface GraphConfig {
     metric: GraphMetric;
     series: GraphSeriesDef[];
     show_total: boolean;
+    style?: GraphStyle | null;
 }
 
 export interface Graph {
@@ -430,6 +455,7 @@ export interface GraphDataSeries {
     unit: string | null;
     dashed: boolean;
     group: string; // series sharing a group (e.g. an interface's in/out) share a colour
+    color?: string | null; // per-series override; null = the palette colour for its group
     values: (number | null)[];
 }
 

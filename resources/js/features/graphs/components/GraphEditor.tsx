@@ -1,12 +1,24 @@
-import { useState } from 'react';
-import { Plus, X } from '@phosphor-icons/react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowCounterClockwise, Plus, X } from '@phosphor-icons/react';
 import { useDevices } from '../../devices/api/getDevices';
 import { useDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
 import { useProbes } from '../../topology/api/probes';
 import { useSensors } from '../../settings/api/sensors';
-import { useSaveGraph, type GraphInput } from '../api/graphs';
+import { useSaveGraph, useGraphStyleDefaults, type GraphInput } from '../api/graphs';
+import { GRAPH_PALETTE } from './GraphChart';
 import { pushToast } from '../../../lib/toast';
-import type { Graph, GraphDirection, GraphMetric, GraphSeriesDef, GraphSource } from '../../../types';
+import type { Graph, GraphColorMode, GraphDirection, GraphMetric, GraphSeriesDef, GraphSource } from '../../../types';
+
+// The same group key the backend assigns (GetGraphData), so the editor's default swatches match
+// what the chart draws - and recolouring an interface recolours both its in + out rows together.
+function groupKey(s: GraphSeriesDef): string {
+    switch (s.source) {
+        case 'sensor': return `sensor:${s.sensor_id}:${s.device_id}`;
+        case 'ping': return `ping:${s.device_id}`;
+        case 'probe': return `probe:${s.probe_id}`;
+        default: return `if:${s.interface_id}`;
+    }
+}
 
 const field = 'rounded-lg border-0 bg-white/5 px-2.5 py-1.5 text-xs text-white/90 ring-1 ring-white/10 focus:ring-emerald-400/40 disabled:opacity-40';
 
@@ -21,12 +33,49 @@ const SOURCES: { key: GraphSource; label: string }[] = [
 export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; onDone: () => void; onCancel: () => void }) {
     const { data: devices } = useDevices();
     const { data: sensors } = useSensors();
+    const { data: styleDefaults } = useGraphStyleDefaults();
     const save = useSaveGraph();
 
     const [name, setName] = useState(initial?.name ?? '');
     const [metric, setMetric] = useState<GraphMetric>(initial?.config.metric ?? 'rate');
     const [showTotal, setShowTotal] = useState(initial?.config.show_total ?? true);
     const [series, setSeries] = useState<GraphSeriesDef[]>(initial?.config.series ?? []);
+
+    // Style: inherit the house default unless this graph carries its own config.style. When it
+    // inherits, seed the (hidden) controls from the default once it loads, so unchecking reveals
+    // the current look ready to tweak rather than a blank slate.
+    const [useDefaultStyle, setUseDefaultStyle] = useState(initial?.config.style == null);
+    const [fill, setFill] = useState(initial?.config.style?.fill ?? false);
+    const [stacked, setStacked] = useState(initial?.config.style?.stacked ?? false);
+    const [colorMode, setColorMode] = useState<GraphColorMode>(initial?.config.style?.color_mode ?? 'group');
+    useEffect(() => {
+        if (initial?.config.style == null && styleDefaults) {
+            setFill(styleDefaults.fill);
+            setStacked(styleDefaults.stacked);
+            setColorMode(styleDefaults.color_mode);
+        }
+    }, [styleDefaults, initial]);
+
+    // The default palette colour a series would draw with (house palette, wrapping), mirroring the
+    // chart: in 'group' mode an interface's in + out share their group's colour, in 'series' mode
+    // every row gets the next colour. Shown in the swatch so a series with no override still shows
+    // its actual on-chart colour.
+    const palette = styleDefaults?.palette?.length ? styleDefaults.palette : GRAPH_PALETTE;
+    const groupOrder = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const s of series) { const g = groupKey(s); if (!m.has(g)) m.set(g, m.size); }
+        return m;
+    }, [series]);
+    const defaultColorAt = (s: GraphSeriesDef, i: number) =>
+        colorMode === 'series' ? palette[i % palette.length] : palette[(groupOrder.get(groupKey(s)) ?? 0) % palette.length];
+
+    // Per-series overrides; undefined clears back to the palette default / computed name.
+    function setColor(index: number, color: string | undefined) {
+        setSeries((prev) => prev.map((s, j) => (j === index ? { ...s, color } : s)));
+    }
+    function setSeriesName(index: number, value: string) {
+        setSeries((prev) => prev.map((s, j) => (j === index ? { ...s, name: value.trim() === '' ? null : value } : s)));
+    }
 
     // The add-a-series row.
     const [source, setSource] = useState<GraphSource>('interface');
@@ -65,7 +114,8 @@ export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; on
     function submit() {
         if (!name.trim()) { pushToast({ title: 'Give the graph a name', tone: 'down' }); return; }
         if (series.length === 0) { pushToast({ title: 'Add at least one series', tone: 'down' }); return; }
-        const input: GraphInput = { id: initial?.id, name: name.trim(), config: { metric, series, show_total: showTotal } };
+        const style = useDefaultStyle ? undefined : { fill, stacked, color_mode: colorMode };
+        const input: GraphInput = { id: initial?.id, name: name.trim(), config: { metric, series, show_total: showTotal, ...(style ? { style } : {}) } };
         save.mutate(input, {
             onSuccess: () => { pushToast({ title: initial ? 'Graph updated' : 'Graph created', tone: 'up' }); onDone(); },
             onError: () => pushToast({ title: "Couldn't save the graph", tone: 'down' }),
@@ -138,19 +188,64 @@ export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; on
             {/* Current series */}
             <div className="space-y-1">
                 {series.length === 0 && <p className="px-1 text-xs text-white/35">No series yet. Add interfaces, custom OIDs, ping or probe latency above.</p>}
-                {series.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.02] px-3 py-1.5 text-xs ring-1 ring-white/5">
-                        <span className="shrink-0 rounded bg-white/5 px-1.5 text-[10px] uppercase text-white/40">{s.source}</span>
-                        <span className="flex-1 truncate text-white/75">{seriesLabel(s)}</span>
-                        <button onClick={() => setSeries((prev) => prev.filter((_, j) => j !== i))} className="rounded p-1 text-white/35 hover:text-rose-300"><X weight="bold" className="h-3 w-3" /></button>
-                    </div>
-                ))}
+                {series.map((s, i) => {
+                    const swatch = s.color ?? defaultColorAt(s, i);
+                    return (
+                        <div key={i} className="flex items-center gap-2 rounded-lg bg-white/[0.02] px-3 py-1.5 text-xs ring-1 ring-white/5">
+                            <span className="shrink-0 rounded bg-white/5 px-1.5 text-[10px] uppercase text-white/40">{s.source}</span>
+                            <input
+                                value={s.name ?? ''}
+                                onChange={(e) => setSeriesName(i, e.target.value)}
+                                placeholder={seriesLabel(s)}
+                                title="Custom series name (blank = the default)"
+                                className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 text-white/80 outline-none placeholder:text-white/40 hover:bg-white/5 focus:bg-white/5 focus:ring-1 focus:ring-emerald-400/40"
+                            />
+                            <label className="relative shrink-0 cursor-pointer" title="Series colour">
+                                <span className="block h-4 w-4 rounded-full ring-1 ring-white/20" style={{ backgroundColor: swatch }} />
+                                <input type="color" value={swatch} onChange={(e) => setColor(i, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Series colour" />
+                            </label>
+                            {s.color != null && (
+                                <button onClick={() => setColor(i, undefined)} title="Reset to default colour" className="rounded p-1 text-white/35 hover:text-white/70"><ArrowCounterClockwise weight="bold" className="h-3 w-3" /></button>
+                            )}
+                            <button onClick={() => setSeries((prev) => prev.filter((_, j) => j !== i))} className="rounded p-1 text-white/35 hover:text-rose-300"><X weight="bold" className="h-3 w-3" /></button>
+                        </div>
+                    );
+                })}
             </div>
 
             <label className="flex items-center gap-2 px-1 text-xs text-white/65">
                 <input type="checkbox" checked={showTotal} onChange={(e) => setShowTotal(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500" />
                 Show a combined total line (sum of all series)
             </label>
+
+            {/* Style: fill / stacked. Inherits the house default unless overridden here. Per-series
+                colour lives on the series rows above. */}
+            <div className="rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
+                <label className="flex items-center gap-2 text-xs text-white/75">
+                    <input type="checkbox" checked={useDefaultStyle} onChange={(e) => setUseDefaultStyle(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500" />
+                    Use the house default style
+                </label>
+                {!useDefaultStyle && (
+                    <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/5 pt-3">
+                        <label className="flex items-center gap-2 text-xs text-white/65">
+                            <input type="checkbox" checked={stacked} onChange={(e) => setStacked(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500" />
+                            Stacked
+                        </label>
+                        <label className={`flex items-center gap-2 text-xs ${stacked ? 'text-white/30' : 'text-white/65'}`}>
+                            <input type="checkbox" checked={fill || stacked} disabled={stacked} onChange={(e) => setFill(e.target.checked)} className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500 disabled:opacity-40" />
+                            Filled area{stacked ? ' (implied by stacked)' : ''}
+                        </label>
+                        <label className="flex items-center gap-2 text-xs text-white/65">
+                            Colours
+                            <select value={colorMode} onChange={(e) => setColorMode(e.target.value as GraphColorMode)} className={field}>
+                                <option value="group">Shared per interface</option>
+                                <option value="series">Distinct per series</option>
+                            </select>
+                        </label>
+                    </div>
+                )}
+                {useDefaultStyle && <p className="mt-2 text-[11px] text-white/35">Fill, stacking and colour mode follow the house default (Settings &rarr; Graphs). Rename a series or set its colour on each row above.</p>}
+            </div>
 
             <div className="flex justify-end gap-2">
                 <button onClick={onCancel} className="rounded-lg px-3 py-1.5 text-sm text-white/55 hover:text-white/85">Cancel</button>

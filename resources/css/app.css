@@ -27,6 +27,13 @@
        util% can't be computed, so the edge must NOT ramp green->red (spec). */
     --link-unknown: #64748b;
     color-scheme: dark;
+
+    /* Graph axes (custom graphs). An "R G B" triple consumed as rgb(var(--graph-axis) / <a>)
+       for gridlines, tick labels and the hover crosshair; --graph-ink is the neutral total line.
+       Both flip in light mode below; the hardcoded white the chart used before stayed invisible.
+       Series (line/fill) colours are separate - they come from the palette or a per-series override. */
+    --graph-axis: 255 255 255;
+    --graph-ink: 232 230 220;
 }
 
 /* Light theme (GitHub #34). The app is written dark-first with ~1800 `white`-based utilities
@@ -44,6 +51,11 @@
     --link-down: #9ca3af;
     --link-unknown: #94a3b8;
     color-scheme: light;
+
+    /* Dark ink for the axes + total line so they read on the white surface (the old white was
+       invisible in light mode). */
+    --graph-axis: 24 24 27;
+    --graph-ink: 39 39 42;
 
     /* Status chips are written dark-first: a pale `-300` text on a faint `-500/10` tint reads
        well on the dark UI but washes out to near-invisible on the light surface (the tint is

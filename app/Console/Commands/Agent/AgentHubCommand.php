@@ -10,6 +10,7 @@ use App\Models\Agent;
 use App\Models\Subnet;
 use App\Support\EngineLog;
 use Clue\React\Redis\Factory as RedisFactory;
+use Illuminate\Support\Facades\Cache;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Message as Psr7Message;
 use Illuminate\Console\Command;
@@ -216,6 +217,20 @@ class AgentHubCommand extends Command
             $conn->write((new Frame($frame->getPayload(), true, Frame::OP_PONG))->getContents());
         }
 
+        // A pong is the agent's reply to OUR keepalive ping, which carries a send-timestamp
+        // ("mm:<ms>"); the round-trip is the agent's current link latency. Cache it with a short
+        // TTL so it reads as "current" (and simply disappears when the agent stops answering).
+        if ($opcode === Frame::OP_PONG) {
+            $payload = $frame->getPayload();
+            if (str_starts_with($payload, 'mm:')) {
+                $sentMs = (float) substr($payload, 3);
+                $rttMs = (microtime(true) * 1000) - $sentMs;
+                if ($rttMs >= 0 && $rttMs < 60000) {
+                    Cache::put("agent:{$agentId}:latency", round($rttMs, 1), now()->addSeconds(self::KEEPALIVE_SECONDS * 3));
+                }
+            }
+        }
+
         // Every ping (from the agent) or pong (its reply to our keepalive) is a heartbeat -
         // refresh last_seen so "online" means "heard from within a keepalive or two", and the
         // reaper can flip a silent agent offline promptly instead of waiting on a TCP/proxy
@@ -255,11 +270,16 @@ class AgentHubCommand extends Command
         }
     }
 
-    /** Send a WebSocket ping to every connected agent (keepalive). The agent auto-pongs. */
+    /**
+     * Send a WebSocket ping to every connected agent (keepalive). The agent auto-pongs, echoing the
+     * payload - we stamp the send time into it ("mm:<ms>") so the pong handler can derive the link
+     * latency from the round-trip.
+     */
     private function pingAll(): void
     {
+        $payload = 'mm:'.(int) round(microtime(true) * 1000);
         foreach ($this->conns as $conn) {
-            $conn->write((new Frame('mm', true, Frame::OP_PING))->getContents());
+            $conn->write((new Frame($payload, true, Frame::OP_PING))->getContents());
         }
     }
 

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { LinkMediaType, MapDetail, MapLink, MapNote, NetworkMap } from '../../../types';
+import type { LinkMediaType, MapDetail, MapLink, MapNote, MapNoteSize, NetworkMap } from '../../../types';
 
 export const mapKeys = {
     all: ['maps'] as const,
@@ -229,17 +229,22 @@ export function useCreateMapNote() {
     });
 }
 
-/** Update a note's text / position / colour. Position saves aren't invalidated (already moved). */
+/** Update a note's text / position / style. Position saves aren't invalidated (already moved). */
 export function useUpdateMapNote() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, noteId, text, x, y, color }: { mapId: number; noteId: number; text?: string; x?: number; y?: number; color?: string | null }): Promise<MapNote> => {
-            const { data } = await apiClient.patch<{ data: MapNote }>(`/maps/${mapId}/notes/${noteId}`, { text, x, y, color });
+        mutationFn: async (
+            { mapId, noteId, text, x, y, color, background, size }:
+            { mapId: number; noteId: number; text?: string; x?: number; y?: number; color?: string | null; background?: string | null; size?: MapNoteSize | null },
+        ): Promise<MapNote> => {
+            const { data } = await apiClient.patch<{ data: MapNote }>(`/maps/${mapId}/notes/${noteId}`, { text, x, y, color, background, size });
             return data.data;
         },
-        onSuccess: (_d, { mapId, text, color }) => {
-            // Only refetch on a content change; a drag-only save leaves the cache alone.
-            if (text !== undefined || color !== undefined) qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
+        onSuccess: (_d, { mapId, text, color, background, size }) => {
+            // Only refetch on a content/style change; a drag-only save leaves the cache alone.
+            if (text !== undefined || color !== undefined || background !== undefined || size !== undefined) {
+                qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
+            }
         },
     });
 }

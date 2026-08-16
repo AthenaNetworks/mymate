@@ -23,6 +23,11 @@ class StoreGraphRequest extends FormRequest
             'config' => [$creating ? 'required' : 'sometimes', 'array'],
             'config.metric' => ['sometimes', Rule::in(['rate', 'util'])],
             'config.show_total' => ['sometimes', 'boolean'],
+            // Per-graph style override. Absent = inherit the house default (App\Support\GraphSettings).
+            'config.style' => ['sometimes', 'nullable', 'array'],
+            'config.style.fill' => ['sometimes', 'boolean'],
+            'config.style.stacked' => ['sometimes', 'boolean'],
+            'config.style.color_mode' => ['sometimes', 'in:group,series'],
             'config.series' => ['sometimes', 'array', 'max:64'],
             // A series is sourced from an interface (default), a custom sensor, ping latency, or a
             // service probe. Only the ids for its source are used; all are existence-checked.
@@ -35,6 +40,10 @@ class StoreGraphRequest extends FormRequest
             // A display label the editor captured when the series was added (the chart computes its
             // own authoritative label; this is just for editing convenience).
             'config.series.*.label' => ['sometimes', 'nullable', 'string', 'max:200'],
+            // Optional custom series name shown on the chart (overrides the computed label).
+            'config.series.*.name' => ['sometimes', 'nullable', 'string', 'max:200'],
+            // Optional per-series line/fill colour; null/absent = the categorical palette default.
+            'config.series.*.color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
         ];
     }
 }

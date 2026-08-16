@@ -272,8 +272,11 @@ type MetricsResult struct {
 }
 
 type PingResult struct {
-	DeviceID int  `json:"device_id"`
-	Up       bool `json:"up"`
+	DeviceID int      `json:"device_id"`
+	Up       bool     `json:"up"`
+	RttMs    *float64 `json:"rtt_ms,omitempty"`    // average round-trip over the replies (nil when down)
+	LossPct  *float64 `json:"loss_pct,omitempty"`  // percent of probes that got no reply
+	JitterMs *float64 `json:"jitter_ms,omitempty"` // mean absolute rtt change between replies
 }
 
 type FlowResult struct {

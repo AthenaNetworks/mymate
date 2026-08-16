@@ -196,6 +196,22 @@ return [
         'passkey_required' => (bool) env('MYMATE_PASSKEY_REQUIRED', false),
     ],
 
+    // Default look of the custom graphs (App\Support\GraphSettings overrides this in-app; each
+    // graph can override again in its own config.style). The palette is assigned to series in
+    // order and wraps when a graph has more series than colours; a series can still pin its own
+    // colour (config.series.*.color).
+    'graphs' => [
+        'style' => [
+            'fill' => (bool) env('MYMATE_GRAPH_FILL', false),
+            'stacked' => (bool) env('MYMATE_GRAPH_STACKED', false),
+            // 'group' = an interface's in + out share a colour (out dashed); 'series' = every
+            // series gets its own colour so none hide under another.
+            'color_mode' => env('MYMATE_GRAPH_COLOR_MODE', 'group'),
+            // Validated categorical default (matches GRAPH_PALETTE in the frontend chart).
+            'palette' => ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
+        ],
+    ],
+
     // Device resource metrics - CPU / memory / temperature. Polled on their own
     // (slower) cadence than throughput; latest values cached on the device row and
     // trend samples appended to device_metric_samples. Off by env if you don't want it.

@@ -13,6 +13,7 @@ import (
 const (
 	pingTimeout = 1 * time.Second
 	pingWorkers = 32 // bound concurrent pings so a big site doesn't open thousands of sockets
+	pingProbes  = 3  // echoes per device per poll - enough for a stable rtt + loss/jitter, like fping
 )
 
 // Poller holds the per-interface counter state so bps deltas survive across polls (and
@@ -81,7 +82,13 @@ func (p *Poller) runPings(ctx context.Context, targets []proto.PingTarget) []pro
 		go func(i int, t proto.PingTarget) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			results[i] = proto.PingResult{DeviceID: t.DeviceID, Up: ping(t.IP, pingTimeout)}
+			up, rtt, loss, jitter := pingStats(t.IP, pingTimeout, pingProbes)
+			res := proto.PingResult{DeviceID: t.DeviceID, Up: up, LossPct: &loss}
+			if up {
+				res.RttMs = &rtt
+				res.JitterMs = &jitter
+			}
+			results[i] = res
 		}(i, t)
 	}
 	wg.Wait()

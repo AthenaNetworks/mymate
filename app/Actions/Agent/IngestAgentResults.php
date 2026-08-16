@@ -6,6 +6,7 @@ use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
 use App\Enums\DeviceStatus;
+use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceMetricsUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
@@ -33,7 +34,7 @@ use Illuminate\Support\Facades\DB;
  * the counter-reset guard); this action computes util against the interface's known speed
  * (RateCalculator::utilPercent) so the util/colour authority stays central.
  *
- * @phpstan-type PingResult array{device_id:int, up:bool}
+ * @phpstan-type PingResult array{device_id:int, up:bool, rtt_ms?:float|null, loss_pct?:float|null, jitter_ms?:float|null}
  * @phpstan-type FlowResult array{interface_id:int, in_bps:float, out_bps:float}
  */
 class IngestAgentResults
@@ -257,30 +258,83 @@ class IngestAgentResults
         return is_numeric($v) ? (float) $v : null;
     }
 
-    /** @param array<int,array{device_id:int,up:bool}> $pings */
+    /**
+     * Fold the agent's per-device ping results into the same up/down + latency pipeline the central
+     * sweep uses (PingFleet). The agent measures rtt/loss/jitter locally (older agents that report
+     * only `up` still work - the latency half is simply skipped). Status uses the same flap
+     * dampening (a device only flips down after `fail_threshold` misses), and the latency trend is
+     * throttled per device to `ping.history_interval` so it lands about once a minute, not every
+     * report. Only this agent's devices are touched.
+     *
+     * @param  array<int,array{device_id:int,up:bool,rtt_ms?:float|null,loss_pct?:float|null,jitter_ms?:float|null}>  $pings
+     */
     private function ingestPings(Agent $agent, array $pings): void
     {
         if ($pings === []) {
             return;
         }
-        // Only this agent's devices, indexed by id.
         $wanted = collect($pings)->pluck('device_id')->all();
         $devices = Device::where('agent_id', $agent->id)->whereIn('id', $wanted)->get()->keyBy('id');
 
+        $threshold = max(1, (int) config('mymate.ping.fail_threshold', 3));
+        $interval = max(5, (int) config('mymate.ping.history_interval', 60));
+        $now = now();
+        $cutoff = $now->copy()->subSeconds($interval);
+
+        $rows = [];   // ping_samples trend inserts
+        $frames = []; // live rtt/loss frames for the latency broadcast
         foreach ($pings as $p) {
             $device = $devices->get($p['device_id'] ?? 0);
             if ($device === null) {
                 continue; // not this agent's device - ignore
             }
-            $new = ($p['up'] ?? false) ? DeviceStatus::Up : DeviceStatus::Down;
-            if ($device->status === $new) {
-                continue; // change-only, like the central sweep
+
+            // Up/down with flap dampening, mirroring PingFleet: down only after `threshold`
+            // consecutive misses; one reply recovers immediately.
+            $reachable = (bool) ($p['up'] ?? false);
+            $streak = (int) $device->fail_streak;
+            if ($reachable) {
+                $newStreak = 0;
+                $newStatus = DeviceStatus::Up;
+            } else {
+                $newStreak = min($streak + 1, $threshold);
+                $newStatus = $newStreak >= $threshold ? DeviceStatus::Down : $device->status;
             }
-            $device->status = $new;
-            $device->last_change = now();
-            $device->save();
-            LiveBroadcast::send(new DeviceStatusChanged($device));
-            $new === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
+            $statusChanged = $device->status !== $newStatus;
+            if ($newStreak !== $streak || $statusChanged) {
+                $device->fail_streak = $newStreak;
+                if ($statusChanged) {
+                    $device->status = $newStatus;
+                    $device->last_change = $now;
+                }
+                $device->save();
+                if ($statusChanged) {
+                    $newStatus === DeviceStatus::Down ? $this->outages->open($device) : $this->outages->close($device);
+                    LiveBroadcast::send(new DeviceStatusChanged($device));
+                }
+            }
+
+            // Latency trend + live columns, throttled per device to the history cadence. An older
+            // agent that reports no rtt/loss simply doesn't feed this half.
+            $rtt = self::num($p['rtt_ms'] ?? null);
+            $loss = self::num($p['loss_pct'] ?? null);
+            if ($rtt === null && $loss === null) {
+                continue;
+            }
+            if ($device->ping_at !== null && $device->ping_at->greaterThan($cutoff)) {
+                continue;
+            }
+            $jitter = self::num($p['jitter_ms'] ?? null);
+            $device->forceFill(['rtt_ms' => $rtt, 'loss_pct' => $loss, 'ping_at' => $now])->save();
+            $rows[] = ['device_id' => $device->id, 'ts' => $now, 'rtt_ms' => $rtt, 'loss_pct' => $loss, 'jitter_ms' => $jitter];
+            $frames[] = ['device_id' => $device->id, 'rtt_ms' => $rtt, 'loss_pct' => $loss];
+        }
+
+        if ($rows !== []) {
+            DB::table('ping_samples')->insert($rows);
+        }
+        if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
+            LiveBroadcast::send(new DeviceLatencyUpdated($frames));
         }
     }
 

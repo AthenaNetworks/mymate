@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\InterfaceController;
 use App\Http\Controllers\Api\InterfaceSampleController;
 use App\Http\Controllers\Api\LibreNmsImportController;
 use App\Http\Controllers\Api\LinkController;
+use App\Http\Controllers\Api\GraphSettingController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapController;
@@ -290,6 +291,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Settings: editable engine tunables + credential management.
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
+    // House default graph style. GET is open to every operator (the Graphs page resolves an
+    // inheriting graph against it); the PUT is admin-only via RestrictWritesToAdmins.
+    Route::get('settings/graph-style', [GraphSettingController::class, 'show'])->name('settings.graph-style.show');
+    Route::put('settings/graph-style', [GraphSettingController::class, 'update'])->name('settings.graph-style.update');
     // Outgoing mail server: SMTP config + a test send.
     Route::get('settings/mail', [MailSettingController::class, 'show'])->name('settings.mail.show');
     Route::put('settings/mail', [MailSettingController::class, 'update'])->name('settings.mail.update');
