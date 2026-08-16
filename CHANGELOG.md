@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-08-16
+
 ### Added
 - **Passkeys (WebAuthn) with an optional mandatory mode.** Operators can register a passkey
   (fingerprint / face / security key) as a phishing-resistant second factor from Settings → Account.
@@ -24,43 +26,48 @@ of commit subjects.
   heart-beating. Because its devices go dark when it does, their individual down alerts roll up into
   the one agent-down alert (gated on the existing suppress-dependent knob) - so you get one clear
   page naming how many devices are behind it, not a storm or a silent gap.
-
-### Fixed
-- **A dead session bounces to the login screen instead of erroring.** An expired session used to spray
-  sticky red toasts from every in-flight request; now it drops cleanly to the login screen with a
-  single "your session ended" notice.
-- **Graphs: latency overlaid on traffic keeps a sensible scale.** Adding a ping/probe latency series
-  to an interface-throughput graph used to drop the axis to raw bits (to fit both) and flatten the
-  latency line to zero. Traffic now drives the left axis in kbps/Mbps as before, and latency rides
-  its own right-hand ms axis - so both stay readable.
-- **RouterOS upgrades: CHR fetches the right package.** A CHR reports its architecture as `x86_64`, so
-  the cache tried `routeros-<v>-x86_64.npk`, which doesn't exist on MikroTik and 404'd. RouterOS 7
-  serves x86 and CHR from a single arch-less `routeros-<v>.npk`; we now use that for both, and
-  `x86_64` is a recognised architecture.
-- **Backup engine auto-provisioning no longer fails as root.** The rusted provision script wired
-  My Mate to the engine with `$SUDO -u <app-user> ...`, but on an install running as root `$SUDO`
-  is empty, so the `-u` was left dangling (`line 98: -u: command not found`) and setup bailed with
-  "backup engine setup failed". It now drops to the app user with runuser when already root. The
-  engine itself was installed and healthy - only the final "point My Mate at it" step was skipped.
-
-### Added
 - **Dependency tidy + always-undoable layouts.** A new "Dependency (from selected)" tidy: pick a
   device and only its downstream branch is re-laid-out as a clean tree fanning south, with the
   selected device left exactly where it is and everything north/unrelated untouched - so you can add
   gear under a switch later and re-tidy just that branch. With nothing selected it tidies the whole
-  map from the north-most device. Links auto-attach to the facing sides as the tree flows. Every
-  tidy now snapshots the previous layout **server-side first**, so there's an **Undo tidy** button
-  that rolls back from any browser - which is why the old "this can't be undone" confirmation is gone.
-- **Links tidy themselves up (auto-attach).** A new toolbar toggle lets a link's ends float to
-  whichever side of each card faces the other, re-picking as you drag cards around, so the map
-  stops looking like a plate of spaghetti. On by default. Flip it to "pinned" and you can drag a
-  link's endpoint onto any side of a card to fix it there. Works for device links and the
-  device-less overview links.
+  map from the north-most device. Every tidy now snapshots the previous layout **server-side first**,
+  so there's an **Undo tidy** button that rolls back from any browser - which is why the old "this
+  can't be undone" confirmation is gone.
+- **Links tidy themselves up (auto-attach).** A toolbar toggle lets a link's ends float to whichever
+  side of each card faces the other, re-picking as you drag cards around, so the map stops looking
+  like a plate of spaghetti. On by default. Flip it to "pinned" and you can drag a link's endpoint
+  onto any side of a card to fix it there. Works for device links and the device-less overview links.
 - **API reference on the demo site.** A full, interactive OpenAPI 3.1 reference (rendered with
-  Scalar) covering the integration API - devices, interfaces, maps, links, sites, alerts,
-  backups, graphs and more - with the bearer API-key auth documented. Served at `/api-docs`,
-  surfaced only on the sales/demo instance and linked from its chrome; a real monitoring
-  instance 404s it.
+  Scalar) covering the integration API - devices, interfaces, maps, links, sites, alerts, backups,
+  graphs and more - with the bearer API-key auth documented. Served at `/api-docs`, surfaced only on
+  the sales/demo instance and linked from its chrome; a real monitoring instance 404s it.
+
+### Fixed
+- **HTTPS setup no longer needs `sudo`.** The self-signed cert step shelled out via `sudo -u`, but
+  `sudo` isn't a package dependency and is often absent on a minimal box - so it aborted mid-install
+  (behind a generic "serving plain HTTP" warning) and left `APP_URL` on http, which in turn broke
+  passkeys and secure cookies. It now drops privileges with `runuser` like the rest of the installer.
+- **A dead session bounces to the login screen instead of erroring.** An expired session used to
+  spray sticky red toasts from every in-flight request; now it drops cleanly to the login screen with
+  a single "your session ended" notice.
+- **Big maps stay responsive.** On a large map the device cards were re-rendering on every poll and
+  util tick, so the canvas janked and clicks felt dead until stats settled. Only the cards that
+  actually changed re-render now.
+- **Graphs: latency overlaid on traffic keeps a sensible scale.** Adding a ping/probe latency series
+  to an interface-throughput graph used to drop the axis to raw bits and flatten the latency line to
+  zero. Traffic now drives the left axis in kbps/Mbps, and latency rides its own right-hand ms axis.
+- **RouterOS upgrades: CHR fetches the right package.** A CHR reports its architecture as `x86_64`, so
+  the cache tried `routeros-<v>-x86_64.npk`, which doesn't exist on MikroTik and 404'd. RouterOS 7
+  serves x86 and CHR from a single arch-less `routeros-<v>.npk`; we now use that for both.
+- **Backup engine auto-provisioning no longer fails as root.** The rusted provision script left a
+  dangling `-u` when `$SUDO` was empty (running as root), so backup setup bailed with a shell error.
+  It now drops to the app user with `runuser`. The engine was installed fine - only the wiring step
+  was skipped.
+- **Light mode: pale button/toggle text is readable.** The Cache button, the Discovery/Dashboard
+  toggles, the icon picker and a few others used a light `-200` tint text that washed out on white;
+  it's darkened in light mode now.
+- **Sensors: the "walk a table" row no longer collapses.** Choosing the walk aggregation squeezed the
+  mode select down to just its caret; the two selects now share the row evenly.
 
 ## [1.6.0] - 2026-08-15
 
@@ -554,7 +561,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AthenaNetworks/mymate/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/AthenaNetworks/mymate/compare/v1.3.0...v1.4.0
