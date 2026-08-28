@@ -39,6 +39,15 @@ class PasskeyController extends Controller
     /** Store the newly-created passkey, and count this session as passkey-verified. */
     public function register(PasskeyRegistrationRequest $request, StorePasskey $store): JsonResponse
     {
+        // Defence in depth for #42 (the middleware also enforces this): an operator who already
+        // has a passkey must be verified this session before adding another, so a password-only
+        // attacker can't self-enrol a factor to satisfy the gate. A first enrolment (no passkey
+        // yet) is allowed - that's the mandatory-enrol path.
+        $verified = $request->hasSession() && $request->session()->get('passkey_verified', false);
+        if (! $verified && $request->user()->passkeys()->exists()) {
+            abort(Response::HTTP_LOCKED, 'Verify an existing passkey before adding another.');
+        }
+
         $passkey = $store(
             $request->user(),
             $request->string('name')->toString() ?: 'Passkey',

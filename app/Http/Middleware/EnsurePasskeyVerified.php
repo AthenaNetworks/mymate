@@ -42,13 +42,25 @@ class EnsurePasskeyVerified
         if ($user->passkey_exempt) {
             return $next($request);
         }
-        // Let a not-yet-verified operator reach the pages that let them verify.
-        if ($request->routeIs('logout', 'user', 'passkeys.*')) {
+
+        $hasPasskey = $user->passkeys()->exists();
+
+        // Always reachable while unverified: sign out, read your own user, and the verification
+        // ceremony (challenge an existing passkey to become verified this session).
+        if ($request->routeIs('logout', 'user', 'passkeys.verify', 'passkeys.verify.options')) {
+            return $next($request);
+        }
+        // First-enrolment ONLY: an operator with no passkey yet may register their first one (the
+        // mandatory-enrol path). One who ALREADY has a passkey must VERIFY it, never mint a new one
+        // from an unverified session - otherwise a password-only attacker could self-enrol a factor
+        // and delete the victim's, bypassing the second factor entirely (GitHub #42). register /
+        // destroy / list otherwise require a verified session (they fall through to the gate below).
+        if (! $hasPasskey && $request->routeIs('passkeys.register', 'passkeys.register.options')) {
             return $next($request);
         }
 
         $required = app(AuthSettings::class)->passkeyRequired();
-        $mustVerify = $required || $user->passkeys()->exists();
+        $mustVerify = $required || $hasPasskey;
         // No session means the ceremony can't have happened this session - treat as unverified.
         $verified = $request->hasSession() && $request->session()->get('passkey_verified', false);
 

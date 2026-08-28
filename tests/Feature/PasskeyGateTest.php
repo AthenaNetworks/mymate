@@ -45,6 +45,63 @@ class PasskeyGateTest extends TestCase
         $this->actingAs($user)->getJson('/api/devices')->assertStatus(423);
     }
 
+    private function withPasskey(User $user): void
+    {
+        $user->passkeys()->create([
+            'name' => 'Victim key',
+            // A valid base64 (no padding) id - the verify-options action base64-decodes it.
+            'credential_id' => rtrim(base64_encode('victim-credential'), '='),
+            'credential' => ['type' => 'public-key'],
+        ]);
+    }
+
+    // --- GitHub #42: a password-only session must not be able to satisfy the gate itself ---------
+
+    public function test_a_password_only_session_cannot_self_enrol_a_passkey_when_one_exists(): void
+    {
+        // The bypass: an attacker with the victim's password logs in (unverified) and tries to mint
+        // their OWN authenticator to get a verified session. The victim already has a passkey, so
+        // both register + register-options must be gated - they can only VERIFY the existing one.
+        $user = User::factory()->admin()->create();
+        $this->withPasskey($user);
+
+        $this->actingAs($user)->postJson('/api/passkeys/register')->assertStatus(423);
+        $this->actingAs($user)->postJson('/api/passkeys/register/options')->assertStatus(423);
+    }
+
+    public function test_a_password_only_session_cannot_delete_a_passkey(): void
+    {
+        // The second half of the attack: deleting the victim's credential to lock them out.
+        $user = User::factory()->admin()->create();
+        $this->withPasskey($user);
+        $passkey = $user->passkeys()->first();
+
+        $this->actingAs($user)->deleteJson("/api/passkeys/{$passkey->id}")->assertStatus(423);
+    }
+
+    public function test_the_verify_ceremony_stays_reachable_for_a_passkey_holder(): void
+    {
+        // The legitimate way to become verified must NOT be gated, or a 2FA user could never log in.
+        $user = User::factory()->admin()->create();
+        $this->withPasskey($user);
+
+        // The gate must let the verification ceremony through - a 423 would strand a 2FA user with
+        // no way to become verified. The options controller itself needs a real Sanctum session
+        // (WebAuthn is browser-only, per this file's note), which the /api test harness doesn't
+        // bind - so we assert only that the gate did NOT block it (anything but 423).
+        $status = $this->actingAs($user)->postJson('/api/passkeys/verify/options')->getStatusCode();
+        $this->assertNotSame(423, $status, 'the verify ceremony must not be gated');
+    }
+
+    public function test_first_enrolment_stays_reachable_when_required_without_a_passkey(): void
+    {
+        // A mandatory-enrol user with no passkey yet must still reach register/options to enrol.
+        $this->requirePasskeys();
+        $status = $this->actingAs(User::factory()->admin()->create())
+            ->postJson('/api/passkeys/register/options')->getStatusCode();
+        $this->assertNotSame(423, $status, 'first enrolment must not be gated');
+    }
+
     public function test_an_exempt_operator_is_never_gated(): void
     {
         $this->requirePasskeys();

@@ -13,6 +13,18 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-08-28
+
+### Security
+- **Fixed a passkey 2FA bypass (GitHub #42).** The enforcement gate allowlisted `passkeys.*`, which
+  matched the register and delete routes as well as the verify ceremony, and registering a passkey
+  marked the session verified. Together, someone who knew only an operator's password could log in,
+  enrol their own authenticator to satisfy the gate, and delete the victim's passkey - defeating the
+  second factor. The gate now only lets an unverified session reach the verify ceremony (always) and
+  register a *first* passkey when the operator has none yet; an operator who already has a passkey
+  must verify it, never mint a new one or delete one, until verified. Anyone with passkeys enabled
+  (fleet-mandatory or opt-in 2FA) should update. Thanks to @appelboom for the report.
+
 ### Fixed
 - Graph PNG export failed under the app's Content-Security-Policy (it rasterised through a `blob:`
   image, which `img-src` doesn't allow). It now loads through a `data:` URL instead. SVG and CSV
@@ -593,7 +605,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/AthenaNetworks/mymate/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/AthenaNetworks/mymate/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/AthenaNetworks/mymate/compare/v1.5.0...v1.6.0
