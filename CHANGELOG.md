@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Changed
+- **Backup failures now show why, on the Backups page.** A failed device lists the engine's actual
+  message (e.g. "captured empty configuration") inline instead of just a red dot, and the reason is
+  surfaced even when the backup engine reports the failure via an HTTP error status rather than in a
+  200 body - so a device shows the specific cause rather than a generic failure.
+
 ## [1.7.1] - 2026-08-28
 
 ### Security

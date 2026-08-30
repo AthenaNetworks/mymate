@@ -274,11 +274,17 @@ export function BackupsView() {
                                 <StatusDot status={d.status} />
                                 <span className="min-w-0 flex-1">
                                     <span className="block truncate text-sm font-medium text-white/85">{d.name}</span>
-                                    <span className="block truncate text-[11px] text-white/40">
-                                        {d.backup_at ? `backed up ${relativeTime(d.backup_at)}` : 'never backed up'}
-                                    </span>
+                                    {d.backup_status === 'failed' ? (
+                                        <span className="block truncate text-[11px] text-rose-300/80" title={d.backup_message ?? 'Last backup failed'}>
+                                            {d.backup_message ?? 'Last backup failed'}
+                                        </span>
+                                    ) : (
+                                        <span className="block truncate text-[11px] text-white/40">
+                                            {d.backup_at ? `backed up ${relativeTime(d.backup_at)}` : 'never backed up'}
+                                        </span>
+                                    )}
                                 </span>
-                                {d.backup_status === 'failed' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" title="Last backup failed" />}
+                                {d.backup_status === 'failed' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" title={d.backup_message ?? 'Last backup failed'} />}
                             </button>
                         ))
                     )}

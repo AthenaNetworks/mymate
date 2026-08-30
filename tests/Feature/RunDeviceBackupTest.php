@@ -68,6 +68,40 @@ class RunDeviceBackupTest extends TestCase
         $this->assertSame(BackupStatus::Unchanged, $device->refresh()->backup_status);
     }
 
+    public function test_a_failed_result_surfaces_rusteds_message_on_the_device(): void
+    {
+        // The empty-config case (#41): Rusted reports status "failed" with a specific reason. That
+        // reason must land on backup_message so the Backups page shows *why*, not a generic failure.
+        Http::fake([
+            '*/api/devices/*/backup' => Http::response(['status' => 'failed', 'message' => 'captured empty configuration'], 200),
+            '*' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $device = $this->routerosDevice();
+        app(RunDeviceBackup::class)($device);
+
+        $device->refresh();
+        $this->assertSame(BackupStatus::Failed, $device->backup_status);
+        $this->assertSame('captured empty configuration', $device->backup_message);
+    }
+
+    public function test_a_failure_reported_via_an_error_status_still_surfaces_the_message(): void
+    {
+        // Rusted may return the same structured result with a non-2xx status; RustedClient must
+        // still surface the specific message rather than a generic HTTP error.
+        Http::fake([
+            '*/api/devices/*/backup' => Http::response(['status' => 'failed', 'message' => 'captured empty configuration'], 500),
+            '*' => Http::response(['status' => 'ok'], 200),
+        ]);
+
+        $device = $this->routerosDevice();
+        app(RunDeviceBackup::class)($device);
+
+        $device->refresh();
+        $this->assertSame(BackupStatus::Failed, $device->backup_status);
+        $this->assertSame('captured empty configuration', $device->backup_message);
+    }
+
     public function test_a_failed_capture_marks_failed_and_rethrows(): void
     {
         Http::fake([

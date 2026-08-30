@@ -173,6 +173,20 @@ class RustedClient
      */
     public function backup(string $name): array
     {
-        return $this->client()->post('/api/devices/'.rawurlencode($name).'/backup')->throw()->json() ?? [];
+        $res = $this->client()->post('/api/devices/'.rawurlencode($name).'/backup');
+        $body = $res->json();
+
+        // A failed backup can come back as HTTP 200 with {status:"failed", message:...} or as an
+        // error status carrying the same body. Either way, prefer Rusted's own structured result so
+        // the device surfaces *why* it failed (e.g. "captured empty configuration") instead of a
+        // generic HTTP error. Only when there's no structured result do we let the transport error
+        // propagate for the caller ({@see RunDeviceBackup}) to record as the failure message.
+        if (is_array($body) && isset($body['status'])) {
+            return $body;
+        }
+
+        $res->throw();
+
+        return is_array($body) ? $body : [];
     }
 }
