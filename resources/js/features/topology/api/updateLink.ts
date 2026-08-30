@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { Link } from '../../../types';
+import type { Link, LinkMediaType } from '../../../types';
 import { linkKeys } from './getLinks';
 
 export interface UpdateLinkInput {
@@ -12,6 +12,8 @@ export interface UpdateLinkInput {
     // Per-link bandwidth override A->B / B->A; null reverts to the derived speed.
     bw_ab_mbps?: number | null;
     bw_ba_mbps?: number | null;
+    // Physical medium (map styling: dash pattern); null = unspecified.
+    media_type?: LinkMediaType | null;
     // Node side each end attaches to (s-top/s-left/... ); null = auto-float to the facing side.
     a_handle?: string | null;
     b_handle?: string | null;

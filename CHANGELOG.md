@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Link editing (GitHub #39).** A link's media type is now editable, not just settable at creation
+  (the Edit tab of a link gained the media-type picker). And the link edit / add-link dialogs opened
+  from the device inspector now render as a proper centred modal instead of being trapped inside the
+  narrow inspector pane (they're portalled out past the pane's transform/blur).
+
 ### Changed
 - **Backup failures now show why, on the Backups page.** A failed device lists the engine's actual
   message (e.g. "captured empty configuration") inline instead of just a red dot, and the reason is

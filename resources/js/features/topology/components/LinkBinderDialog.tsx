@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CaretDown, LinkSimple, MagnifyingGlass, X } from '@phosphor-icons/react';
 import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
 import { useDiscoverDevice } from '../api/discoverDevice';
@@ -265,7 +266,9 @@ export function AddLinkDialog({
         );
     }
 
-    return (
+    // Portal to <body> so the modal isn't trapped by a transformed ancestor (e.g. the device
+    // inspector pane's transform/backdrop-filter becomes the containing block, GitHub #39).
+    return createPortal(
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -322,7 +325,8 @@ export function AddLinkDialog({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 
@@ -369,7 +373,9 @@ export function LinkBinderDialog({
         );
     }
 
-    return (
+    // Portal to <body> so the modal isn't trapped by a transformed ancestor (e.g. the device
+    // inspector pane's transform/backdrop-filter becomes the containing block, GitHub #39).
+    return createPortal(
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             {/* Backdrop - a fixed element, so glass blur is allowed here (never on the canvas). */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -426,6 +432,7 @@ export function LinkBinderDialog({
                     </div>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

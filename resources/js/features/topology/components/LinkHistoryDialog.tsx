@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LinkSimple, Pulse, X } from '@phosphor-icons/react';
 import { useInterfaceSamples } from '../api/getInterfaceSamples';
 import { useUpdateLink } from '../api/updateLink';
 import { InterfaceChart } from './InterfaceChart';
 import { EndPicker } from './LinkBinderDialog';
+import { MediaTypePicker } from './MediaTypePicker';
 import { useIsAdmin } from '../../auth/api/auth';
 import { pushToast } from '../../../lib/toast';
 import { formatRate } from '../../../lib/formatRate';
 import type { ChartMode } from '../../../lib/shellStore';
-import type { Device, InterfaceSample, Link } from '../../../types';
+import type { Device, InterfaceSample, Link, LinkMediaType } from '../../../types';
 
 const WINDOWS = [
     ['1h', 3600],
@@ -159,6 +161,7 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
     const [bIf, setBIf] = useState(link.b_interface_id != null ? String(link.b_interface_id) : '');
     const [bwAb, setBwAb] = useState(link.bw_ab_mbps != null ? String(link.bw_ab_mbps) : '');
     const [bwBa, setBwBa] = useState(link.bw_ba_mbps != null ? String(link.bw_ba_mbps) : '');
+    const [media, setMedia] = useState<LinkMediaType | null>(link.media_type);
     const update = useUpdateLink();
     // A ping-only end has no interface to pick, so it's ready without a selection.
     const aPingOnly = aDev?.poll_method === 'none';
@@ -181,6 +184,7 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
                 b_interface_id: bPingOnly ? null : Number(bIf),
                 bw_ab_mbps: parse(bwAb),
                 bw_ba_mbps: parse(bwBa),
+                media_type: media,
             },
             {
                 onSuccess: () => {
@@ -195,6 +199,8 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
         <div className="space-y-3.5">
             <EndPicker device={aDev} value={aIf} onChange={setAIf} />
             <EndPicker device={bDev} value={bIf} onChange={setBIf} />
+
+            <MediaTypePicker value={media} onChange={setMedia} />
 
             <div className="space-y-2 rounded-2xl bg-white/[0.02] p-3 ring-1 ring-white/[0.06]">
                 <p className="text-[11px] font-medium uppercase tracking-wide text-white/35">Bandwidth override</p>
@@ -250,7 +256,10 @@ export function LinkHistoryDialog({
         'rounded-full px-2.5 py-0.5 transition-colors duration-300 ease-fluid ' +
         (active ? 'bg-white/10 text-white/90' : 'text-white/40 hover:text-white/70');
 
-    return (
+    // Portal to <body>: the device inspector pane is a transform/backdrop-filter ancestor, which
+    // would otherwise become the containing block for this `fixed` overlay and trap it inside the
+    // narrow pane instead of covering the viewport (GitHub #39).
+    return createPortal(
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             {/* Backdrop - a fixed element, so glass blur is allowed here (never on the canvas). */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -312,6 +321,7 @@ export function LinkHistoryDialog({
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

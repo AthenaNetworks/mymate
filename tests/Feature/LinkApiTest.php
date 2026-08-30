@@ -162,6 +162,28 @@ class LinkApiTest extends TestCase
         $this->assertDatabaseMissing('links', ['id' => $link->id, 'b_interface_id' => $bIf->id]);
     }
 
+    public function test_update_can_change_the_media_type(): void
+    {
+        // GitHub #39: media type was only settable at creation; it must be editable too.
+        [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
+        $link = Link::create(['a_device_id' => $a->id, 'a_interface_id' => $aIf->id, 'b_device_id' => $b->id, 'b_interface_id' => $bIf->id, 'media_type' => 'fiber']);
+
+        $this->putJson("/api/links/{$link->id}", [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id,
+            'media_type' => 'wireless',
+        ])->assertOk()->assertJsonPath('data.media_type', 'wireless');
+
+        $this->assertDatabaseHas('links', ['id' => $link->id, 'media_type' => 'wireless']);
+
+        // And can be cleared back to unspecified.
+        $this->putJson("/api/links/{$link->id}", [
+            'a_device_id' => $a->id, 'a_interface_id' => $aIf->id,
+            'b_device_id' => $b->id, 'b_interface_id' => $bIf->id,
+            'media_type' => null,
+        ])->assertOk()->assertJsonPath('data.media_type', null);
+    }
+
     public function test_update_allows_resaving_the_same_link_unchanged(): void
     {
         [$a, $b, $aIf, $bIf] = $this->twoLinkableDevices();
