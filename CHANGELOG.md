@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-08-30
+
 ### Added
 - **Custom SNMP sensors: test an OID + show readings on the device face (GitHub #40).** The sensor
   form has a "Test OID" button that reads the OID against a chosen device (exactly as the poller
@@ -624,7 +626,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/AthenaNetworks/mymate/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/AthenaNetworks/mymate/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/AthenaNetworks/mymate/compare/v1.6.1...v1.7.0
 [1.6.1]: https://github.com/AthenaNetworks/mymate/compare/v1.6.0...v1.6.1
