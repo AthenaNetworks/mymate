@@ -28,6 +28,7 @@ class StoreSensorRequest extends FormRequest
             'unit' => ['nullable', 'string', 'max:16'],
             'divisor' => ['nullable', 'numeric', 'not_in:0'],
             'enabled' => ['sometimes', 'boolean'],
+            'on_face' => ['sometimes', 'boolean'],
             // Targeting - same bag as alert policies. null/all = fleet-wide.
             'scope' => ['nullable', 'array'],
             'scope.type' => ['nullable', Rule::in(['all', 'device_type', 'map', 'devices'])],

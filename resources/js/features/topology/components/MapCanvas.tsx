@@ -38,6 +38,7 @@ import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
 import { useLinks } from '../api/getLinks';
+import { useFaceSensors } from '../../settings/api/sensors';
 import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
 import { computeLayout, dependencyLayout, declump, type LayoutKind } from '../lib/layout';
@@ -45,7 +46,17 @@ import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from 
 import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
-import type { Device, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import type { Device, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
+
+/** Compare two devices' face-sensor label sets by value, so a routine refetch that returns the
+ *  same readings doesn't re-render the card (GitHub #40). */
+function sameFace(a: FaceSensorReading[], b: FaceSensorReading[]): boolean {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].name !== b[i].name || a[i].value !== b[i].value || a[i].unit !== b[i].unit) return false;
+    }
+    return true;
+}
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
 const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode, note: MapNoteNode };
@@ -87,6 +98,7 @@ export function MapCanvas() {
     const isAdmin = useIsAdmin();
     const { data: devices, isLoading } = useDevices();
     const { data: links } = useLinks();
+    const { data: faceSensors } = useFaceSensors(); // custom SNMP readings shown on device cards (#40)
     const activeMapId = useActiveMapId();
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
     const edgeAttach = useEdgeAttach(); // 'auto' floats links to the facing side; 'fixed' keeps pinned sides
@@ -265,6 +277,8 @@ export function MapCanvas() {
     childMapsRef.current = childMaps;
     const mapNotesRef = useRef(mapNotes);
     mapNotesRef.current = mapNotes;
+    const faceSensorsRef = useRef(faceSensors);
+    faceSensorsRef.current = faceSensors;
     const activeMapIdRef = useRef(activeMapId);
     activeMapIdRef.current = activeMapId;
 
@@ -314,6 +328,7 @@ export function MapCanvas() {
                 loss_pct: d.loss_pct,
                 latency_good_ms: d.latency_good_ms,
                 latency_bad_ms: d.latency_bad_ms,
+                faceSensors: faceSensorsRef.current?.[d.id] ?? [],
             },
         }));
         const perDevice: Record<number, number> = {};
@@ -479,6 +494,21 @@ export function MapCanvas() {
             }),
         );
     }, [devices, setNodes]);
+
+    // Face sensors (#40): patch each device's labels when the readings query updates, with the same
+    // skip-unchanged discipline as the metrics patch so a routine refetch doesn't re-render cards.
+    useEffect(() => {
+        if (!faceSensors) return;
+        setNodes((nds) =>
+            nds.map((n) => {
+                if (n.type !== 'device') return n;
+                const next = faceSensors[Number(n.id)] ?? [];
+                const cur = (n.data as { faceSensors?: FaceSensorReading[] }).faceSensors ?? [];
+                if (sameFace(cur, next)) return n;
+                return { ...n, data: { ...n.data, faceSensors: next } };
+            }),
+        );
+    }, [faceSensors, setNodes]);
 
     // Selection focus: a selected device brings its own links forward and fades the rest.
     // Only touches the emphasized/dimmed flags (util fields are preserved by the spread), and

@@ -21,6 +21,7 @@ class SensorResource extends JsonResource
             'divisor' => $this->divisor,
             'scope' => $this->scope ?? ['type' => 'all'],
             'enabled' => $this->enabled,
+            'on_face' => $this->on_face,
         ];
     }
 }

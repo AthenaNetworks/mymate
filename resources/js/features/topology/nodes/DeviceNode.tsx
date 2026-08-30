@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import type { DeviceStatus, DeviceType, TileMetric } from '../../../types';
+import type { DeviceStatus, DeviceType, FaceSensorReading, TileMetric } from '../../../types';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceGlyph } from './DeviceGlyph';
 import { linkColor } from '../lib/linkColor';
@@ -24,7 +24,13 @@ export type DeviceNodeData = {
     loss_pct: number | null;
     latency_good_ms: number | null; // <= good -> green, >= bad -> red, between -> amber
     latency_bad_ms: number | null;
+    faceSensors?: FaceSensorReading[]; // custom SNMP readings shown as labels on the card (GitHub #40)
 };
+
+/** Compact a face-sensor value: drop a trailing .0, else one decimal ("22", "21.7", "1024"). */
+function fmtFace(v: number): string {
+    return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
 
 // Fallback quality thresholds when a device has none set (typical broadband RTT feel).
 const LATENCY_GOOD_DEFAULT = 30;
@@ -224,6 +230,17 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                         <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
                             {valueLabel}
                         </span>
+                    </div>
+                )}
+
+                {/* Custom SNMP sensor labels on the device face (GitHub #40), Dude-style. */}
+                {d.faceSensors && d.faceSensors.length > 0 && (
+                    <div className="mt-2 space-y-0.5 border-t border-white/5 pt-1.5">
+                        {d.faceSensors.slice(0, 4).map((s, i) => (
+                            <div key={i} className="truncate text-[10px] leading-tight text-white/55" title={`${s.name}: ${fmtFace(s.value)}${s.unit ?? ''}`}>
+                                <span className="font-semibold tabular-nums text-white/80">{fmtFace(s.value)}{s.unit ?? ''}</span> {s.name}
+                            </div>
+                        ))}
                     </div>
                 )}
 

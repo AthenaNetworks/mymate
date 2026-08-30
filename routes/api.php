@@ -220,6 +220,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
     Route::get('devices/{device}/sensors', [SensorController::class, 'forDevice'])
         ->name('devices.sensors');
+    // Face-sensor readings for every device (GitHub #40), so the map can label each card. Readable
+    // by any operator; keyed by device id.
+    Route::get('face-sensors', [SensorController::class, 'faceReadings'])->name('sensors.face');
     // Service probes (HTTP/TCP, GitHub #19): per-device list/create + edit/delete/run/history.
     Route::get('devices/{device}/probes', [ProbeController::class, 'index'])->name('devices.probes.index');
     Route::post('devices/{device}/probes', [ProbeController::class, 'store'])->name('devices.probes.store');
@@ -322,7 +325,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Maintenance windows: scheduled alert suppression for planned work.
     Route::apiResource('maintenance-windows', MaintenanceWindowController::class)
         ->only(['index', 'store', 'update', 'destroy']);
-    // Custom SNMP sensors (user-defined OIDs).
+    // Custom SNMP sensors (user-defined OIDs). `test` reads an OID against a chosen device
+    // without saving, so it sits before the resource routes and is throttled like probes.test.
+    Route::post('sensors/test', [SensorController::class, 'test'])
+        ->middleware('throttle:20,1')->name('sensors.test');
     Route::apiResource('sensors', SensorController::class)
         ->only(['index', 'store', 'update', 'destroy']);
     // RouterOS upgrade catalog + package mirror.

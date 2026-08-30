@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { AlertScope, DeviceSensorReading, Sensor } from '../../../types';
+import type { AlertScope, DeviceSensorReading, FaceSensorReading, Sensor, SensorAgg, SensorMode } from '../../../types';
 
 export interface SensorInput {
     id?: number;
@@ -12,6 +12,7 @@ export interface SensorInput {
     divisor?: number;
     scope?: AlertScope;
     enabled?: boolean;
+    on_face?: boolean;
 }
 
 export function useSensors() {
@@ -37,6 +38,29 @@ export function useSaveSensor() {
     });
 }
 
+export interface SensorTestInput {
+    device_id: number;
+    oid: string;
+    mode?: SensorMode;
+    agg?: SensorAgg | null;
+    divisor?: number;
+}
+export interface SensorTestResult {
+    ok: boolean;
+    value?: number;
+    error?: string;
+}
+
+/** Read an OID against a chosen device without saving the sensor (validates before committing). */
+export function useTestSensor() {
+    return useMutation({
+        mutationFn: async (input: SensorTestInput): Promise<SensorTestResult> => {
+            const { data } = await apiClient.post<{ data: SensorTestResult }>('/sensors/test', input);
+            return data.data;
+        },
+    });
+}
+
 export function useDeleteSensor() {
     const qc = useQueryClient();
     return useMutation({
@@ -44,6 +68,18 @@ export function useDeleteSensor() {
             await apiClient.delete(`/sensors/${id}`);
         },
         onSuccess: () => qc.invalidateQueries({ queryKey: ['sensors'] }),
+    });
+}
+
+/** Face-sensor readings for every device (GitHub #40), keyed by device id, for the map labels. */
+export function useFaceSensors() {
+    return useQuery({
+        queryKey: ['face-sensors'],
+        queryFn: async (): Promise<Record<number, FaceSensorReading[]>> => {
+            const { data } = await apiClient.get<{ data: Record<number, FaceSensorReading[]> }>('/face-sensors');
+            return data.data;
+        },
+        refetchInterval: 30_000,
     });
 }
 

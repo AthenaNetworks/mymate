@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Broadcast, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
-import { useSensors, useSaveSensor, useDeleteSensor, type SensorInput } from '../api/sensors';
+import { Broadcast, CheckCircle, Plus, PencilSimple, Trash, WarningCircle } from '@phosphor-icons/react';
+import { useSensors, useSaveSensor, useDeleteSensor, useTestSensor, type SensorInput } from '../api/sensors';
+import { useDevices } from '../../devices/api/getDevices';
 import { ScopeEditor } from '../../../components/ScopeEditor';
 import { pushToast } from '../../../lib/toast';
 import type { AlertScope, Sensor } from '../../../types';
@@ -34,8 +35,21 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
         divisor: initial?.divisor ?? 1,
         scope: initial?.scope ?? { type: 'all' },
         enabled: initial?.enabled ?? true,
+        on_face: initial?.on_face ?? false,
     });
     const set = <K extends keyof SensorInput>(k: K, v: SensorInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+    // Test-an-OID (GitHub #40): pick an SNMP device and read the OID without saving.
+    const { data: devices } = useDevices();
+    const snmpDevices = (devices ?? []).filter((d) => d.poll_method === 'snmp');
+    const test = useTestSensor();
+    const [testDeviceId, setTestDeviceId] = useState<number | null>(null);
+    function runTest() {
+        const deviceId = testDeviceId ?? snmpDevices[0]?.id ?? null;
+        if (deviceId == null || form.oid.trim() === '') return;
+        setTestDeviceId(deviceId);
+        test.mutate({ device_id: deviceId, oid: form.oid.trim(), mode: form.mode, agg: form.agg, divisor: form.divisor });
+    }
 
     function submit() {
         save.mutate(form, {
@@ -79,10 +93,50 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
                     />
                 </label>
             </div>
+            {/* Test the OID against a device before saving (GitHub #40). */}
+            <div className="space-y-2 rounded-xl bg-white/[0.02] p-2.5 ring-1 ring-white/[0.06]">
+                <div className="flex gap-2">
+                    <select
+                        className={`${field} min-w-0 flex-1`}
+                        value={testDeviceId ?? snmpDevices[0]?.id ?? ''}
+                        onChange={(e) => setTestDeviceId(Number(e.target.value) || null)}
+                        disabled={snmpDevices.length === 0}
+                    >
+                        {snmpDevices.length === 0 && <option value="">No SNMP devices</option>}
+                        {snmpDevices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                    <button
+                        onClick={runTest}
+                        disabled={test.isPending || form.oid.trim() === '' || snmpDevices.length === 0}
+                        className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-sm font-medium text-white/80 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-40"
+                    >
+                        {test.isPending ? 'Testing...' : 'Test OID'}
+                    </button>
+                </div>
+                {test.data && (
+                    test.data.ok ? (
+                        <p className="flex items-center gap-1.5 px-1 text-xs text-emerald-300">
+                            <CheckCircle weight="fill" className="h-3.5 w-3.5 shrink-0" />
+                            Read <span className="font-mono font-semibold">{test.data.value}{form.unit ? ` ${form.unit}` : ''}</span>
+                        </p>
+                    ) : (
+                        <p className="flex items-start gap-1.5 px-1 text-xs text-rose-300/90">
+                            <WarningCircle weight="fill" className="mt-px h-3.5 w-3.5 shrink-0" />
+                            <span>{test.data.error}</span>
+                        </p>
+                    )
+                )}
+            </div>
+
             <ScopeEditor scope={form.scope ?? { type: 'all' }} onChange={(s) => set('scope', s)} />
-            <label className="flex items-center gap-2 px-1 text-sm text-white/70">
-                <input type="checkbox" checked={form.enabled ?? true} onChange={(e) => set('enabled', e.target.checked)} /> Enabled
-            </label>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-1">
+                <label className="flex items-center gap-2 text-sm text-white/70">
+                    <input type="checkbox" checked={form.enabled ?? true} onChange={(e) => set('enabled', e.target.checked)} /> Enabled
+                </label>
+                <label className="flex items-center gap-2 text-sm text-white/70" title="Draw the current reading as a label on the device's map card (like The Dude)">
+                    <input type="checkbox" checked={form.on_face ?? false} onChange={(e) => set('on_face', e.target.checked)} /> Show on device face
+                </label>
+            </div>
             <p className="px-1 text-[11px] text-white/35">
                 Polled over SNMP on the metrics cadence for the devices in scope. The raw value is divided by the
                 divisor (use it to scale, e.g. tenths of a volt → volts).

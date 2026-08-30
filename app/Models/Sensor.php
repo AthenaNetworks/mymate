@@ -22,12 +22,13 @@ class Sensor extends Model
     /** How a table walk is reduced to a single value. */
     public const AGGS = ['sum', 'avg', 'max', 'min', 'count'];
 
-    protected $fillable = ['name', 'oid', 'mode', 'agg', 'unit', 'divisor', 'scope', 'enabled'];
+    protected $fillable = ['name', 'oid', 'mode', 'agg', 'unit', 'divisor', 'scope', 'enabled', 'on_face'];
 
     protected $casts = [
         'divisor' => 'float',
         'scope' => 'array',
         'enabled' => 'boolean',
+        'on_face' => 'boolean',
     ];
 
     public function readings(): HasMany

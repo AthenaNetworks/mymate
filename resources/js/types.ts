@@ -490,6 +490,14 @@ export interface Sensor {
     divisor: number;
     scope: AlertScope;
     enabled: boolean;
+    on_face: boolean; // show the current reading as a label on the device's map card
+}
+
+/** One "show on device face" reading, drawn as a label on a device's map card (GitHub #40). */
+export interface FaceSensorReading {
+    name: string;
+    value: number;
+    unit: string | null;
 }
 
 /** The current value of one custom sensor on one device. */

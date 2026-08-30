@@ -13,6 +13,13 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Custom SNMP sensors: test an OID + show readings on the device face (GitHub #40).** The sensor
+  form has a "Test OID" button that reads the OID against a chosen device (exactly as the poller
+  will) so you can confirm it returns a value before saving. And a sensor can be flagged "Show on
+  device face" to draw its current reading as a Dude-style label on the device's map card (e.g.
+  "22°C Temp"); multiple face sensors stack on the card.
+
 ### Fixed
 - **Link editing (GitHub #39).** A link's media type is now editable, not just settable at creation
   (the Edit tab of a link gained the media-type picker). And the link edit / add-link dialogs opened

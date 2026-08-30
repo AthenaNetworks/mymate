@@ -4,9 +4,9 @@ namespace App\Actions\Polling;
 
 use App\Models\Device;
 use App\Models\Sensor;
-use App\Services\Snmp\SnmpClient;
 use App\Support\DeviceScope;
 use App\Support\EngineLog;
+use App\Support\SensorReader;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  */
 class PollSensors
 {
-    public function __construct(private SnmpClient $snmp) {}
+    public function __construct(private SensorReader $reader) {}
 
     /** @param  list<int>  $deviceIds */
     public function __invoke(array $deviceIds): void
@@ -51,17 +51,14 @@ class PollSensors
                 }
 
                 try {
-                    $raw = $sensor->mode === 'walk'
-                        ? self::aggregate($this->snmp->walk($device->mgmt_ip, $community, $sensor->oid), (string) ($sensor->agg ?: 'sum'))
-                        : self::firstNumeric($this->snmp->get($device->mgmt_ip, $community, [$sensor->oid]));
+                    $value = $this->reader->read($device->mgmt_ip, $community, $sensor->oid, $sensor->mode, $sensor->agg, (float) $sensor->divisor);
                 } catch (\Throwable) {
                     continue; // unreachable / unsupported OID - just skip this reading
                 }
 
-                if ($raw === null) {
+                if ($value === null) {
                     continue;
                 }
-                $value = $sensor->divisor != 0.0 ? $raw / $sensor->divisor : $raw;
 
                 $readings[] = ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => $value, 'read_at' => $now];
                 $history[] = ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'ts' => $now, 'value' => $value];
@@ -80,45 +77,4 @@ class PollSensors
         }
     }
 
-    /** First numeric value in an SNMP GET result (leading signed/decimal number), or null. */
-    private static function firstNumeric(array $res): ?float
-    {
-        foreach ($res as $value) {
-            if (preg_match('/-?\d+(\.\d+)?/', (string) $value, $m) === 1) {
-                return (float) $m[0];
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Reduce a table walk to one value. `count` counts every returned row (numeric or not);
-     * the rest operate on the numeric values only. An empty walk -> null (no reading).
-     *
-     * @param  array<int|string, string>  $res
-     */
-    private static function aggregate(array $res, string $agg): ?float
-    {
-        if ($agg === 'count') {
-            return $res === [] ? null : (float) count($res);
-        }
-
-        $nums = [];
-        foreach ($res as $value) {
-            if (preg_match('/-?\d+(\.\d+)?/', (string) $value, $m) === 1) {
-                $nums[] = (float) $m[0];
-            }
-        }
-        if ($nums === []) {
-            return null;
-        }
-
-        return match ($agg) {
-            'avg' => array_sum($nums) / count($nums),
-            'max' => max($nums),
-            'min' => min($nums),
-            default => array_sum($nums), // sum
-        };
-    }
 }
