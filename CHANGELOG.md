@@ -14,23 +14,23 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
-- **Add a device without putting it on a map.** Both add-device forms (the Devices page and the
+- **Add a device without putting it on a map (GitHub #43).** Both add-device forms (the Devices page and the
   map toolbar) gain a "Place on … map" checkbox, on by default. Untick it for gear you want
   monitored but not cluttering the canvas - a batch of client CPE, say. Adding from the map
   toolbar now places the device exactly once, on the map you're looking at (it used to also
   land a copy on the default map when that wasn't the active one).
-- **Bulk "Remove from maps" on the Devices page.** Select any devices and take them off every
+- **Bulk "Remove from maps" on the Devices page (GitHub #43).** Select any devices and take them off every
   map in one go; they stay monitored and keep their links and history, and any of them can be
   re-added from a map's inspector. The list also gains an "Any map / On a map / Not on any map"
   filter and a "Not on any map" tag so hidden devices are easy to find. Note that an operator
   restricted to specific maps cannot see a device that is on no map at all.
-- **Expandable health history.** The inspector's Health section gets the same expand arrow as
+- **Expandable health history (GitHub #43).** The inspector's Health section gets the same expand arrow as
   Total throughput: a large chart of one metric at a time - latency, loss, jitter, CPU, memory,
   temperature, signal, SNR, CCQ, wireless clients, OSPF neighbours - with a real labelled axis
   in that metric's unit and 1h to 30d ranges. Works for ping-only devices too.
 
 ### Fixed
-- **Dead portal stubs on the map.** A link to a device that isn't on any map no longer draws a
+- **Dead portal stubs on the map (GitHub #43).** A link to a device that isn't on any map no longer draws a
   greyed-out "other map" portal that leads nowhere - on the canvas or the public wallboard. So
   hiding a client device from the map now actually hides it, link and all.
 
