@@ -3,6 +3,7 @@ import type { Device } from '../../../types';
 import { useDeviceMetricSamples } from '../api/getDeviceMetricSamples';
 import { useDevicePingSamples } from '../api/getDevicePingSamples';
 import { useDeviceSensors } from '../../settings/api/sensors';
+import { HEALTH_METRICS, healthSeries } from '../lib/healthMetrics';
 
 // One resource row: label, sparkline of its recent history, and the current value.
 // Each metric auto-scales its own sparkline (no shared axis - %, C, ms all differ).
@@ -43,34 +44,22 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
     );
 }
 
-const pct = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)}%`;
-const ms = (v: number) => `${v.toFixed(v < 10 ? 1 : 0)} ms`;
-
 /**
  * Device health: latency + packet loss (every monitored device), plus CPU / memory /
  * temperature when the device reports them. Each row shows the current value and a recent
  * sparkline; rows with no data at all are dropped so a ping-only device shows just latency.
+ * The metric table lives in lib/healthMetrics so the expanded HealthChartModal matches.
  */
 export function DeviceResources({ device }: { device: Device }) {
     const metrics = useDeviceMetricSamples(device.id, 3600).data ?? [];
     const ping = useDevicePingSamples(device.id, 3600).data ?? [];
     const sensors = useDeviceSensors(device.id).data ?? [];
 
-    const seriesOf = <T,>(rows: T[], field: keyof T): number[] =>
-        rows.map((s) => s[field] as number | null).filter((v: number | null): v is number => v !== null);
-
-    const rows: Row[] = [
-        { key: 'latency', label: 'Latency', color: '#a78bfa', current: device.rtt_ms, series: seriesOf(ping, 'rtt_ms'), format: ms },
-        { key: 'loss', label: 'Loss', color: '#f87171', current: device.loss_pct, series: seriesOf(ping, 'loss_pct'), format: pct },
-        { key: 'cpu', label: 'CPU', color: '#34d399', current: device.cpu_pct, series: seriesOf(metrics, 'cpu_pct'), format: pct },
-        { key: 'mem', label: 'Memory', color: '#38bdf8', current: device.mem_used_pct, series: seriesOf(metrics, 'mem_used_pct'), format: pct },
-        { key: 'temp', label: 'Temp', color: '#fbbf24', current: device.temp_c, series: seriesOf(metrics, 'temp_c'), format: (v: number) => `${Math.round(v)}°C` },
-        { key: 'signal', label: 'Signal', color: '#f472b6', current: device.signal_dbm, series: seriesOf(metrics, 'signal_dbm'), format: (v: number) => `${Math.round(v)} dBm` },
-        { key: 'snr', label: 'SNR', color: '#2dd4bf', current: device.snr_db, series: seriesOf(metrics, 'snr_db'), format: (v: number) => `${Math.round(v)} dB` },
-        { key: 'ccq', label: 'CCQ', color: '#22d3ee', current: device.ccq_pct, series: seriesOf(metrics, 'ccq_pct'), format: pct },
-        { key: 'clients', label: 'Clients', color: '#c084fc', current: device.wireless_clients, series: seriesOf(metrics, 'wireless_clients'), format: (v: number) => `${Math.round(v)}` },
-        { key: 'ospf', label: 'OSPF neighbours', color: '#818cf8', current: device.ospf_neighbors, series: seriesOf(metrics, 'ospf_neighbors'), format: (v: number) => `${Math.round(v)} full` },
-    ].filter((r) => r.current !== null || r.series.length > 0);
+    const rows: Row[] = HEALTH_METRICS.map((m) => ({
+        key: m.key, label: m.label, color: m.color, format: m.format,
+        current: m.current(device),
+        series: healthSeries(m, ping, metrics),
+    })).filter((r) => r.current !== null || r.series.length > 0);
 
     if (rows.length === 0 && sensors.length === 0) {
         return <div className="text-xs text-white/35">No health data yet - collected on the next sweep.</div>;

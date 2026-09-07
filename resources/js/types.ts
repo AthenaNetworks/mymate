@@ -67,6 +67,8 @@ export interface Device {
     icon_color: string | null; // hex; tints the glyph
     parent_device_id: number | null;
     parent_name: string | null;
+    /** Maps this device is placed on (0 = hidden from every map). Only on list/show payloads. */
+    maps_count?: number;
     vendor: string | null;
     model: string | null;
     serial: string | null;

@@ -29,6 +29,8 @@ class StoreDeviceRequest extends FormRequest
             'map_y' => ['nullable', 'numeric'],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
             'parent_device_id' => ['nullable', 'integer', 'exists:devices,id'],
+            // Off = monitored but placed on no map (default on: lands on the default map).
+            'place_on_map' => ['sometimes', 'boolean'],
         ];
     }
 }

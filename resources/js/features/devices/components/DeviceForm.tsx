@@ -31,6 +31,7 @@ export function DeviceForm() {
     const [deviceType, setDeviceType] = useState<DeviceType>('unknown');
     const [agentId, setAgentId] = useState<string>(''); // '' = polled centrally
     const [credentialId, setCredentialId] = useState<string>(''); // '' = none picked yet
+    const [placeOnMap, setPlaceOnMap] = useState(true); // off = monitored but hidden from every map
 
     // Throughput polling needs a matching credential (SNMP community / RouterOS login).
     // Ping-only devices don't poll, so there's nothing to authenticate with.
@@ -52,8 +53,9 @@ export function DeviceForm() {
                 name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                 agent_id: agentId === '' ? null : Number(agentId),
                 credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
+                place_on_map: placeOnMap,
             },
-            { onSuccess: () => { setName(''); setMgmtIp(''); setDeviceType('unknown'); setAgentId(''); setCredentialId(''); } },
+            { onSuccess: () => { setName(''); setMgmtIp(''); setDeviceType('unknown'); setAgentId(''); setCredentialId(''); setPlaceOnMap(true); } },
         );
     }
 
@@ -107,6 +109,15 @@ export function DeviceForm() {
                     ))}
                 </select>
             )}
+
+            {/* Off = a client device you want monitored but not cluttering the map. */}
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+                <input type="checkbox" checked={placeOnMap} onChange={(e) => setPlaceOnMap(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-emerald-400" />
+                <span className="min-w-0">
+                    <span className="block text-sm text-white/75">Place on the default map</span>
+                    <span className="block text-[11px] leading-snug text-white/40">Off: monitored but hidden from every map until you add it from a map's inspector.</span>
+                </span>
+            </label>
 
             {/* Island CTA with nested button-in-button trailing icon + magnetic hover. */}
             <button

@@ -25,6 +25,7 @@ import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddLinkDialog } from './LinkBinderDialog';
 import { DeviceDialog } from '../../devices/components/DeviceDialog';
 import { ChartModal } from './ChartModal';
+import { HealthChartModal } from './HealthChartModal';
 import { TraceModal } from './TraceModal';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
@@ -494,6 +495,7 @@ export function DeviceInspector() {
     const [deletingLink, setDeletingLink] = useState<{ id: number; label: string } | null>(null);
     const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
     const [chartExpanded, setChartExpanded] = useState(false);
+    const [healthExpanded, setHealthExpanded] = useState(false);
     const [tracing, setTracing] = useState(false);
     const activeMapId = useActiveMapId();
     const { data: mapDetail } = useMap(activeMapId);
@@ -732,7 +734,17 @@ export function DeviceInspector() {
             )}
 
             <Section title="Health">
-                <DeviceResources device={device} />
+                <div className="group relative">
+                    <button
+                        type="button"
+                        onClick={() => setHealthExpanded(true)}
+                        title="Expand - every metric + time range"
+                        className="absolute right-0 top-0 z-10 rounded-lg p-1 text-white/35 opacity-0 transition-opacity duration-200 hover:bg-white/5 hover:text-white/80 group-hover:opacity-100"
+                    >
+                        <ArrowsOut weight="bold" className="h-3.5 w-3.5" />
+                    </button>
+                    <DeviceResources device={device} />
+                </div>
             </Section>
 
             {pingOnly ? (
@@ -891,6 +903,11 @@ export function DeviceInspector() {
                     hasSpeed={allHaveSpeed}
                     onClose={() => setChartExpanded(false)}
                 />
+            )}
+
+            {/* Enlarged, time-adjustable health chart (one metric at a time). */}
+            {healthExpanded && (
+                <HealthChartModal deviceId={device.id} deviceName={device.name} onClose={() => setHealthExpanded(false)} />
             )}
 
             {/* Live MTR trace to this device's mgmt IP; the run is stopped when this closes. */}

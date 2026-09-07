@@ -52,6 +52,17 @@ class ViewerReadOnlyTest extends TestCase
         $this->assertDatabaseHas('devices', ['id' => $device->id]);
     }
 
+    public function test_non_admin_cannot_remove_a_device_from_its_maps(): void
+    {
+        $device = Device::factory()->create();
+        $map = \App\Models\Map::factory()->create();
+        \App\Models\DeviceMapPosition::create(['device_id' => $device->id, 'map_id' => $map->id, 'x' => 1, 'y' => 1]);
+        $this->actingAs(User::factory()->create());
+
+        $this->deleteJson("/api/devices/{$device->id}/map-positions")->assertForbidden();
+        $this->assertDatabaseHas('device_map_positions', ['device_id' => $device->id, 'map_id' => $map->id]);
+    }
+
     public function test_non_admin_cannot_create_or_edit_a_device(): void
     {
         $device = Device::factory()->create();

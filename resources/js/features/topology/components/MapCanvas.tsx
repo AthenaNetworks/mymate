@@ -1000,14 +1000,20 @@ export function MapCanvas() {
             {pending && devices && <LinkBinderDialog pending={pending} devices={devices} onClose={() => setPending(null)} />}
 
             {/* Add a device (or a generic internet object) straight onto this map: create it, then
-                drop it at the current viewport centre and select it. */}
+                drop it at the current viewport centre and select it. The dialog creates with
+                place_on_map:false, so this is the ONE placement (no stray copy on the default map);
+                with the box unticked the device is selected but stays off every map. */}
             {deviceDialog && (
                 <DeviceDialog
                     mode="create"
                     defaults={deviceDialog.defaults}
                     onClose={() => setDeviceDialog(null)}
-                    onCreated={(d: Device) => {
+                    onCreated={(d: Device, placeOnMap: boolean) => {
                         if (activeMapId === null) return;
+                        if (!placeOnMap) {
+                            selectDevice(d.id); // inspector offers "Add to this map" if they change their mind
+                            return;
+                        }
                         const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
                         addToMap.mutate(
                             { mapId: activeMapId, deviceId: d.id },

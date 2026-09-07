@@ -138,6 +138,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Device CRUD + map position.
     Route::patch('devices/{device}/position', [DeviceController::class, 'updatePosition'])
         ->name('devices.position');
+    // Take a device off every map at once (Devices list bulk action). A write, so
+    // RestrictWritesToAdmins keeps it admin-only.
+    Route::delete('devices/{device}/map-positions', [DeviceController::class, 'unplace'])
+        ->name('devices.map-positions.destroy');
     // Bulk firmware upgrade - one isolated job per device. Before the
     // resource so `devices/upgrade` isn't shadowed by `devices/{device}`.
     // Dry-run the dependency checks first; both before the resource.

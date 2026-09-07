@@ -16,6 +16,10 @@ use App\Models\MapLinkPosition;
  *
  * Nothing here is sensitive - it is ids, positions, device/map names and live throughput, which
  * is exactly what the canvas draws. No credentials, no management addresses.
+ *
+ * A link whose far end is on NO map is omitted from the portals: there is nowhere to navigate
+ * to, and drawing a dead stub for every hidden client device is exactly the clutter an operator
+ * removes a device from the map to avoid.
  */
 class MapDetail
 {
@@ -43,8 +47,12 @@ class MapDetail
                 continue; // both ends on this map (intra - the canvas draws it) or neither
             }
             $remoteId = $aIn ? $link->b_device_id : $link->a_device_id;
+            // Lowest map id when the remote sits on several maps, so the portal target is stable.
             $remote = DeviceMapPosition::where('device_id', $remoteId)
-                ->where('map_id', '!=', $map->id)->with('map:id,name')->first();
+                ->where('map_id', '!=', $map->id)->orderBy('map_id')->with('map:id,name')->first();
+            if ($remote === null) {
+                continue; // far end is on no map at all - nothing to portal to (see class doc)
+            }
             $pos = $portalPos->get($link->id);
 
             // Busiest throughput (bps) + util% across both ends - the link's load.
@@ -69,8 +77,8 @@ class MapDetail
                 'local_device_id' => $aIn ? $link->a_device_id : $link->b_device_id,
                 'remote_device_id' => $remoteId,
                 'remote_device_name' => Device::find($remoteId)?->name,
-                'remote_map_id' => $remote?->map_id,
-                'remote_map_name' => $remote?->map?->name,
+                'remote_map_id' => $remote->map_id,
+                'remote_map_name' => $remote->map?->name,
                 'bps' => $bpsList === [] ? null : max($bpsList),
                 'util' => $utilList === [] ? null : round(max($utilList), 1),
                 'portal_x' => $pos?->x,

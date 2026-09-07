@@ -19,6 +19,9 @@ class DeviceResource extends JsonResource
             'last_change' => $this->last_change,
             'map_x' => $this->map_x,
             'map_y' => $this->map_y,
+            // How many maps the device is placed on (0 = hidden from every map). Only present
+            // on the list/show endpoints, which count the relation; other responses omit it.
+            'maps_count' => $this->whenCounted('mapPositions'),
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'geo_source' => $this->geo_source,

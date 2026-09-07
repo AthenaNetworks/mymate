@@ -148,4 +148,10 @@ class Device extends Model
     {
         return $this->hasMany(Probe::class);
     }
+
+    /** Every map this device is placed on (one row per map). None = hidden from all maps. */
+    public function mapPositions(): HasMany
+    {
+        return $this->hasMany(DeviceMapPosition::class);
+    }
 }

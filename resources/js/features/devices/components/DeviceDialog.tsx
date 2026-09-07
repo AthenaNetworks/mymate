@@ -33,8 +33,10 @@ export type DeviceDialogDefaults = { name?: string; mgmt_ip?: string; device_typ
 /**
  * Create or edit a device in a main-window modal. Used from the Devices view, the map toolbar
  * (add a device / a generic internet-uplink object straight onto the canvas), and the inspector
- * (edit the selected device's options). On create it hands the new device back via onCreated so
- * the caller can drop it on the current map.
+ * (edit the selected device's options). On create it hands the new device back via onCreated,
+ * with whether the operator asked for it to be placed, so the caller can drop it on the current
+ * map - the dialog itself always creates with place_on_map:false so the map caller is the single
+ * placement (no stray copy on the default map).
  */
 export function DeviceDialog({
     mode,
@@ -47,7 +49,7 @@ export function DeviceDialog({
     device?: Device;
     defaults?: DeviceDialogDefaults;
     onClose: () => void;
-    onCreated?: (device: Device) => void;
+    onCreated?: (device: Device, placeOnMap: boolean) => void;
 }) {
     const isAdmin = useIsAdmin();
     const create = useCreateDevice();
@@ -58,6 +60,7 @@ export function DeviceDialog({
     const [name, setName] = useState(device?.name ?? defaults?.name ?? '');
     const [mgmtIp, setMgmtIp] = useState(device?.mgmt_ip ?? defaults?.mgmt_ip ?? '');
     const [pollMethod, setPollMethod] = useState<PollMethod>(device?.poll_method ?? defaults?.poll_method ?? 'snmp');
+    const [placeOnMap, setPlaceOnMap] = useState(true); // create only: drop it on the current map?
     const [deviceType, setDeviceType] = useState<DeviceType>(device?.device_type ?? defaults?.device_type ?? 'unknown');
     const [agentId, setAgentId] = useState<string>(device?.agent_id != null ? String(device.agent_id) : '');
     const [credentialId, setCredentialId] = useState<string>(device?.credential_id != null ? String(device.credential_id) : '');
@@ -105,8 +108,9 @@ export function DeviceDialog({
 
         if (mode === 'create') {
             create.mutate(
-                { name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent },
-                { onSuccess: (d) => { onCreated?.(d); onClose(); } },
+                // place_on_map:false - the caller places it on the *active* map (if asked), not the default one.
+                { name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, place_on_map: false },
+                { onSuccess: (d) => { onCreated?.(d, placeOnMap); onClose(); } },
             );
         } else if (device) {
             const latGood = latencyGood.trim() === '' ? null : Number(latencyGood);
@@ -139,7 +143,9 @@ export function DeviceDialog({
                                 {mode === 'create' ? 'Add device' : `Edit ${device?.name ?? 'device'}`}
                             </h2>
                             <p className="text-xs text-white/40">
-                                {mode === 'create' ? 'It is added to your fleet and placed on this map' : 'Change how this device is identified and polled'}
+                                {mode === 'create'
+                                    ? placeOnMap ? 'It is added to your fleet and placed on this map' : 'It is added to your fleet but shown on no map'
+                                    : 'Change how this device is identified and polled'}
                             </p>
                         </div>
                         <button type="button" onClick={onClose} className="rounded-lg p-1 text-white/40 transition-colors hover:bg-white/5 hover:text-white/80">
@@ -200,6 +206,17 @@ export function DeviceDialog({
                                     <option key={a.id} value={a.id}>Via agent: {a.name}</option>
                                 ))}
                             </select>
+                        </label>
+                    )}
+
+                    {/* Off = a client device you want monitored but not cluttering the map. */}
+                    {mode === 'create' && (
+                        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
+                            <input type="checkbox" checked={placeOnMap} onChange={(e) => setPlaceOnMap(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-emerald-400" />
+                            <span className="min-w-0">
+                                <span className="block text-sm text-white/75">Place on this map</span>
+                                <span className="block text-[11px] leading-snug text-white/40">Off: monitored but hidden from every map (no node, no link stub) until you add it from a map's inspector.</span>
+                            </span>
                         </label>
                     )}
 

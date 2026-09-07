@@ -27,7 +27,8 @@ class DeviceController extends Controller
     {
         // `site` is eager-loaded so DeviceGeo can read site coordinates without an N+1
         // across the whole fleet.
-        $devices = Device::with(['parent', 'site'])->orderBy('name')->get();
+        // `mapPositions` is counted so the list can flag devices that are on no map at all.
+        $devices = Device::with(['parent', 'site'])->withCount('mapPositions')->orderBy('name')->get();
         // Resolve effective geo coordinates (own, else the site's, else inherited from the uplink
         // parent) in-memory for the whole set, so the geo map can place CPE that have no
         // coordinates of their own.
@@ -45,7 +46,7 @@ class DeviceController extends Controller
 
     public function show(Device $device): DeviceResource
     {
-        $device->loadMissing('parent', 'site');
+        $device->loadMissing('parent', 'site')->loadCount('mapPositions');
         // Single-device responses can still resolve own-or-site coordinates; only uplink
         // inheritance needs the full set and stays a list-endpoint concern.
         \App\Support\DeviceGeo::apply([$device]);
@@ -71,6 +72,18 @@ class DeviceController extends Controller
     public function destroy(Device $device, DeleteDevice $deleteDevice): Response
     {
         $deleteDevice($device);
+
+        return response()->noContent();
+    }
+
+    /**
+     * Take the device off every map at once (the Devices list's bulk "Remove from maps").
+     * The device itself, its links and its history are untouched - it stays monitored and
+     * can be re-added from any map's inspector.
+     */
+    public function unplace(Device $device): Response
+    {
+        $device->mapPositions()->delete();
 
         return response()->noContent();
     }

@@ -88,6 +88,25 @@ class MapApiTest extends TestCase
             ->assertJsonPath('data.inter_map_links.0.portal_x', null); // not yet positioned
     }
 
+    public function test_link_to_a_device_on_no_map_produces_no_portal(): void
+    {
+        $this->actingAsUser();
+        $townA = Map::factory()->create(['name' => 'Town A']);
+        $core = Device::factory()->create();
+        $client = Device::factory()->create(); // monitored but placed on NO map (hidden)
+        DeviceMapPosition::create(['device_id' => $core->id, 'map_id' => $townA->id, 'x' => 5, 'y' => 6]);
+
+        $ifA = NetworkInterface::factory()->create(['device_id' => $core->id]);
+        $ifB = NetworkInterface::factory()->create(['device_id' => $client->id]);
+        Link::create(['a_device_id' => $core->id, 'a_interface_id' => $ifA->id, 'b_device_id' => $client->id, 'b_interface_id' => $ifB->id]);
+
+        // There is nowhere to navigate to, so no dead "other map" portal stub is emitted.
+        $this->getJson("/api/maps/{$townA->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.positions')
+            ->assertJsonCount(0, 'data.inter_map_links');
+    }
+
     public function test_inter_map_link_portal_position_persists_and_is_returned(): void
     {
         $this->actingAsUser();
@@ -130,6 +149,16 @@ class MapApiTest extends TestCase
         $device = app(CreateDevice::class)(['name' => 'NewDev', 'mgmt_ip' => '10.0.0.77', 'poll_method' => PollMethod::Snmp]);
 
         $this->assertDatabaseHas('device_map_positions', ['device_id' => $device->id, 'map_id' => Map::default()->id]);
+    }
+
+    public function test_create_device_can_skip_map_placement(): void
+    {
+        $device = app(CreateDevice::class)([
+            'name' => 'Client', 'mgmt_ip' => '10.0.0.78', 'poll_method' => PollMethod::None, 'place_on_map' => false,
+        ]);
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'name' => 'Client']); // still in the fleet
+        $this->assertDatabaseMissing('device_map_positions', ['device_id' => $device->id]); // on no map
     }
 
     public function test_requires_authentication(): void

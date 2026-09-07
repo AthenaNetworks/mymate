@@ -10,6 +10,8 @@ export interface CreateDeviceInput {
     device_type?: DeviceType;
     credential_id?: number | null;
     agent_id?: number | null;
+    /** Default true: lands on the default map. False: monitored but on no map. */
+    place_on_map?: boolean;
 }
 
 export function useCreateDevice() {

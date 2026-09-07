@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass } from '@phosphor-icons/react';
+import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold } from '@phosphor-icons/react';
 import { useDevices } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
+import { useUnplaceDevice } from '../api/unplaceDevice';
 import { useUpdateDevice } from '../api/updateDevice';
 import { useUpgradeDevices, useUpgradePreflight, type UpgradePlanRow } from '../api/upgradeDevices';
 import { DeviceForm } from './DeviceForm';
@@ -25,6 +26,7 @@ export function DevicesView() {
     const isAdmin = useIsAdmin();
     const { data: devices, isLoading } = useDevices();
     const del = useDeleteDevice();
+    const unplace = useUnplaceDevice();
     const update = useUpdateDevice();
     const [editing, setEditing] = useState<Device | null>(null);
 
@@ -41,25 +43,29 @@ export function DevicesView() {
     const [pendingUpgrade, setPendingUpgrade] = useState<PendingUpgrade | null>(null);
     const [deleting, setDeleting] = useState<Device | null>(null);
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+    const [confirmBulkUnplace, setConfirmBulkUnplace] = useState(false);
 
     // Search + filters.
     const [query, setQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
     const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
     const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
+    const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced'>('all'); // on a map / hidden from every map
     const q = query.trim().toLowerCase();
     const filtered = (devices ?? []).filter(
         (d) =>
             (statusFilter === 'all' || d.status === statusFilter) &&
             (typeFilter === 'all' || d.device_type === typeFilter) &&
             (monitoredFilter === 'all' || (monitoredFilter === 'live') === d.monitored) &&
+            // A payload without the count (older API) is treated as placed so nothing vanishes.
+            (mapFilter === 'all' || (mapFilter === 'placed') === ((d.maps_count ?? 1) > 0)) &&
             (!q ||
                 d.name.toLowerCase().includes(q) ||
                 d.mgmt_ip.includes(q) ||
                 (d.model ?? '').toLowerCase().includes(q) ||
                 (d.vendor ?? '').toLowerCase().includes(q)),
     );
-    const filtersActive = q !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all';
+    const filtersActive = q !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all';
     const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
 
     function open(id: number) {
@@ -85,6 +91,16 @@ export function DevicesView() {
         setSelected(new Set());
         setConfirmBulkDelete(false);
         pushToast({ title: `Deleted ${ids.length} device${ids.length > 1 ? 's' : ''}`, tone: 'info' });
+    }
+
+    // Take every selected device off every map (they stay monitored) - e.g. a batch of imported
+    // client CPE that shouldn't clutter the core map. Same fan-out pattern as bulk delete.
+    async function unplaceSelected() {
+        const ids = [...selected];
+        await Promise.all(ids.map((id) => unplace.mutateAsync(id).catch(() => null)));
+        setSelected(new Set());
+        setConfirmBulkUnplace(false);
+        pushToast({ title: `Removed ${ids.length} device${ids.length > 1 ? 's' : ''} from all maps`, tone: 'info' });
     }
 
     function toggle(id: number) {
@@ -185,6 +201,15 @@ export function DevicesView() {
                                             {preflight.isPending ? 'Checking...' : upgrade.isPending ? 'Queuing...' : `Upgrade ${selected.size}`}
                                         </button>
                                         <button
+                                            onClick={() => setConfirmBulkUnplace(true)}
+                                            disabled={unplace.isPending}
+                                            title="Take the selected devices off every map (they stay monitored)"
+                                            className="flex items-center gap-1.5 rounded-full bg-indigo-500/15 px-3 py-1 text-xs font-medium text-indigo-200 ring-1 ring-indigo-400/25 transition-all duration-300 ease-fluid hover:bg-indigo-500/25 active:scale-[0.98] disabled:opacity-50"
+                                        >
+                                            <MapTrifold weight="bold" className="h-3.5 w-3.5" />
+                                            {unplace.isPending ? 'Removing...' : 'Remove from maps'}
+                                        </button>
+                                        <button
                                             onClick={() => setConfirmBulkDelete(true)}
                                             disabled={del.isPending}
                                             className="flex items-center gap-1.5 rounded-full bg-rose-500/15 px-3 py-1 text-xs font-medium text-rose-200 ring-1 ring-rose-400/25 transition-all duration-300 ease-fluid hover:bg-rose-500/25 active:scale-[0.98] disabled:opacity-50"
@@ -226,8 +251,13 @@ export function DevicesView() {
                                     <option value="live">Live</option>
                                     <option value="paused">Paused</option>
                                 </select>
+                                <select value={mapFilter} onChange={(e) => setMapFilter(e.target.value as typeof mapFilter)} className={selectCls}>
+                                    <option value="all">Any map</option>
+                                    <option value="placed">On a map</option>
+                                    <option value="unplaced">Not on any map</option>
+                                </select>
                                 {filtersActive && (
-                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
+                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
                                         Clear
                                     </button>
                                 )}
@@ -278,7 +308,7 @@ export function DevicesView() {
                                                 type="checkbox"
                                                 checked={selected.has(d.id)}
                                                 onChange={() => toggle(d.id)}
-                                                title="Select (bulk upgrade / delete)"
+                                                title="Select (bulk upgrade / remove from maps / delete)"
                                                 className="mr-2.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-amber-400"
                                             />
                                         )}
@@ -319,6 +349,15 @@ export function DevicesView() {
                                                     'SNMP'
                                                 )}
                                             </span>
+                                            {/* Hidden from every map - monitored, but no node anywhere. */}
+                                            {d.maps_count === 0 && (
+                                                <span
+                                                    title="Not placed on any map - open a map and use 'Add to this map' in the inspector"
+                                                    className="hidden items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-white/35 ring-1 ring-white/10 sm:inline-flex"
+                                                >
+                                                    <MapTrifold weight="bold" className="h-3 w-3" /> Not on any map
+                                                </span>
+                                            )}
                                             {/* Enable/disable monitoring inline - paused devices poll nothing. */}
                                             {isAdmin && (
                                                 <button
@@ -346,8 +385,9 @@ export function DevicesView() {
                                                 )}
                                                 <button
                                                     onClick={() => open(d.id)}
-                                                    title="Show on map"
-                                                    className="rounded-lg p-1 text-white/40 opacity-100 transition-all duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 lg:text-white/30 lg:opacity-0 lg:group-hover:opacity-100"
+                                                    disabled={d.maps_count === 0}
+                                                    title={d.maps_count === 0 ? 'Not on any map' : 'Show on map'}
+                                                    className="rounded-lg p-1 text-white/40 opacity-100 transition-all duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-30 lg:text-white/30 lg:opacity-0 lg:group-hover:opacity-100"
                                                 >
                                                     <ArrowRight weight="bold" className="h-4 w-4" />
                                                 </button>
@@ -441,6 +481,24 @@ export function DevicesView() {
                     busy={del.isPending}
                     onConfirm={deleteSelected}
                     onClose={() => setConfirmBulkDelete(false)}
+                />
+            )}
+
+            {confirmBulkUnplace && (
+                <ConfirmDialog
+                    title="Remove from maps"
+                    icon={<MapTrifold weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Take <span className="font-semibold text-white/85">{selected.size} device{selected.size > 1 ? 's' : ''}</span> off every map?
+                            They stay monitored and keep their links and history; re-add one from any map's inspector. Note that
+                            operators restricted to specific maps can't see a device that's on no map.
+                        </>
+                    }
+                    confirmLabel={`Remove ${selected.size} from maps`}
+                    busy={unplace.isPending}
+                    onConfirm={unplaceSelected}
+                    onClose={() => setConfirmBulkUnplace(false)}
                 />
             )}
 

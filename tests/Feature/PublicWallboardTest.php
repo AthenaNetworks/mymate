@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\Device;
 use App\Models\DeviceMapPosition;
+use App\Models\Link;
 use App\Models\Map;
 use App\Models\MapShare;
+use App\Models\NetworkInterface;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -67,6 +69,22 @@ class PublicWallboardTest extends TestCase
         }
         // The raw IP string must not appear anywhere in the response.
         $this->assertStringNotContainsString('10.9.9.9', $res->getContent());
+    }
+
+    public function test_wallboard_omits_links_to_devices_on_no_map(): void
+    {
+        [$map, $device] = $this->mapWithDevice();
+        $hidden = Device::factory()->create(['mgmt_ip' => '10.9.9.10']); // linked, but on no map
+        $ifA = NetworkInterface::factory()->create(['device_id' => $device->id]);
+        $ifB = NetworkInterface::factory()->create(['device_id' => $hidden->id]);
+        Link::create(['a_device_id' => $device->id, 'a_interface_id' => $ifA->id, 'b_device_id' => $hidden->id, 'b_interface_id' => $ifB->id]);
+        $token = MapShare::create(['map_id' => $map->id, 'token' => MapShare::newToken(), 'enabled' => true])->token;
+
+        // Same builder as the authenticated map: no dead portal stub on the NOC screen either.
+        $this->getJson("/api/public/wall/{$token}/map")
+            ->assertOk()
+            ->assertJsonCount(1, 'data.positions')
+            ->assertJsonCount(0, 'data.inter_map_links');
     }
 
     public function test_disabled_and_unknown_tokens_404(): void

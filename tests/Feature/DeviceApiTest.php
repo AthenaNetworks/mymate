@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Enums\DeviceType;
 use App\Models\Credential;
 use App\Models\Device;
+use App\Models\DeviceMapPosition;
+use App\Models\Map;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -36,6 +38,55 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('data.status', 'unknown');
 
         $this->assertDatabaseHas('devices', ['name' => 'Edge1', 'mgmt_ip' => '10.0.0.1', 'status' => 'unknown']);
+    }
+
+    public function test_it_places_a_new_device_on_the_default_map_by_default(): void
+    {
+        $id = $this->postJson('/api/devices', ['name' => 'Edge1', 'mgmt_ip' => '10.0.0.1', 'poll_method' => 'snmp'])
+            ->assertCreated()->json('data.id');
+
+        $this->assertDatabaseHas('device_map_positions', ['device_id' => $id, 'map_id' => Map::default()->id]);
+    }
+
+    public function test_it_creates_a_device_without_placing_it_on_a_map(): void
+    {
+        $id = $this->postJson('/api/devices', [
+            'name' => 'Client-CPE', 'mgmt_ip' => '10.0.0.2', 'poll_method' => 'none', 'place_on_map' => false,
+        ])->assertCreated()->json('data.id');
+
+        $this->assertDatabaseHas('devices', ['id' => $id]);
+        $this->assertDatabaseMissing('device_map_positions', ['device_id' => $id]);
+    }
+
+    public function test_it_removes_a_device_from_every_map(): void
+    {
+        $device = Device::factory()->create();
+        $other = Device::factory()->create();
+        foreach (Map::factory()->count(2)->create() as $map) {
+            DeviceMapPosition::create(['device_id' => $device->id, 'map_id' => $map->id, 'x' => 1, 'y' => 2]);
+            DeviceMapPosition::create(['device_id' => $other->id, 'map_id' => $map->id, 'x' => 3, 'y' => 4]);
+        }
+
+        $this->deleteJson("/api/devices/{$device->id}/map-positions")->assertNoContent();
+
+        $this->assertDatabaseMissing('device_map_positions', ['device_id' => $device->id]);
+        $this->assertDatabaseHas('devices', ['id' => $device->id]);                  // still monitored
+        $this->assertSame(2, DeviceMapPosition::where('device_id', $other->id)->count()); // untouched
+    }
+
+    public function test_index_and_show_report_how_many_maps_a_device_is_on(): void
+    {
+        $placed = Device::factory()->create(['name' => 'placed']);
+        $hidden = Device::factory()->create(['name' => 'hidden']);
+        foreach (Map::factory()->count(2)->create() as $map) {
+            DeviceMapPosition::create(['device_id' => $placed->id, 'map_id' => $map->id, 'x' => 0, 'y' => 0]);
+        }
+
+        $rows = collect($this->getJson('/api/devices')->assertOk()->json('data'))->keyBy('id');
+        $this->assertSame(2, $rows[$placed->id]['maps_count']);
+        $this->assertSame(0, $rows[$hidden->id]['maps_count']);
+
+        $this->getJson("/api/devices/{$placed->id}")->assertOk()->assertJsonPath('data.maps_count', 2);
     }
 
     public function test_it_validates_on_create(): void
