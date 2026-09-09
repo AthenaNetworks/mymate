@@ -30,6 +30,15 @@ of commit subjects.
   in that metric's unit and 1h to 30d ranges. Works for ping-only devices too.
 
 ### Fixed
+- **Group drags on the map now save every device (GitHub #44).** Selecting several devices and dragging them
+  together only persisted the one under the cursor; the rest snapped back to their old spots on the
+  next refresh, which looked like the map "forgetting" positions after a big batch of adds. All the
+  dragged nodes (devices, portals, child maps and notes) now go up in one request, Tidy saves the
+  whole layout in one request too, and a device dropped onto the canvas lands at its drop point in
+  the same call that adds it - no follow-up save to race against a refresh. A failed save now shows a
+  toast and reverts the nodes instead of silently disagreeing with the server, and a refresh mid-drag
+  no longer bounces nodes back. Selection survives a canvas rebuild, so a group stays selected after
+  you move it. Same one-node fix for group drags on the Geo map.
 - **Dead portal stubs on the map (GitHub #43).** A link to a device that isn't on any map no longer draws a
   greyed-out "other map" portal that leads nowhere - on the canvas or the public wallboard. So
   hiding a client device from the map now actually hides it, link and all.

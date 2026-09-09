@@ -22,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 /**
@@ -80,6 +81,64 @@ class MapController extends Controller
         );
 
         return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Persist the positions of many nodes on this map at once - everything a single gesture
+     * moved (a multi-select drag, an auto-layout) - in one transaction, so a group drag can't
+     * half-save and a refresh mid-flight can't see a partial layout (GitHub #44). Any mix of
+     * device placements, inter-map portals, child-map nodes and notes; each list is optional.
+     */
+    public function savePositions(Request $request, Map $map): JsonResponse
+    {
+        $data = $request->validate([
+            'devices' => ['sometimes', 'array', 'max:2000'],
+            'devices.*.id' => ['required', 'integer', 'exists:devices,id'],
+            'devices.*.x' => ['required', 'numeric'],
+            'devices.*.y' => ['required', 'numeric'],
+            'portals' => ['sometimes', 'array', 'max:2000'],
+            'portals.*.link_id' => ['required', 'integer', 'exists:links,id'],
+            'portals.*.x' => ['required', 'numeric'],
+            'portals.*.y' => ['required', 'numeric'],
+            'child_maps' => ['sometimes', 'array', 'max:2000'],
+            'child_maps.*.id' => ['required', 'integer', Rule::exists('maps', 'id')->where('parent_map_id', $map->id)],
+            'child_maps.*.x' => ['required', 'numeric'],
+            'child_maps.*.y' => ['required', 'numeric'],
+            'notes' => ['sometimes', 'array', 'max:2000'],
+            'notes.*.id' => ['required', 'integer', Rule::exists('map_notes', 'id')->where('map_id', $map->id)],
+            'notes.*.x' => ['required', 'numeric'],
+            'notes.*.y' => ['required', 'numeric'],
+        ]);
+
+        $saved = DB::transaction(function () use ($data, $map): int {
+            $n = 0;
+            foreach ($data['devices'] ?? [] as $d) {
+                DeviceMapPosition::updateOrCreate(
+                    ['device_id' => $d['id'], 'map_id' => $map->id],
+                    ['x' => $d['x'], 'y' => $d['y']],
+                );
+                $n++;
+            }
+            foreach ($data['portals'] ?? [] as $p) {
+                MapLinkPosition::updateOrCreate(
+                    ['map_id' => $map->id, 'link_id' => $p['link_id']],
+                    ['x' => $p['x'], 'y' => $p['y']],
+                );
+                $n++;
+            }
+            foreach ($data['child_maps'] ?? [] as $c) {
+                Map::whereKey($c['id'])->where('parent_map_id', $map->id)->update(['node_x' => $c['x'], 'node_y' => $c['y']]);
+                $n++;
+            }
+            foreach ($data['notes'] ?? [] as $note) {
+                MapNote::whereKey($note['id'])->where('map_id', $map->id)->update(['x' => $note['x'], 'y' => $note['y']]);
+                $n++;
+            }
+
+            return $n;
+        });
+
+        return response()->json(['ok' => true, 'saved' => $saved]);
     }
 
     /** Persist where an inter-map link's portal node sits on this map (drag to move). */

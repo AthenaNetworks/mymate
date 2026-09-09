@@ -254,6 +254,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Multiple maps: tree + per-map device placements/positions + inter-map links.
     Route::apiResource('maps', MapController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
     Route::patch('maps/{map}/positions/{device}', [MapController::class, 'savePosition'])->name('maps.positions.save');
+    // Bulk: every node moved in one gesture (group drag, Tidy) lands in one transaction (GitHub #44).
+    Route::patch('maps/{map}/positions', [MapController::class, 'savePositions'])->name('maps.positions.save-many');
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');

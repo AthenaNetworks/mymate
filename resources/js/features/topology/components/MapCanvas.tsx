@@ -33,7 +33,7 @@ import { MapSearch } from './MapSearch';
 import { MapControls } from './MapControls';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPosition, useSaveMapLinkPosition, useAddDeviceToMap, useSaveChildMapPosition, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
+import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
@@ -105,9 +105,7 @@ export function MapCanvas() {
     const layoutKind = useLayoutKind(); // last-applied auto-layout algorithm
     const selectedDeviceId = useSelectedDeviceId(); // focus its links, fade the rest
     const { data: mapDetail } = useMap(activeMapId); // membership + per-map positions + inter-map links
-    const savePosition = useSaveMapPosition();
-    const saveLinkPosition = useSaveMapLinkPosition();
-    const saveChildPosition = useSaveChildMapPosition();
+    const savePositions = useSaveMapPositions(); // one request per gesture, optimistic (GitHub #44)
     const removeChildMap = useRemoveChildMap();
     const createMapLink = useCreateMapLink();
     const updateLink = useUpdateLink();
@@ -378,7 +376,17 @@ export function MapCanvas() {
             draggable: isAdmin,
             selectable: true,
         }));
-        setNodes([...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes]);
+        // Carry each node's selection and measured size across the rebuild. A position save patches
+        // the cached positions (and so membershipKey) the moment a drag ends; a fresh node object
+        // without `measured` makes React Flow re-measure it (edges jump until it does), and losing
+        // the selection would make a group impossible to nudge twice in a row (GitHub #44).
+        setNodes((prev) => {
+            const prevById = new Map(prev.map((n) => [n.id, n]));
+            return [...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes].map((n) => {
+                const p = prevById.get(n.id);
+                return p ? { ...n, measured: p.measured, selected: p.selected } : n;
+            });
+        });
     }, [membershipKey, setNodes, isAdmin]);
 
     // Intra-map links -> util edges; inter-map links -> dashed portal edges. Seed util.
@@ -548,12 +556,12 @@ export function MapCanvas() {
         (pos: Record<number, { x: number; y: number }>) => {
             if (activeMapId === null) return;
             setNodes((nds) => nds.map((n) => (n.type === 'device' && pos[Number(n.id)] ? { ...n, position: pos[Number(n.id)] } : n)));
-            for (const [id, p] of Object.entries(pos)) {
-                savePosition.mutate({ mapId: activeMapId, deviceId: Number(id), x: p.x, y: p.y });
-            }
+            // One request for the whole layout (not one per device), so a big Tidy can't half-land.
+            const devices = Object.entries(pos).map(([id, p]) => ({ id: Number(id), x: p.x, y: p.y }));
+            if (devices.length) savePositions.mutate({ mapId: activeMapId, devices });
             setTimeout(() => fitView({ padding: 0.3, duration: 600 }), 60);
         },
-        [activeMapId, setNodes, savePosition, fitView],
+        [activeMapId, setNodes, savePositions, fitView],
     );
 
     // Snapshot the current on-canvas device positions (seeds the force layout + feeds Remove-overlaps).
@@ -644,24 +652,21 @@ export function MapCanvas() {
                 nodesConnectable={isAdmin}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
-                onNodeDragStop={(_, node) => {
+                onNodeDragStop={(_, node, dragged) => {
                     if (!isAdmin || activeMapId === null) return;
-                    // Inter-map link portals are draggable too - persist their position.
-                    if (node.type === 'portal') {
-                        const linkId = Number(node.id.replace('portal:', ''));
-                        if (linkId) saveLinkPosition.mutate({ mapId: activeMapId, linkId, x: node.position.x, y: node.position.y });
-                        return;
+                    // A multi-select drag moves every selected node, but React Flow hands us the one
+                    // under the cursor as `node` - the full set is the third argument. Persist ALL of
+                    // them, in one request; saving only `node` left the rest of the group unsaved and
+                    // they snapped back on the next refetch (GitHub #44).
+                    const batch: Required<MapPositionBatch> = { devices: [], portals: [], child_maps: [], notes: [] };
+                    for (const n of dragged.length ? dragged : [node]) {
+                        const { x, y } = n.position;
+                        if (n.type === 'device') batch.devices.push({ id: Number(n.id), x, y });
+                        else if (n.type === 'portal') { const linkId = Number(n.id.replace('portal:', '')); if (linkId) batch.portals.push({ link_id: linkId, x, y }); }
+                        else if (n.type === 'childmap') batch.child_maps.push({ id: childMapId(n.id), x, y });
+                        else if (n.type === 'note') batch.notes.push({ id: noteId(n.id), x, y });
                     }
-                    if (node.type === 'childmap') {
-                        saveChildPosition.mutate({ mapId: activeMapId, childMapId: childMapId(node.id), x: node.position.x, y: node.position.y });
-                        return;
-                    }
-                    if (node.type === 'note') {
-                        updateMapNote.mutate({ mapId: activeMapId, noteId: noteId(node.id), x: node.position.x, y: node.position.y });
-                        return;
-                    }
-                    if (node.type !== 'device') return;
-                    savePosition.mutate({ mapId: activeMapId, deviceId: Number(node.id), x: node.position.x, y: node.position.y });
+                    if (!isEmptyBatch(batch)) savePositions.mutate({ mapId: activeMapId, ...batch });
                 }}
                 onConnect={(c: Connection) => {
                     if (!isAdmin || !c.source || !c.target || c.source === c.target) return;
@@ -731,10 +736,8 @@ export function MapCanvas() {
                     const deviceId = Number(e.dataTransfer.getData('application/mymate-device'));
                     if (!deviceId) return;
                     const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-                    addToMap.mutate(
-                        { mapId: activeMapId, deviceId },
-                        { onSuccess: () => { savePosition.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }); selectDevice(deviceId); } },
-                    );
+                    // Position rides along with the add, so there's no follow-up save to race the refetch.
+                    addToMap.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }, { onSuccess: () => selectDevice(deviceId) });
                 }}
                 fitView
                 fitViewOptions={{ padding: 0.3 }}
@@ -1015,10 +1018,7 @@ export function MapCanvas() {
                             return;
                         }
                         const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-                        addToMap.mutate(
-                            { mapId: activeMapId, deviceId: d.id },
-                            { onSuccess: () => { savePosition.mutate({ mapId: activeMapId, deviceId: d.id, x: pos.x, y: pos.y }); selectDevice(d.id); } },
-                        );
+                        addToMap.mutate({ mapId: activeMapId, deviceId: d.id, x: pos.x, y: pos.y }, { onSuccess: () => selectDevice(d.id) });
                     }}
                 />
             )}

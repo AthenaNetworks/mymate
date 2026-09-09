@@ -180,10 +180,14 @@ function GeoFlowInner() {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeClick={(_, node) => node.type === 'device' && selectDevice(Number(node.id))}
-                onNodeDragStop={(_, node) => {
-                    if (node.type !== 'device') return;
-                    const { lat, lng } = unproject(node.position.x, node.position.y, baseZoom);
-                    update.mutate({ id: Number(node.id), latitude: Number(lat.toFixed(7)), longitude: Number(lng.toFixed(7)) });
+                onNodeDragStop={(_, node, dragged) => {
+                    // A multi-select drag moves several nodes; save each of them, not just the one
+                    // under the cursor (GitHub #44).
+                    for (const n of dragged.length ? dragged : [node]) {
+                        if (n.type !== 'device') continue;
+                        const { lat, lng } = unproject(n.position.x, n.position.y, baseZoom);
+                        update.mutate({ id: Number(n.id), latitude: Number(lat.toFixed(7)), longitude: Number(lng.toFixed(7)) });
+                    }
                 }}
                 minZoom={0.05}
                 maxZoom={12}

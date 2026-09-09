@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
+import { pushToast } from '../../../lib/toast';
 import type { LinkMediaType, MapDetail, MapLink, MapNote, MapNoteSize, NetworkMap } from '../../../types';
 
 export const mapKeys = {
@@ -59,28 +60,104 @@ export function useDeleteMap() {
     });
 }
 
-export function useSaveMapPosition() {
+/** One gesture's worth of moved nodes - any mix of the four node kinds; each list optional. */
+export interface MapPositionBatch {
+    devices?: { id: number; x: number; y: number }[];
+    portals?: { link_id: number; x: number; y: number }[];
+    child_maps?: { id: number; x: number; y: number }[];
+    notes?: { id: number; x: number; y: number }[];
+}
+
+export function isEmptyBatch(b: MapPositionBatch): boolean {
+    return !b.devices?.length && !b.portals?.length && !b.child_maps?.length && !b.notes?.length;
+}
+
+/** Fold a batch of moves into a cached MapDetail so the canvas and the cache agree immediately. */
+function applyBatch(detail: MapDetail, b: MapPositionBatch): MapDetail {
+    const next = { ...detail };
+    if (b.devices?.length) {
+        const byId = new Map(b.devices.map((d) => [d.id, d]));
+        next.positions = detail.positions.map((p) => {
+            const m = byId.get(p.device_id);
+            return m ? { ...p, x: m.x, y: m.y } : p;
+        });
+    }
+    if (b.portals?.length) {
+        const byId = new Map(b.portals.map((pt) => [pt.link_id, pt]));
+        next.inter_map_links = detail.inter_map_links.map((il) => {
+            const m = byId.get(il.id);
+            return m ? { ...il, portal_x: m.x, portal_y: m.y } : il;
+        });
+    }
+    if (b.child_maps?.length) {
+        const byId = new Map(b.child_maps.map((c) => [c.id, c]));
+        next.child_maps = detail.child_maps.map((c) => {
+            const m = byId.get(c.id);
+            return m ? { ...c, node_x: m.x, node_y: m.y } : c;
+        });
+    }
+    if (b.notes?.length) {
+        const byId = new Map(b.notes.map((n) => [n.id, n]));
+        next.map_notes = detail.map_notes.map((n) => {
+            const m = byId.get(n.id);
+            return m ? { ...n, x: m.x, y: m.y } : n;
+        });
+    }
+    return next;
+}
+
+/**
+ * Persist every node a single gesture moved (a multi-select drag, Tidy) in ONE request
+ * (GitHub #44). The cached map detail is patched optimistically first - and any refetch
+ * already in flight is cancelled - so a refresh landing mid-drag can't bounce the nodes back
+ * to their old spots. On failure the cache is rolled back (the nodes visibly revert) and a
+ * toast says so, rather than the canvas silently disagreeing with the server.
+ */
+export function useSaveMapPositions() {
+    const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, deviceId, x, y }: { mapId: number; deviceId: number; x: number; y: number }): Promise<void> => {
-            await apiClient.patch(`/maps/${mapId}/positions/${deviceId}`, { x, y });
+        mutationFn: async ({ mapId, ...batch }: { mapId: number } & MapPositionBatch): Promise<void> => {
+            await apiClient.patch(`/maps/${mapId}/positions`, batch);
+        },
+        onMutate: async ({ mapId, ...batch }) => {
+            const key = mapKeys.detail(mapId);
+            // A refetch already in flight (e.g. the one an "add device" just triggered) would land
+            // AFTER our patch carrying pre-drag positions. Cancel it; it's re-run once the save
+            // has succeeded (see onSuccess) so whatever it was fetching for still arrives.
+            const interrupted = qc.isFetching({ queryKey: key }) > 0;
+            await qc.cancelQueries({ queryKey: key });
+            const previous = qc.getQueryData<MapDetail>(key);
+            if (previous) qc.setQueryData<MapDetail>(key, applyBatch(previous, batch));
+            return { previous, interrupted };
+        },
+        onSuccess: async (_d, { mapId, ...batch }, ctx) => {
+            // A refetch started DURING the PATCH could have replaced the cache with pre-save
+            // positions. Now the server has them, re-apply the batch and refresh from the source.
+            const key = mapKeys.detail(mapId);
+            const raced = qc.isFetching({ queryKey: key }) > 0;
+            if (raced) await qc.cancelQueries({ queryKey: key });
+            const current = qc.getQueryData<MapDetail>(key);
+            if (current) qc.setQueryData<MapDetail>(key, applyBatch(current, batch));
+            if (raced || ctx?.interrupted) void qc.invalidateQueries({ queryKey: key });
+        },
+        onError: (_err, { mapId }, ctx) => {
+            if (ctx?.previous) qc.setQueryData<MapDetail>(mapKeys.detail(mapId), ctx.previous);
+            pushToast({ title: 'Couldn\'t save the new positions', detail: 'The nodes were put back where the server has them.', tone: 'down', key: 'map-positions-save' });
+            void qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
         },
     });
 }
 
-/** Persist where an inter-map link's portal node sits on a map (drag to move). */
-export function useSaveMapLinkPosition() {
-    return useMutation({
-        mutationFn: async ({ mapId, linkId, x, y }: { mapId: number; linkId: number; x: number; y: number }): Promise<void> => {
-            await apiClient.patch(`/maps/${mapId}/links/${linkId}/position`, { x, y });
-        },
-    });
-}
-
+/**
+ * Place a device on a map. Pass x/y to land it exactly there in the same call - a separate
+ * position save after the add used to race the refetch this triggers, so a dropped device could
+ * briefly (or, on a slow link, lastingly) show at 0,0 (GitHub #44).
+ */
 export function useAddDeviceToMap() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, deviceId }: { mapId: number; deviceId: number }): Promise<void> => {
-            await apiClient.post(`/maps/${mapId}/devices`, { device_id: deviceId });
+        mutationFn: async ({ mapId, deviceId, x, y }: { mapId: number; deviceId: number; x?: number; y?: number }): Promise<void> => {
+            await apiClient.post(`/maps/${mapId}/devices`, { device_id: deviceId, x, y });
         },
         onSuccess: (_d, { mapId }) => {
             qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });

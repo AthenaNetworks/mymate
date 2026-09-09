@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { MagnifyingGlass, Plus, Stack } from '@phosphor-icons/react';
 import { useDevices } from '../../devices/api/getDevices';
-import { useMap, useAddDeviceToMap, useSaveMapPosition } from '../../maps/api/maps';
+import { useMap, useAddDeviceToMap } from '../../maps/api/maps';
 import { useActiveMapId, selectDevice } from '../../../lib/shellStore';
 import { useIsAdmin } from '../../auth/api/auth';
 import { StatusDot } from '../../../components/StatusDot';
@@ -18,7 +18,6 @@ export function MapDevicePalette() {
     const { data: devices } = useDevices();
     const { data: mapDetail } = useMap(activeMapId);
     const addToMap = useAddDeviceToMap();
-    const savePosition = useSaveMapPosition();
     const [q, setQ] = useState('');
 
     if (!isAdmin) {
@@ -36,10 +35,7 @@ export function MapDevicePalette() {
         // Click-to-place drops it near the top-left with a little scatter so repeats don't stack.
         const x = 120 + Math.random() * 260;
         const y = 120 + Math.random() * 200;
-        addToMap.mutate(
-            { mapId: activeMapId, deviceId },
-            { onSuccess: () => { savePosition.mutate({ mapId: activeMapId, deviceId, x, y }); selectDevice(deviceId); } },
-        );
+        addToMap.mutate({ mapId: activeMapId, deviceId, x, y }, { onSuccess: () => selectDevice(deviceId) });
     }
 
     return (

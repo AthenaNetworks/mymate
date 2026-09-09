@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Models\DeviceMapPosition;
 use App\Models\Link;
 use App\Models\Map;
+use App\Models\MapNote;
 use App\Models\NetworkInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -134,14 +135,89 @@ class MapApiTest extends TestCase
         $map = Map::factory()->create();
         $device = Device::factory()->create();
 
+        // The add carries the drop point itself (no follow-up position save - GitHub #44).
         $this->postJson("/api/maps/{$map->id}/devices", ['device_id' => $device->id, 'x' => 1, 'y' => 2])->assertCreated();
-        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $device->id]);
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $device->id, 'x' => 1, 'y' => 2]);
 
         $this->patchJson("/api/maps/{$map->id}/positions/{$device->id}", ['x' => 40, 'y' => 50])->assertOk();
         $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $device->id, 'x' => 40, 'y' => 50]);
 
         $this->deleteJson("/api/maps/{$map->id}/devices/{$device->id}")->assertNoContent();
         $this->assertDatabaseMissing('device_map_positions', ['map_id' => $map->id, 'device_id' => $device->id]);
+    }
+
+    /** GitHub #44: a group drag / Tidy saves every moved node in one request, one transaction. */
+    public function test_bulk_save_positions_persists_devices_portals_child_maps_and_notes(): void
+    {
+        $this->actingAsUser();
+        $map = Map::factory()->create();
+        $other = Map::factory()->create();
+        [$a, $b, $c] = Device::factory()->count(3)->create();
+        DeviceMapPosition::create(['device_id' => $a->id, 'map_id' => $map->id, 'x' => 1, 'y' => 1]);
+        DeviceMapPosition::create(['device_id' => $b->id, 'map_id' => $map->id, 'x' => 2, 'y' => 2]);
+        // $c is not on the map yet - a bulk save places it, same as the single-node save does.
+        $remote = Device::factory()->create();
+        DeviceMapPosition::create(['device_id' => $remote->id, 'map_id' => $other->id, 'x' => 0, 'y' => 0]);
+        $ifA = NetworkInterface::factory()->create(['device_id' => $a->id]);
+        $ifR = NetworkInterface::factory()->create(['device_id' => $remote->id]);
+        $link = Link::create(['a_device_id' => $a->id, 'a_interface_id' => $ifA->id, 'b_device_id' => $remote->id, 'b_interface_id' => $ifR->id]);
+        $child = Map::create(['name' => 'Child', 'parent_map_id' => $map->id, 'node_x' => 0, 'node_y' => 0]);
+        $note = MapNote::create(['map_id' => $map->id, 'text' => 'rack', 'x' => 0, 'y' => 0]);
+
+        $this->patchJson("/api/maps/{$map->id}/positions", [
+            'devices' => [
+                ['id' => $a->id, 'x' => 100, 'y' => 110],
+                ['id' => $b->id, 'x' => 200, 'y' => 210],
+                ['id' => $c->id, 'x' => 300, 'y' => 310],
+            ],
+            'portals' => [['link_id' => $link->id, 'x' => 400, 'y' => 410]],
+            'child_maps' => [['id' => $child->id, 'x' => 500, 'y' => 510]],
+            'notes' => [['id' => $note->id, 'x' => 600, 'y' => 610]],
+        ])->assertOk()->assertJsonPath('saved', 6);
+
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $a->id, 'x' => 100, 'y' => 110]);
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $b->id, 'x' => 200, 'y' => 210]);
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $c->id, 'x' => 300, 'y' => 310]);
+        $this->assertDatabaseHas('map_link_positions', ['map_id' => $map->id, 'link_id' => $link->id, 'x' => 400, 'y' => 410]);
+        $this->assertDatabaseHas('maps', ['id' => $child->id, 'parent_map_id' => $map->id, 'node_x' => 500, 'node_y' => 510]);
+        $this->assertDatabaseHas('map_notes', ['id' => $note->id, 'x' => 600, 'y' => 610]);
+        // The other map's placement of the remote device is untouched.
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $other->id, 'device_id' => $remote->id, 'x' => 0, 'y' => 0]);
+
+        // Round-trips through show, so a refetch mid-drag returns the new layout, not a partial one.
+        $this->getJson("/api/maps/{$map->id}")->assertOk()->assertJsonCount(3, 'data.positions');
+    }
+
+    public function test_bulk_save_positions_rejects_bad_rows_and_saves_nothing(): void
+    {
+        $this->actingAsUser();
+        $map = Map::factory()->create();
+        $device = Device::factory()->create();
+        DeviceMapPosition::create(['device_id' => $device->id, 'map_id' => $map->id, 'x' => 1, 'y' => 1]);
+        // A child map that hangs off a DIFFERENT canvas, and a note on a different map, can't
+        // be moved through this map's endpoint.
+        $elsewhere = Map::factory()->create();
+        $foreignChild = Map::create(['name' => 'Foreign', 'parent_map_id' => $elsewhere->id, 'node_x' => 0, 'node_y' => 0]);
+        $foreignNote = MapNote::create(['map_id' => $elsewhere->id, 'text' => 'x', 'x' => 0, 'y' => 0]);
+
+        $this->patchJson("/api/maps/{$map->id}/positions", [
+            'devices' => [['id' => $device->id, 'x' => 50, 'y' => 60]],
+            'child_maps' => [['id' => $foreignChild->id, 'x' => 9, 'y' => 9]],
+            'notes' => [['id' => $foreignNote->id, 'x' => 9, 'y' => 9]],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['child_maps.0.id', 'notes.0.id']);
+
+        $this->patchJson("/api/maps/{$map->id}/positions", ['devices' => [['id' => 999999, 'x' => 1, 'y' => 2]]])
+            ->assertUnprocessable()->assertJsonValidationErrors(['devices.0.id']);
+        $this->patchJson("/api/maps/{$map->id}/positions", ['devices' => [['id' => $device->id, 'x' => 'left', 'y' => 2]]])
+            ->assertUnprocessable()->assertJsonValidationErrors(['devices.0.x']);
+
+        // Validation failed as a whole, so the good device row was not applied either.
+        $this->assertDatabaseHas('device_map_positions', ['map_id' => $map->id, 'device_id' => $device->id, 'x' => 1, 'y' => 1]);
+        $this->assertDatabaseHas('maps', ['id' => $foreignChild->id, 'node_x' => 0]);
+        $this->assertDatabaseHas('map_notes', ['id' => $foreignNote->id, 'x' => 0]);
+
+        // Empty body is a no-op, not an error.
+        $this->patchJson("/api/maps/{$map->id}/positions", [])->assertOk()->assertJsonPath('saved', 0);
     }
 
     public function test_new_device_auto_joins_the_default_map(): void
