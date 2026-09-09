@@ -95,6 +95,15 @@ export function DeviceGlyph({
     const [attempt, setAttempt] = useState(0);
     const MAX_RETRIES = 3;
 
+    // The inspector keeps one glyph mounted and swaps the device under it. Without this reset a
+    // photo loaded for the previous (MikroTik) device leaves `loaded` true for the next one, which
+    // hides the vendor mark / family icon while no photo is rendered - an empty icon box.
+    useEffect(() => {
+        setLoaded(false);
+        setErrored(false);
+        setAttempt(0);
+    }, [deviceId]);
+
     // First request for an uncached MikroTik photo 404s but dispatches a server-side fetch; poll
     // a few more times (backing off) so the freshly cached image appears without a page reload.
     useEffect(() => {
@@ -119,6 +128,8 @@ export function DeviceGlyph({
     const realModel = !!model && !/^0x[0-9a-f]+$/i.test(model.trim());
     const gaveUp = errored && attempt >= MAX_RETRIES;
     const useImage = isMikrotik && realModel && !gaveUp;
+    // A loaded photo only replaces the fallback while a photo is actually being rendered.
+    const photoShown = useImage && loaded;
     const mark = vendorMark(vendor);
     const Fallback = familyIcon(type, model ?? '');
 
@@ -133,7 +144,7 @@ export function DeviceGlyph({
                     className={`${className} object-contain ${loaded ? '' : 'hidden'}`}
                 />
             )}
-            {!loaded && (
+            {!photoShown && (
                 mark ? (
                     <span
                         className={`${className} grid place-items-center rounded-[4px] font-bold leading-none text-white`}

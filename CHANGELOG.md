@@ -30,6 +30,9 @@ of commit subjects.
   in that metric's unit and 1h to 30d ranges. Works for ping-only devices too.
 
 ### Fixed
+- **Inspector icon sometimes blank.** Opening a non-MikroTik device (a Grandstream switch, say) straight after a
+  MikroTik one left an empty box where the vendor mark or device icon belongs. The glyph now resets when the
+  device under it changes, so the mark / icon always shows.
 - **Group drags on the map now save every device (GitHub #44).** Selecting several devices and dragging them
   together only persisted the one under the cursor; the rest snapped back to their old spots on the
   next refresh, which looked like the map "forgetting" positions after a big batch of adds. All the
