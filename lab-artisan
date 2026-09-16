@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+exec docker compose \
+  -p mymate-command-lab \
+  -f docker-compose.yml \
+  -f docker-compose.lab.yml \
+  exec \
+  -e DB_CONNECTION=pgsql \
+  -e DB_HOST=postgres \
+  -e DB_PORT=5432 \
+  -e DB_DATABASE=mymate \
+  -e DB_USERNAME=mymate \
+  -e DB_PASSWORD=mymate \
+  -e REDIS_HOST=redis \
+  app php artisan "$@"

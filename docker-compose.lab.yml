@@ -1,0 +1,39 @@
+# Local-only MyMate command-runner development lab.
+# Usage: docker compose -p mymate-command-lab -f docker-compose.yml -f docker-compose.lab.yml up -d
+services:
+  app:
+    image: mymate-command-runner:templates-v6-rusted-lab
+    env_file:
+      - .env.lab
+    restart: "no"
+    environment:
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_URL: http://10.10.50.150
+      ASSET_URL: .
+      REVERB_APP_SECRET: mymate-command-lab-only
+      SANCTUM_STATEFUL_DOMAINS: 10.10.50.150,localhost,127.0.0.1
+      CORS_ALLOWED_ORIGINS: http://10.10.50.150
+      MYMATE_DEVICE_USER: ""
+      MYMATE_DEVICE_PASS: ""
+      MYMATE_SNMP_COMMUNITY: ""
+    ports: !override
+      - "10.10.50.150:80:80"
+      - "10.10.50.150:443:443"
+      - "10.10.50.150:9443:443"
+      - "10.10.50.150:9080:80"
+    volumes:
+      - rusted_data:/var/lib/rusted
+      - rusted_config:/etc/rusted
+  postgres:
+    restart: "no"
+  redis:
+    restart: "no"
+
+volumes:
+  pgdata:
+    name: mymate-command-lab-pgdata
+  rusted_data:
+    name: mymate-command-lab-rusted-data
+  rusted_config:
+    name: mymate-command-lab-rusted-config
