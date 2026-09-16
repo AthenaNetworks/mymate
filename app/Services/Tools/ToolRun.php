@@ -3,6 +3,7 @@
 namespace App\Services\Tools;
 
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
  * The one cache contract every Tools-page run shares. A run is a short-lived streaming
@@ -22,7 +23,9 @@ class ToolRun
     /** Snapshots (and the owner/stop flags) live this long before Redis drops them. */
     public const TTL_MINUTES = 15;
 
-    public const KINDS = ['ping', 'trace', 'sweep', 'portscan'];
+    public const COMMAND_TTL_MINUTES = 120;
+
+    public const KINDS = ['ping', 'trace', 'sweep', 'portscan', 'command'];
 
     /**
      * Seed the "running" envelope and record the owner. Called from the controller before
@@ -32,8 +35,9 @@ class ToolRun
      */
     public static function start(string $id, string $kind, string $target, int $ownerId, array $result): void
     {
+        $ttl = self::ttlFor($kind);
         self::put($id, $kind, $target, 'running', $result);
-        Cache::put(self::ownerKey($id), $ownerId, now()->addMinutes(self::TTL_MINUTES));
+        Cache::put(self::ownerKey($id), $ownerId, now()->addMinutes($ttl));
     }
 
     /**
@@ -51,7 +55,37 @@ class ToolRun
             'status' => $status,
             'error' => $error,
             'result' => $result,
-        ], now()->addMinutes(self::TTL_MINUTES));
+        ], now()->addMinutes(self::ttlFor($kind)));
+    }
+
+    /**
+     * Atomically mutate a run snapshot. Concurrent per-device jobs use this so one result
+     * cannot overwrite another device's status.
+     *
+     * @param callable(array<string,mixed>): array<string,mixed> $mutator
+     */
+    public static function update(string $id, callable $mutator): void
+    {
+        $lock = Cache::lock("tool:{$id}:update", 10);
+        try {
+            $lock->block(5);
+        } catch (Throwable) {
+            return;
+        }
+
+        try {
+            $snapshot = self::get($id);
+            if ($snapshot === null) {
+                return;
+            }
+            $snapshot['result'] = $mutator((array) ($snapshot['result'] ?? []));
+            $status = ($snapshot['result']['complete'] ?? false) ? 'done' : (string) $snapshot['status'];
+            self::put($id, (string) $snapshot['kind'], (string) $snapshot['target'], $status, (array) $snapshot['result'], $snapshot['error'] ?? null);
+        } catch (Throwable) {
+            // A short-lived status cache must never make the worker fail after the SSH run.
+        } finally {
+            $lock->release();
+        }
     }
 
     /** @return array<string, mixed>|null */
@@ -70,7 +104,9 @@ class ToolRun
     /** Ask a running job to cancel. It notices within one poll cycle and writes a final snapshot. */
     public static function requestStop(string $id): void
     {
-        Cache::put(self::stopKey($id), true, now()->addMinutes(self::TTL_MINUTES));
+        $snapshot = self::get($id);
+        $ttl = self::ttlFor((string) ($snapshot['kind'] ?? ''));
+        Cache::put(self::stopKey($id), true, now()->addMinutes($ttl));
     }
 
     public static function stopRequested(string $id): bool
@@ -81,6 +117,11 @@ class ToolRun
     public static function clearStop(string $id): void
     {
         Cache::forget(self::stopKey($id));
+    }
+
+    private static function ttlFor(string $kind): int
+    {
+        return $kind === 'command' ? self::COMMAND_TTL_MINUTES : self::TTL_MINUTES;
     }
 
     private static function key(string $id): string

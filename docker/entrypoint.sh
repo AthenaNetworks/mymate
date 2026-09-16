@@ -24,11 +24,15 @@ if [ ! -s "$CERT_DIR/tls.crt" ] || [ ! -s "$CERT_DIR/tls.key" ]; then
     mkdir -p "$CERT_DIR"
     HOST=$(printf '%s' "${APP_URL:-}" | sed -E 's#^https?://##; s#[:/].*$##')
     [ -z "$HOST" ] && HOST=localhost
+    case "$HOST" in
+        *.*.*.*) SAN="IP:$HOST,DNS:localhost,IP:127.0.0.1" ;;
+        *) SAN="DNS:$HOST,DNS:localhost,IP:127.0.0.1" ;;
+    esac
     echo "mymate: generating a self-signed TLS certificate for $HOST"
     openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
         -keyout "$CERT_DIR/tls.key" -out "$CERT_DIR/tls.crt" \
-        -subj "/CN=$HOST" -addext "subjectAltName=DNS:$HOST,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1 \
-        || echo "mymate: WARNING could not generate a TLS cert - HTTPS may not start"
+        -subj "/CN=$HOST" -addext "subjectAltName=$SAN" >/dev/null 2>&1 \
+        || echo "mymate: WARNING could not generate a self-signed TLS cert - HTTPS may not start"
     chmod 600 "$CERT_DIR/tls.key" 2>/dev/null || true
 fi
 

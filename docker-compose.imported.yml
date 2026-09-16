@@ -1,0 +1,69 @@
+# Fresh LAN lab imported from the supplied MyMate Compose layout.
+# HTTP is the primary test path to avoid self-signed certificate trust issues:
+#   http://10.10.50.150
+# HTTPS remains available at https://10.10.50.150.
+services:
+  app:
+    image: mymate-command-runner:templates-v6-rusted-lab
+    env_file:
+      - .env.imported
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      HOME: /var/www
+      APP_ENV: local
+      APP_DEBUG: "false"
+      APP_URL: http://10.10.50.150
+      ASSET_URL: .
+      DB_CONNECTION: pgsql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: mymate
+      DB_USERNAME: mymate
+      DB_PASSWORD: mymate
+      REDIS_HOST: redis
+      REVERB_APP_ID: mymate
+      REVERB_APP_KEY: mymate
+      SANCTUM_STATEFUL_DOMAINS: 10.10.50.150,localhost,127.0.0.1
+      CORS_ALLOWED_ORIGINS: http://10.10.50.150
+    volumes:
+      - ./gitconfig.mymate:/var/www/.gitconfig:ro
+    ports:
+      - "10.10.50.150:80:80"
+      - "10.10.50.150:443:443"
+    cap_add:
+      - NET_RAW
+    sysctls:
+      net.ipv4.ping_group_range: "0 2147483647"
+    restart: "no"
+
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: mymate
+      POSTGRES_PASSWORD: mymate
+      POSTGRES_DB: mymate
+    volumes:
+      - imported_pgdata:/var/lib/postgresql/data
+    restart: "no"
+
+  redis:
+    image: redis:7
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+      - "--stop-writes-on-bgsave-error"
+      - "no"
+      - "--maxmemory"
+      - "1gb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+    restart: "no"
+
+volumes:
+  imported_pgdata:
+    name: mymate-imported-pgdata
