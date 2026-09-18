@@ -13,6 +13,31 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Manage a device's parent straight from the map (GitHub #45).** Right-click any device card for a node
+  menu: set, change or clear its parent device, take it off this map, or delete it outright. The
+  inspector's Parent row is editable too - both open the same searchable picker, so you can re-home a
+  device onto its real uplink without leaving the map. Parent is what drives dependency-aware alert
+  suppression, downstream-first upgrade ordering, geo coordinate inheritance and the tree layouts, so
+  fixing it on the map fixes all of those.
+- **Delete a device from the map (GitHub #45).** Previously the map could only *hide* a device ("Remove
+  from this map"); actually retiring one meant going to the Devices page. Both actions now sit side by
+  side, clearly labelled, in the node menu and the inspector. Delete is admin-only and always confirms
+  first - the dialog names the device and counts what goes with it (links, map placements, interfaces and
+  history), and warns you when it has child devices, which survive with no parent.
+
+### Fixed
+- **A parent loop can no longer be created (GitHub #45).** Setting a device's parent to one of its own
+  downstream devices (A under B under A) is now refused with a clear message instead of being saved.
+  A loop would quietly break alert suppression, upgrade ordering and inherited map coordinates.
+- **Confirmation dialogs opened from the device inspector are no longer squeezed into it.** The
+  inspector pane is a blurred, sliding panel, which trapped any dialog rendered inside it - so
+  "Delete link" and the RouterOS upgrade confirmation appeared cramped into the 22rem column
+  instead of centred on screen. They now centre properly, like every other dialog.
+- **The map no longer draws a deleted device's links (GitHub #45).** Deleting a device removes its links
+  and map placements in the database, but the map kept its edges and inter-map portals on screen until
+  the next refresh. Both caches now refresh with the delete.
+
 ## [1.8.0] - 2026-09-10
 
 ### Added

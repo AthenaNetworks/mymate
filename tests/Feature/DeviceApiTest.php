@@ -6,7 +6,9 @@ use App\Enums\DeviceType;
 use App\Models\Credential;
 use App\Models\Device;
 use App\Models\DeviceMapPosition;
+use App\Models\Link;
 use App\Models\Map;
+use App\Models\NetworkInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -251,6 +253,113 @@ class DeviceApiTest extends TestCase
         $this->putJson("/api/devices/{$device->id}", ['parent_device_id' => $device->id])
             ->assertStatus(422)
             ->assertJsonValidationErrors(['parent_device_id']);
+    }
+
+    public function test_it_sets_changes_and_clears_a_parent(): void
+    {
+        // GitHub #45 - the map's node menu / inspector re-home a device by PATCHing this one field.
+        $core = Device::factory()->create(['name' => 'Core']);
+        $edge = Device::factory()->create(['name' => 'Edge']);
+        $device = Device::factory()->create(['parent_device_id' => null]);
+
+        $this->putJson("/api/devices/{$device->id}", ['parent_device_id' => $core->id])
+            ->assertOk()
+            ->assertJsonPath('data.parent_device_id', $core->id)
+            ->assertJsonPath('data.parent_name', 'Core'); // the inspector reads the name from here
+
+        $this->putJson("/api/devices/{$device->id}", ['parent_device_id' => $edge->id])
+            ->assertOk()
+            ->assertJsonPath('data.parent_device_id', $edge->id)
+            ->assertJsonPath('data.parent_name', 'Edge');
+
+        $this->putJson("/api/devices/{$device->id}", ['parent_device_id' => null])
+            ->assertOk()
+            ->assertJsonPath('data.parent_device_id', null)
+            ->assertJsonPath('data.parent_name', null);
+
+        $this->assertDatabaseHas('devices', ['id' => $device->id, 'parent_device_id' => null]);
+    }
+
+    public function test_a_device_cannot_be_parented_to_its_own_descendant(): void
+    {
+        // GitHub #45 - core <- edge <- cpe. Parenting the core to any of its downstream gear
+        // closes a loop, which quietly breaks alert suppression / upgrade ordering / geo
+        // inheritance, so it's refused (NotADeviceDescendant).
+        $core = Device::factory()->create(['name' => 'Core']);
+        $edge = Device::factory()->create(['name' => 'Edge', 'parent_device_id' => $core->id]);
+        $cpe = Device::factory()->create(['name' => 'CPE', 'parent_device_id' => $edge->id]);
+
+        $this->putJson("/api/devices/{$core->id}", ['parent_device_id' => $edge->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['parent_device_id']);
+
+        // ...including a grandchild, not just the immediate one.
+        $this->putJson("/api/devices/{$core->id}", ['parent_device_id' => $cpe->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['parent_device_id']);
+
+        $this->assertDatabaseHas('devices', ['id' => $core->id, 'parent_device_id' => null]);
+
+        // A sibling / unrelated device is still a perfectly good parent.
+        $other = Device::factory()->create(['name' => 'Other']);
+        $this->putJson("/api/devices/{$core->id}", ['parent_device_id' => $other->id])->assertOk();
+    }
+
+    public function test_a_parent_loop_already_in_the_data_does_not_hang_validation(): void
+    {
+        // Imported data can carry a loop the rule never saw (it only blocks *new* ones). The
+        // walk is cycle-guarded, so validating against it terminates instead of spinning.
+        $a = Device::factory()->create();
+        $b = Device::factory()->create(['parent_device_id' => $a->id]);
+        Device::whereKey($a->id)->update(['parent_device_id' => $b->id]); // a <-> b
+
+        $c = Device::factory()->create();
+
+        $this->putJson("/api/devices/{$c->id}", ['parent_device_id' => $a->id])->assertOk();
+        $this->assertDatabaseHas('devices', ['id' => $c->id, 'parent_device_id' => $a->id]);
+    }
+
+    public function test_deleting_a_device_takes_its_links_placements_and_interfaces_with_it(): void
+    {
+        // GitHub #45 - "Delete device" on the map. The DB cascade does the work; this pins the
+        // blast radius the confirmation dialog promises.
+        $device = Device::factory()->create();
+        $peer = Device::factory()->create();
+        $iface = NetworkInterface::factory()->for($device)->create();
+        $peerIface = NetworkInterface::factory()->for($peer)->create();
+        $link = Link::create([
+            'a_device_id' => $device->id, 'a_interface_id' => $iface->id,
+            'b_device_id' => $peer->id, 'b_interface_id' => $peerIface->id,
+        ]);
+        $map = Map::factory()->create();
+        DeviceMapPosition::create(['device_id' => $device->id, 'map_id' => $map->id, 'x' => 1, 'y' => 2]);
+        DeviceMapPosition::create(['device_id' => $peer->id, 'map_id' => $map->id, 'x' => 3, 'y' => 4]);
+
+        $this->deleteJson("/api/devices/{$device->id}")->assertNoContent();
+
+        $this->assertDatabaseMissing('devices', ['id' => $device->id]);
+        $this->assertDatabaseMissing('links', ['id' => $link->id]);
+        $this->assertDatabaseMissing('interfaces', ['id' => $iface->id]);
+        $this->assertDatabaseMissing('device_map_positions', ['device_id' => $device->id]);
+
+        // The device at the far end of the link is untouched - only its link is gone.
+        $this->assertDatabaseHas('devices', ['id' => $peer->id]);
+        $this->assertDatabaseHas('interfaces', ['id' => $peerIface->id]);
+        $this->assertDatabaseHas('device_map_positions', ['device_id' => $peer->id]);
+    }
+
+    public function test_deleting_a_device_leaves_its_children_parentless_but_alive(): void
+    {
+        // What the delete confirmation warns about: children survive and fall back to no
+        // parent (`parent_device_id` is nullOnDelete), they are not deleted with it.
+        $parent = Device::factory()->create();
+        $child = Device::factory()->create(['parent_device_id' => $parent->id]);
+        $grandchild = Device::factory()->create(['parent_device_id' => $child->id]);
+
+        $this->deleteJson("/api/devices/{$parent->id}")->assertNoContent();
+
+        $this->assertDatabaseHas('devices', ['id' => $child->id, 'parent_device_id' => null]);
+        $this->assertDatabaseHas('devices', ['id' => $grandchild->id, 'parent_device_id' => $child->id]);
     }
 
     public function test_it_creates_a_ping_only_device(): void

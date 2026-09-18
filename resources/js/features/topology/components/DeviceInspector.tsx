@@ -27,6 +27,8 @@ import { DeviceDialog } from '../../devices/components/DeviceDialog';
 import { ChartModal } from './ChartModal';
 import { HealthChartModal } from './HealthChartModal';
 import { TraceModal } from './TraceModal';
+import { SetParentDialog } from './SetParentDialog';
+import { DeleteDeviceDialog } from './DeleteDeviceDialog';
 import { BackupSection } from '../../backups/components/BackupSection';
 import { DeviceResources } from './DeviceResources';
 import { ProbesSection } from './ProbesSection';
@@ -169,6 +171,30 @@ function CredentialPicker({ device }: { device: Device }) {
                     <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
             </select>
+        </div>
+    );
+}
+
+// Editable "Parent" cell (GitHub #45): the upstream device this one hangs off. Read-only here
+// until now - it drives dependency-aware alert suppression, downstream-first upgrade ordering,
+// geo coordinate inheritance and the tree layouts, so a wrong one is worth fixing on the spot.
+// Opens the same picker the map's node menu does.
+function ParentPicker({ device, devices }: { device: Device; devices: Device[] }) {
+    const [picking, setPicking] = useState(false);
+
+    return (
+        <div className="min-w-0">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/30">Parent</p>
+            <button
+                type="button"
+                onClick={() => setPicking(true)}
+                title="The upstream device this one depends on"
+                className="-ml-1 mt-0.5 flex w-full items-center gap-1 rounded-md bg-white/[0.03] px-1 py-0.5 text-left text-sm text-white/85 outline-none ring-1 ring-white/10 transition hover:ring-white/25 focus:ring-emerald-400/50"
+            >
+                <span className="min-w-0 flex-1 truncate">{device.parent_name ?? 'None'}</span>
+                <CaretDown weight="bold" className="h-3 w-3 shrink-0 text-white/35" />
+            </button>
+            {picking && <SetParentDialog device={device} devices={devices} onClose={() => setPicking(false)} />}
         </div>
     );
 }
@@ -491,6 +517,7 @@ export function DeviceInspector() {
     const delLink = useDeleteLink();
     const [editingLink, setEditingLink] = useState<Link | null>(null);
     const [editingDevice, setEditingDevice] = useState(false);
+    const [deletingDevice, setDeletingDevice] = useState(false); // permanent delete, confirmed first
     const [addingLink, setAddingLink] = useState(false);
     const [deletingLink, setDeletingLink] = useState<{ id: number; label: string } | null>(null);
     const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
@@ -695,7 +722,11 @@ export function DeviceInspector() {
                     <Detail label="Poll method" value={pollLabel[device.poll_method] ?? device.poll_method} />
                 )}
                 {isAdmin && !pingOnly && <CredentialPicker device={device} />}
-                <Detail label="Parent" value={device.parent_name ?? '-'} />
+                {isAdmin ? (
+                    <ParentPicker device={device} devices={devices ?? []} />
+                ) : (
+                    <Detail label="Parent" value={device.parent_name ?? '-'} />
+                )}
             </div>
 
             {(device.vendor || device.model || device.serial || device.cpu || device.ram_bytes) && (
@@ -823,23 +854,35 @@ export function DeviceInspector() {
                 )}
             </Section>
 
-            {activeMapId !== null && isAdmin && (
+            {/* Map membership and deletion together (GitHub #45), so the reversible action and the
+                destructive one are read side by side rather than one being mistaken for the other -
+                the same pair the map's right-click node menu offers. */}
+            {isAdmin && (
                 <Section title="Map">
-                    {onThisMap ? (
-                        <button
-                            onClick={() => removeFromMap.mutate({ mapId: activeMapId, deviceId: device.id })}
-                            className={`${actionBtn} w-full justify-center`}
-                        >
-                            Remove from this map
-                        </button>
-                    ) : (
-                        <button
-                            onClick={() => addToMap.mutate({ mapId: activeMapId, deviceId: device.id })}
-                            className={`${actionBtn} w-full justify-center`}
-                        >
-                            Add to this map
-                        </button>
-                    )}
+                    {activeMapId !== null &&
+                        (onThisMap ? (
+                            <button
+                                onClick={() => removeFromMap.mutate({ mapId: activeMapId, deviceId: device.id })}
+                                title="Takes it off this map only - it stays monitored, and keeps its links and history"
+                                className={`${actionBtn} w-full justify-center`}
+                            >
+                                Remove from this map
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => addToMap.mutate({ mapId: activeMapId, deviceId: device.id })}
+                                className={`${actionBtn} w-full justify-center`}
+                            >
+                                Add to this map
+                            </button>
+                        ))}
+                    <button
+                        onClick={() => setDeletingDevice(true)}
+                        title="Deletes the device everywhere - monitoring, links and history included"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-rose-500/[0.07] px-2 py-1.5 text-xs font-medium text-rose-300/90 ring-1 ring-rose-400/15 transition-all duration-300 ease-fluid hover:bg-rose-500/15 hover:text-rose-200"
+                    >
+                        <Trash weight="light" className="h-3.5 w-3.5" /> Delete device
+                    </button>
                 </Section>
             )}
 
@@ -889,6 +932,9 @@ export function DeviceInspector() {
             {addingLink && (
                 <AddLinkDialog aDevice={device} devices={devices ?? []} onClose={() => setAddingLink(false)} />
             )}
+
+            {/* Delete this device outright - shares the map's confirmation, counts + all. */}
+            {deletingDevice && <DeleteDeviceDialog device={device} onClose={() => setDeletingDevice(false)} />}
 
             {/* Edit this device's options (name, IP, poll method, credential, type, monitoring). */}
             {editingDevice && (

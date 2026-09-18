@@ -5,6 +5,7 @@ namespace App\Http\Requests\Device;
 use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Rules\ManageableIp;
+use App\Rules\NotADeviceDescendant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -46,9 +47,12 @@ class UpdateDeviceRequest extends FormRequest
             // either order regardless.
             'latency_good_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
             'latency_bad_ms' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:65535'],
+            // The uplink this device hangs off - drives alert suppression, upgrade ordering,
+            // geo inheritance and the tree layouts. NotADeviceDescendant covers both a device
+            // parented to itself and one parented to its own downstream gear (a loop).
             'parent_device_id' => [
                 'sometimes', 'nullable', 'integer', 'exists:devices,id',
-                Rule::notIn([$this->route('device')?->id]), // a device can't be its own parent
+                new NotADeviceDescendant($this->route('device')?->id),
             ],
         ];
     }

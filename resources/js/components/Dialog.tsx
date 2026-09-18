@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from '@phosphor-icons/react';
 
 /**
@@ -17,7 +18,11 @@ function ModalShell({ icon, title, onClose, children }: { icon?: ReactNode; titl
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
-    return (
+    // Portal to <body>: the device inspector pane is a transform/backdrop-filter ancestor, which
+    // would otherwise become the containing block for this `fixed` overlay and squeeze the dialog
+    // into the narrow pane instead of centring it on the viewport - the same trap the link editor
+    // was pulled out of in GitHub #39. Harmless everywhere else: an overlay belongs at the top.
+    return createPortal(
         <div className="fixed inset-0 z-50 grid place-items-center p-4">
             {/* Backdrop - a fixed element, so glass blur is allowed here (never on the canvas). */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -43,7 +48,8 @@ function ModalShell({ icon, title, onClose, children }: { icon?: ReactNode; titl
                     {children}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }
 

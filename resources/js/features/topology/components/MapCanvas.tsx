@@ -30,13 +30,17 @@ import { MapLinkEditor } from './MapLinkEditor';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapBreadcrumb } from '../../maps/components/MapBreadcrumb';
 import { MapSearch } from './MapSearch';
+import { MapNodeMenu, type NodeMenuState } from './MapNodeMenu';
+import { SetParentDialog } from './SetParentDialog';
+import { DeleteDeviceDialog } from './DeleteDeviceDialog';
 import { MapControls } from './MapControls';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
+import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useDevices } from '../../devices/api/getDevices';
+import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useLinks } from '../api/getLinks';
 import { useFaceSensors } from '../../settings/api/sensors';
 import { useDeleteLink } from '../api/deleteLink';
@@ -119,6 +123,8 @@ export function MapCanvas() {
     const deleteMapNote = useDeleteMapNote();
     const deleteLink = useDeleteLink();
     const addToMap = useAddDeviceToMap();
+    const removeFromMap = useRemoveDeviceFromMap();
+    const updateDevice = useUpdateDevice(); // node menu: clear a parent without opening the picker
     const { fitView, screenToFlowPosition } = useReactFlow();
     const theme = useTheme();
 
@@ -139,6 +145,10 @@ export function MapCanvas() {
     const [showChildLinks, setShowChildLinks] = useState(true); // toggle the aggregated device links between child maps (GitHub #9)
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
+    // Right-click device management (GitHub #45): the node menu, and the two dialogs it opens.
+    const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null);
+    const [parentForId, setParentForId] = useState<number | null>(null); // parent picker
+    const [deleteDeviceId, setDeleteDeviceId] = useState<number | null>(null); // delete confirmation
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
     const requestDelete = useCallback((linkId: number) => setDeleteLinkId(linkId), []);
@@ -721,6 +731,16 @@ export function MapCanvas() {
                         setInspectorOpen(true); // surface the inspector sheet on phones/tablets
                     }
                 }}
+                // Right-click a device card -> manage it in place (GitHub #45): parent, remove
+                // from this map, delete. Selecting it first makes the menu's target unambiguous
+                // (focus ring + the inspector follows along). Admin-only, like every write here;
+                // other node types keep the browser's own menu.
+                onNodeContextMenu={(e, node) => {
+                    if (!isAdmin || node.type !== 'device') return;
+                    e.preventDefault();
+                    selectDevice(Number(node.id));
+                    setNodeMenu({ deviceId: Number(node.id), x: e.clientX, y: e.clientY });
+                }}
                 // Click the empty canvas to deselect - the inspector then shows the map tools.
                 onPaneClick={() => selectDevice(null)}
                 // Drag a device from the palette (inspector) onto the map to place it there.
@@ -1001,6 +1021,46 @@ export function MapCanvas() {
             )}
 
             {pending && devices && <LinkBinderDialog pending={pending} devices={devices} onClose={() => setPending(null)} />}
+
+            {/* Right-click device management (GitHub #45). The device is resolved live by id, so a
+                menu left open over a device that has just gone simply closes itself. */}
+            {nodeMenu !== null &&
+                (() => {
+                    const d = (devices ?? []).find((x) => x.id === nodeMenu.deviceId);
+                    if (!d) return null;
+                    return (
+                        <MapNodeMenu
+                            device={d}
+                            x={nodeMenu.x}
+                            y={nodeMenu.y}
+                            onThisMap={memberSet.has(d.id)}
+                            onSetParent={() => setParentForId(d.id)}
+                            onClearParent={() =>
+                                updateDevice.mutate(
+                                    { id: d.id, parent_device_id: null },
+                                    { onError: () => pushToast({ title: 'Couldn\'t clear the parent', tone: 'down' }) },
+                                )
+                            }
+                            onRemoveFromMap={() => activeMapId !== null && removeFromMap.mutate({ mapId: activeMapId, deviceId: d.id })}
+                            onDelete={() => setDeleteDeviceId(d.id)}
+                            onClose={() => setNodeMenu(null)}
+                        />
+                    );
+                })()}
+
+            {/* Re-home a device onto its real uplink - from the node menu or the inspector. */}
+            {parentForId !== null && devices?.some((d) => d.id === parentForId) && (
+                <SetParentDialog
+                    device={devices.find((d) => d.id === parentForId)!}
+                    devices={devices}
+                    onClose={() => setParentForId(null)}
+                />
+            )}
+
+            {/* Delete the device outright - the destructive twin of "Remove from this map". */}
+            {deleteDeviceId !== null && devices?.some((d) => d.id === deleteDeviceId) && (
+                <DeleteDeviceDialog device={devices.find((d) => d.id === deleteDeviceId)!} onClose={() => setDeleteDeviceId(null)} />
+            )}
 
             {/* Add a device (or a generic internet object) straight onto this map: create it, then
                 drop it at the current viewport centre and select it. The dialog creates with
