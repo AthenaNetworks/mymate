@@ -27,6 +27,18 @@ of commit subjects.
   history), and warns you when it has child devices, which survive with no parent.
 
 ### Fixed
+- **Site markers on the geo map no longer time out on a large fleet (GitHub #47).** `devices.site_id`
+  was a constrained foreign key with no index, and Postgres does not index those for you, so the
+  per-site device and down counts behind `GET /api/sites` scanned the whole devices table once per
+  site. On a 25,423-device, 2,722-site fleet that was 61 s per call, tripping a 120 s reverse-proxy
+  timeout about two thirds of the time and leaving the map empty after login. A `(site_id, status)`
+  index covers both counts and takes the same call to 0.2 s.
+- **A burst of status flips no longer hammers the outage timeline (GitHub #47).** Every up/down flip
+  invalidated the outage queries the moment it arrived. During weather a large fleet sees several
+  hundred flips a minute, which turned each open browser tab into a ~100 req/s client of
+  `/api/outages` - around 850k requests an hour from two tabs, starving php-fpm of the requests that
+  actually draw the map. The refresh is now coalesced to at most one call per 5 s window, still
+  trailing-edge so the last flip in a burst is reflected.
 - **A parent loop can no longer be created (GitHub #45).** Setting a device's parent to one of its own
   downstream devices (A under B under A) is now refused with a clear message instead of being saved.
   A loop would quietly break alert suppression, upgrade ordering and inherited map coordinates.

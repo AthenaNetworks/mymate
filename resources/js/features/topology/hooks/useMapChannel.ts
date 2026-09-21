@@ -30,6 +30,24 @@ export function useMapChannel(
     useEffect(() => {
         const channel = echo.private('map');
 
+        // A real up<->down flip opens/closes an outage row, so the timeline is refreshed ahead
+        // of its 15 s poll. Coalesced, not per-flip: on a large fleet hundreds of devices can
+        // flap in a minute, and one invalidation per flip turned every open tab into a
+        // ~100 req/s client of /api/outages. Trailing-edge so the last flip in a burst is
+        // still reflected within the window.
+        const OUTAGE_REFRESH_MS = 5_000;
+        let outageTimer: ReturnType<typeof setTimeout> | null = null;
+        let lastOutageRefresh = 0;
+        const refreshOutagesSoon = () => {
+            if (outageTimer !== null) return;
+            const wait = Math.max(0, OUTAGE_REFRESH_MS - (Date.now() - lastOutageRefresh));
+            outageTimer = setTimeout(() => {
+                outageTimer = null;
+                lastOutageRefresh = Date.now();
+                void qc.invalidateQueries({ queryKey: outageKeys.all });
+            }, wait);
+        };
+
         // Custom broadcastAs() names -> leading dot so Echo doesn\'t prepend a namespace.
         channel.listen('.DeviceStatusChanged', (e: DeviceStatusChangedPayload) => {
             const before = qc.getQueryData<Device[]>(deviceKeys.list())?.find((d) => d.id === e.id);
@@ -46,9 +64,7 @@ export function useMapChannel(
             // notification for every device at once.
             if (before && before.status !== e.status && before.status !== 'unknown') {
                 onStatus?.({ id: e.id, name: before.name, status: e.status });
-                // A real flip opens/closes an outage row - refresh the timeline now so the
-                // header status feed and Outages view update ahead of their 15s poll.
-                void qc.invalidateQueries({ queryKey: outageKeys.all });
+                refreshOutagesSoon();
             }
         });
 
@@ -108,6 +124,7 @@ export function useMapChannel(
         });
 
         return () => {
+            if (outageTimer !== null) clearTimeout(outageTimer);
             echo.leave('map');
         };
     }, [qc, onUtil, onStatus]);
