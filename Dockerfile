@@ -29,8 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # --- 2b. rusted backup engine (Go; the 1.26 toolchain is auto-fetched) --------
 FROM golang:1.24-bookworm AS rusted
+ARG RUSTED_REPO=https://github.com/JoshFinlayAU/rusted.git
+ARG RUSTED_REF=main
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && git clone --depth 1 https://github.com/JoshFinlayAU/rusted.git /src
+    && git clone --depth 1 --branch "$RUSTED_REF" "$RUSTED_REPO" /src
 WORKDIR /src
 RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
 

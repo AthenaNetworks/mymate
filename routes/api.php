@@ -8,6 +8,8 @@ use App\Http\Controllers\Api\ApiTokenController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupSettingController;
 use App\Http\Controllers\Api\ContactController;
+use App\Http\Controllers\Api\CommandRunController;
+use App\Http\Controllers\Api\CommandTemplateController;
 use App\Http\Controllers\Api\CredentialController;
 use App\Http\Controllers\Api\DeviceBackupController;
 use App\Http\Controllers\Api\DeviceController;
@@ -183,6 +185,22 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->name('devices.backups.config-at');
     Route::get('devices/{device}/backups/diff', [DeviceBackupController::class, 'diff'])
         ->name('devices.backups.diff');
+
+    // Admin-only SSH command runs. Each selected device receives its own queued job;
+    // results live briefly in the same ToolRun cache used by diagnostics.
+    Route::get('command-templates', [CommandTemplateController::class, 'index'])
+        ->middleware('admin')->name('command-templates.index');
+    Route::post('command-templates', [CommandTemplateController::class, 'store'])
+        ->middleware('admin')->name('command-templates.store');
+    Route::put('command-templates/{commandTemplate}', [CommandTemplateController::class, 'update'])
+        ->middleware('admin')->name('command-templates.update');
+    Route::delete('command-templates/{commandTemplate}', [CommandTemplateController::class, 'destroy'])
+        ->middleware('admin')->name('command-templates.destroy');
+    Route::post('command-runs', [CommandRunController::class, 'start'])
+        ->middleware('throttle:10,1')->name('command-runs.start');
+    Route::get('command-runs/{runId}', [CommandRunController::class, 'show'])->name('command-runs.show');
+    Route::delete('command-runs/{runId}', [CommandRunController::class, 'stop'])
+        ->middleware('throttle:20,1')->name('command-runs.stop');
 
     // Recent history: a bucketed util/bps series for one interface, or the
     // whole device's total throughput (bps summed across its interfaces).

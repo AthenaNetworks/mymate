@@ -304,6 +304,21 @@ return [
             'nice' => 0,
         ],
 
+        // SSH command runs: dedicated capacity so a batch cannot starve live diagnostics.
+        'supervisor-command' => [
+            'connection' => 'redis',
+            'queue' => ['command'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => (int) env('MYMATE_COMMAND_PROCESSES', 4),
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,
+            'timeout' => 240,
+            'nice' => 0,
+        ],
+
         // Dude imports (FR-Dude): isolated + long timeout - extraction (Python) plus
         // upserting millions of history rows must never block polling/discovery.
         'supervisor-import' => [
@@ -332,6 +347,7 @@ return [
             'supervisor-upgrade' => ['maxProcesses' => 4],
             'supervisor-backup' => ['maxProcesses' => 3],
             'supervisor-trace' => ['maxProcesses' => 3],
+            'supervisor-command' => ['maxProcesses' => 8],
             'supervisor-import' => ['maxProcesses' => 1],
         ],
 
@@ -342,6 +358,7 @@ return [
             'supervisor-upgrade' => ['maxProcesses' => 1],
             'supervisor-backup' => ['maxProcesses' => 1],
             'supervisor-trace' => ['maxProcesses' => 1],
+            'supervisor-command' => ['maxProcesses' => 2],
             'supervisor-import' => ['maxProcesses' => 1],
         ],
     ],
