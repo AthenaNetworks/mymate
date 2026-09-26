@@ -280,12 +280,23 @@ class DispatchAgentJobs
         $oids = config('mymate.snmp.oids', []);
         $target['uptime_oids'] = array_values(array_filter([$oids['hr_system_uptime'] ?? null, $oids['sys_uptime'] ?? null]));
 
-        // Nothing to read for cpu/mem/temp -> no metrics target (still ping + throughput).
+        // Wireless RF, the same profile keys SnmpDeviceMetricsDriver::wireless reads, always as
+        // lists (a profile may give a single OID as a string). Older agents ignore them.
+        $wireless = [];
+        foreach (['signal_oids', 'signal_walk', 'snr_oids', 'snr_walk', 'ccq_oids', 'ccq_walk', 'clients_walk', 'clients_value_walk'] as $key) {
+            $list = array_values(array_filter((array) ($p[$key] ?? []), static fn ($o) => is_string($o) && $o !== ''));
+            if ($list !== []) {
+                $wireless[$key] = $list;
+            }
+        }
+        $target += $wireless;
+
+        // Nothing to read for cpu/mem/temp/RF -> no metrics target (still ping + throughput).
         $hasCpu = isset($target['cpu_walk']) || isset($target['cpu_oids']);
         $hasMem = isset($target['mem']);
         $hasTemp = isset($target['temp_walk']) || isset($target['temp_oids']);
 
-        return $hasCpu || $hasMem || $hasTemp || isset($target['hr_entry']) ? $target : null;
+        return $hasCpu || $hasMem || $hasTemp || isset($target['hr_entry']) || $wireless !== [] ? $target : null;
     }
 
     /**
@@ -293,7 +304,11 @@ class DispatchAgentJobs
      * are the sum of each list (unicast first, which has to be there), same as
      * SnmpThroughputDriver::portCounters. `counter32` are the ones that can wrap.
      *
-     * @return array{columns: array<string, list<string>>, counter32: list<string>}
+     * `fallback` is the 32-bit ifTable version of a counter, for when its columns don't answer
+     * (and straight away on SNMPv1): the agent sums it inside 32 bits and treats it as Counter32.
+     * An older agent ignores it and v1 boxes just go without packets there, as before.
+     *
+     * @return array{columns: array<string, list<string>>, counter32: list<string>, fallback: array<string, list<string>>}
      */
     private static function portStatsOids(): array
     {
@@ -310,6 +325,10 @@ class DispatchAgentJobs
                 'pkts_out' => $col('if_hc_out_ucast_pkts', 'if_hc_out_mcast_pkts', 'if_hc_out_bcast_pkts'),
             ],
             'counter32' => PortStats::SNMP_COUNTER32,
+            'fallback' => [
+                'pkts_in' => $col('if_in_ucast_pkts', 'if_in_nucast_pkts'),
+                'pkts_out' => $col('if_out_ucast_pkts', 'if_out_nucast_pkts'),
+            ],
         ];
     }
 

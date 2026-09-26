@@ -245,7 +245,7 @@ class IngestAgentResults
      * the device row (map tile fast path), a history sample, and the coalesced
      * DeviceMetricsUpdated broadcast. Only this agent's devices are touched.
      *
-     * @param  array<int,array{device_id:int,cpu_pct:?float,mem_used_pct:?float,temp_c:?float}>  $metrics
+     * @param  array<int,array<string,mixed>>  $metrics  device_id, cpu_pct, mem_used_pct, temp_c, the RF keys (see wireless()) and the extras (see resourceMetrics())
      */
     private function ingestMetrics(Agent $agent, array $metrics): void
     {
@@ -270,26 +270,37 @@ class IngestAgentResults
             $temp = self::num($m['temp_c'] ?? null);
             // Device page extras (per-CPU, storage, uptime). Older agents never send them.
             $extras = self::resourceMetrics($m);
-            if ($cpu === null && $mem === null && $temp === null && $extras->isEmpty()) {
+            // Wireless RF, null when an older agent didn't send it at all (see wireless()).
+            $rf = self::wireless($m);
+            $rfRead = $rf !== null && array_filter($rf, static fn ($v) => $v !== null) !== [];
+            if ($cpu === null && $mem === null && $temp === null && $extras->isEmpty() && ! $rfRead) {
                 continue; // nothing readable - don't stamp metrics_at with an empty frame
             }
 
+            // An agent that reads RF sends it the way central polling stores it, null included,
+            // so a radio that went quiet clears. One that predates it leaves the stored values be.
+            $rfAttrs = $rf ?? [
+                'signal_dbm' => $device->signal_dbm, 'snr_db' => $device->snr_db,
+                'ccq_pct' => $device->ccq_pct, 'wireless_clients' => $device->wireless_clients,
+            ];
+
             $device->forceFill([
                 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
+                ...($rf ?? []),
                 ...RecordDeviceResources::deviceAttributes($device, $extras, $now),
             ])->save();
             $resources[] = [$device, $extras];
 
             $frames[] = [
                 'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
-                // The agent doesn't gather wireless RF; keep the device's current values.
-                'signal_dbm' => $device->signal_dbm, 'snr_db' => $device->snr_db,
-                'ccq_pct' => $device->ccq_pct, 'wireless_clients' => $device->wireless_clients,
+                ...$rfAttrs,
             ];
             $sampleRows[] = [
                 'device_id' => $device->id, 'ts' => $now,
                 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
-                'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                // history only gets RF this agent actually read now, never a carried-over value
+                'signal_dbm' => $rf['signal_dbm'] ?? null, 'snr_db' => $rf['snr_db'] ?? null,
+                'ccq_pct' => $rf['ccq_pct'] ?? null, 'wireless_clients' => $rf['wireless_clients'] ?? null,
                 'uptime_s' => $extras->uptimeSeconds,
             ];
         }
@@ -354,6 +365,33 @@ class IngestAgentResults
             cpuLoads: $cpus,
             storages: $storages,
         );
+    }
+
+    /**
+     * The wireless RF part of an agent metrics entry, tidied the same way the central drivers do
+     * it (signal/snr to one decimal, ccq clamped to 0-100, a whole client count). Null when the
+     * entry has none of the keys, that's an agent from before it read RF. A key sent as null is
+     * a real "not available" and is kept as null.
+     *
+     * @param  array<string, mixed>  $m
+     * @return array{signal_dbm: ?float, snr_db: ?float, ccq_pct: ?float, wireless_clients: ?int}|null
+     */
+    private static function wireless(array $m): ?array
+    {
+        $keys = ['signal_dbm', 'snr_db', 'ccq_pct', 'wireless_clients'];
+        if (array_intersect($keys, array_keys($m)) === []) {
+            return null;
+        }
+        $signal = self::num($m['signal_dbm'] ?? null);
+        $snr = self::num($m['snr_db'] ?? null);
+        $clients = self::num($m['wireless_clients'] ?? null);
+
+        return [
+            'signal_dbm' => $signal === null ? null : round($signal, 1),
+            'snr_db' => $snr === null ? null : round($snr, 1),
+            'ccq_pct' => DeviceMetrics::clampPct(self::num($m['ccq_pct'] ?? null)),
+            'wireless_clients' => $clients === null || $clients < 0 ? null : (int) round($clients),
+        ];
     }
 
     /** Coerce an incoming metric to a float or null (an agent sends null for an unread metric). */

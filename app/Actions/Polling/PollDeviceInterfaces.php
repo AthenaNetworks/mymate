@@ -82,8 +82,9 @@ class PollDeviceInterfaces
                 $dt = $iface->last_ts !== null
                     ? (float) $sample->ts - (float) $iface->last_ts->getTimestamp()
                     : 0.0;
-                $bpsIn = $this->rates->bps($iface->last_in, $sample->inOctets, $dt);
-                $bpsOut = $this->rates->bps($iface->last_out, $sample->outOctets, $dt);
+                $bits = $sample->counter32 ? 32 : 64;
+                $bpsIn = $this->rates->bps($iface->last_in, $sample->inOctets, $dt, $bits);
+                $bpsOut = $this->rates->bps($iface->last_out, $sample->outOctets, $dt, $bits);
                 // Always store the new raw counters + ts (even on a reset tick) so the
                 // next delta is computed from current reality.
                 $lastIn = $sample->inOctets;

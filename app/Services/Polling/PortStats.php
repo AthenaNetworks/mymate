@@ -19,6 +19,20 @@ final class PortStats
     public const SNMP_COUNTER32 = ['errors_in', 'errors_out', 'discards_in', 'discards_out'];
 
     /**
+     * Packets read from the 32-bit ifTable columns (v1, or a port with no HC packet counters) are
+     * handed over under these names instead, so the stored state says which width a value came
+     * from. A port that flips between the two then just gets one read with no rate, rather than
+     * a delta between a 64-bit count and a wrapped 32-bit one. Always treated as Counter32.
+     */
+    public const NARROW = ['pkts_in' => 'pkts_in32', 'pkts_out' => 'pkts_out32'];
+
+    /** Keep a sum of Counter32 columns inside 32 bits, so a wrap of either one still reads as one wrap. */
+    public static function wrap32(int $sum): int
+    {
+        return $sum & RateCalculator::COUNTER32_MAX;
+    }
+
+    /**
      * @param  array{ts?: float|int, c?: array<string, int>}|null  $prev  the stored state, null on the first read
      * @param  array<string, int>  $counters  raw counters from this read, name => value
      * @param  list<string>  $counter32  names that are 32 bit and may wrap
@@ -31,8 +45,14 @@ final class PortStats
 
         $rates = [];
         foreach (self::RATES as $name) {
-            $rates[$name] = isset($counters[$name])
-                ? $calc->counterRate(isset($last[$name]) ? (int) $last[$name] : null, $counters[$name], $dt, in_array($name, $counter32, true) ? 32 : 64)
+            $key = $name;
+            $bits = in_array($name, $counter32, true) ? 32 : 64;
+            if (! isset($counters[$name]) && isset(self::NARROW[$name], $counters[self::NARROW[$name]])) {
+                $key = self::NARROW[$name];
+                $bits = 32;
+            }
+            $rates[$name] = isset($counters[$key])
+                ? $calc->counterRate(isset($last[$key]) ? (int) $last[$key] : null, $counters[$key], $dt, $bits)
                 : null;
         }
 

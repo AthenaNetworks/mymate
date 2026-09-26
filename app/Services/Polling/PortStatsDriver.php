@@ -14,10 +14,11 @@ interface PortStatsDriver
 {
     /**
      * Raw counters for the given (already discovered) ifIndexes. A port the device answers
-     * nothing for is left out, and a counter it lacks is left out of that port's array.
+     * nothing for is left out, and a counter it lacks is left out of that port's array. Packets
+     * that only came from the 32-bit columns go under the PortStats::NARROW name instead.
      *
      * @param  list<int>  $ifIndexes
-     * @return array<int, array<string, int>> ifIndex => [PortStats::RATES name => raw counter]
+     * @return array<int, array<string, int>> ifIndex => [PortStats::RATES (or NARROW) name => raw counter]
      */
     public function portCounters(Device $device, array $ifIndexes): array;
 }

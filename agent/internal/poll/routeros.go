@@ -2,6 +2,7 @@ package poll
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strconv"
@@ -217,10 +218,52 @@ func (p *Poller) pollRouterOSMetrics(t proto.RouterOSTarget) *proto.MetricsResul
 		cpus = routerOSCPULoads(rows)
 	}
 
-	if cpu == nil && mem == nil && temp == nil && uptime == nil && len(cpus) == 0 && len(storage) == 0 {
+	// Wireless RF from the registration table, like the central driver. A board with no
+	// wireless package traps "no such command", which just means no RF.
+	var wl proto.Wireless
+	if reply, err := c.Run("/interface/wireless/registration-table/print"); err == nil {
+		rows := make([]map[string]string, 0, len(reply.Re))
+		for _, re := range reply.Re {
+			rows = append(rows, re.Map)
+		}
+		wl = routerOSWireless(rows)
+	}
+
+	if cpu == nil && mem == nil && temp == nil && uptime == nil && len(cpus) == 0 && len(storage) == 0 && wl.Empty() {
 		return nil
 	}
-	return &proto.MetricsResult{DeviceID: t.DeviceID, CPUPct: cpu, MemUsedPct: mem, TempC: temp, UptimeS: uptime, CPUs: cpus, Storage: storage}
+	res := &proto.MetricsResult{DeviceID: t.DeviceID, CPUPct: cpu, MemUsedPct: mem, TempC: temp, UptimeS: uptime, CPUs: cpus, Storage: storage}
+	res.SetWireless(wl)
+	return res
+}
+
+// routerOSWireless turns registration-table rows into RF, same as the central
+// RouterOsDeviceMetricsDriver::wireless: one row per associated station (an AP sees its clients,
+// a station sees its AP), so clients is the row count and signal / SNR / CCQ the average across
+// the rows. Values like "-65dBm@6Mbps" read as their leading number. No rows, no RF.
+func routerOSWireless(rows []map[string]string) proto.Wireless {
+	if len(rows) == 0 {
+		return proto.Wireless{}
+	}
+	var signals, snrs, ccqs []float64
+	for _, row := range rows {
+		for field, dst := range map[string]*[]float64{"signal-strength": &signals, "signal-to-noise": &snrs, "tx-ccq": &ccqs} {
+			if m := leadingNumber.FindString(row[field]); m != "" {
+				if f, err := strconv.ParseFloat(m, 64); err == nil {
+					*dst = append(*dst, f)
+				}
+			}
+		}
+	}
+	avg1 := func(v []float64) *float64 {
+		if len(v) == 0 {
+			return nil
+		}
+		r := math.Round(sum(v)/float64(len(v))*10) / 10
+		return &r
+	}
+	n := len(rows)
+	return proto.Wireless{SignalDbm: avg1(signals), SnrDb: avg1(snrs), CcqPct: clampPct(avg1(ccqs)), Clients: &n}
 }
 
 var trailingDigits = regexp.MustCompile(`(\d+)$`)

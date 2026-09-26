@@ -10,12 +10,12 @@ func TestStateRate(t *testing.T) {
 	t0 := time.Now()
 
 	// First sample: no rate yet.
-	if in, out := s.rate(1, 1000, 2000, t0); in != nil || out != nil {
+	if in, out := s.rate(1, 1000, 2000, false, t0); in != nil || out != nil {
 		t.Fatal("first sample should yield no rate")
 	}
 
 	// 1s later, +125000 in octets -> 125000*8 = 1,000,000 bps.
-	in, out := s.rate(1, 1000+125000, 2000+250000, t0.Add(time.Second))
+	in, out := s.rate(1, 1000+125000, 2000+250000, false, t0.Add(time.Second))
 	if in == nil || *in != 1_000_000 {
 		t.Errorf("in bps = %v, want 1000000", in)
 	}
@@ -24,7 +24,7 @@ func TestStateRate(t *testing.T) {
 	}
 
 	// Counter reset (went backwards) -> discard, no rate.
-	if in, _ := s.rate(1, 5, 5, t0.Add(2*time.Second)); in != nil {
+	if in, _ := s.rate(1, 5, 5, false, t0.Add(2*time.Second)); in != nil {
 		t.Error("counter reset should yield no rate")
 	}
 }

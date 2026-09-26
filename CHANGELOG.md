@@ -233,6 +233,17 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **SNMPv1 devices get traffic and packet graphs (airOS and other v1-only gear).** v1 can't carry the
+  64-bit counters we read, so a v1 device showed no traffic and no packets at all. It now reads the
+  32-bit ifTable counters instead (ifInOctets / ifOutOctets, and unicast + non-unicast packets), with the
+  counter wrap handled so a busy port doesn't lose a sample every few minutes. A v2c or v3 port that
+  doesn't answer the 64-bit packet counters falls back the same way. Works centrally and from a remote
+  agent (update the agent to pick it up).
+- **Remote agents collect wireless RF.** Devices polled by an agent now get signal, SNR, CCQ and the
+  client count like centrally polled ones: the vendor SNMP OIDs (MikroTik, Ubiquiti airMAX, Cambium ePMP)
+  and the RouterOS wireless registration table. They land on the map tile, the device page Wireless
+  graphs and the history. Before this an agent-polled radio never showed any RF. Needs the updated agent,
+  an older one keeps working and just leaves the RF alone.
 - **Large fleets: header counts, the map inspector and the Devices page work again (GitHub #22).** On a
   network of ~25,000 devices the header showed "0 up / 0 down", clicking a device on the map did nothing
   and the Devices page hung the tab, all because the one fleet-wide device request never finished. See
