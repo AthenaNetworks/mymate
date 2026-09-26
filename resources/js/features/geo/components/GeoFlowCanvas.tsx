@@ -3,7 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { GeoFlow } from './GeoFlow';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { useMapDevices } from '../../devices/api/getDevices';
-import { useLinks } from '../../topology/api/getLinks';
+import { useMapLinks } from '../../topology/api/getLinks';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMap } from '../../maps/api/maps';
@@ -19,7 +19,7 @@ function GeoFlowInner() {
     const { data: config } = useMapConfig();
     const { data: mapDetail } = useMap(activeMapId);
     const { data: devices } = useMapDevices(activeMapId); // this map's devices only (GitHub #22)
-    const { data: links } = useLinks();
+    const { data: links } = useMapLinks(activeMapId);
     const update = useUpdateDevice();
     const selectedDeviceId = useSelectedDeviceId();
     useMapChannel();

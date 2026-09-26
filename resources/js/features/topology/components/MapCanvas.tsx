@@ -42,7 +42,7 @@ import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMapDevices } from '../../devices/api/getDevices';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
-import { useLinks } from '../api/getLinks';
+import { useMapLinks } from '../api/getLinks';
 import { useFaceSensors } from '../../settings/api/sensors';
 import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
@@ -105,7 +105,7 @@ export function MapCanvas() {
     // Only this map's devices, not the fleet (GitHub #22) - everything below that looks a device
     // up in `devices` is looking at something drawn on this canvas.
     const { data: devices, isLoading } = useMapDevices(activeMapId);
-    const { data: links } = useLinks();
+    const { data: links } = useMapLinks(activeMapId);
     const { data: faceSensors } = useFaceSensors(); // custom SNMP readings shown on device cards (#40)
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
     const edgeAttach = useEdgeAttach(); // 'auto' floats links to the facing side; 'fixed' keeps pinned sides

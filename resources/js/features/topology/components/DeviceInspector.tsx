@@ -18,7 +18,7 @@ import { useDiscoverDevice } from '../api/discoverDevice';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useUpgradeDevices } from '../../devices/api/upgradeDevices';
 import { useCredentials } from '../../settings/api/credentials';
-import { useLinks } from '../api/getLinks';
+import { useDeviceLinks } from '../api/getLinks';
 import { useDeleteLink } from '../api/deleteLink';
 import { useMap, useAddDeviceToMap, useRemoveDeviceFromMap } from '../../maps/api/maps';
 import { LinkHistoryDialog } from './LinkHistoryDialog';
@@ -543,7 +543,7 @@ export function DeviceInspector() {
     const { data: mapDevices } = useMapDevices(activeMapId);
     const { data: stats } = useDeviceStats();
     const { data: interfaces } = useDeviceInterfaces(id);
-    const { data: links } = useLinks();
+    const { data: links } = useDeviceLinks(id);
     const upgrade = useUpgradeDevices();
     const discover = useDiscoverDevice();
     const delLink = useDeleteLink();

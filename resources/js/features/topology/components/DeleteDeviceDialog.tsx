@@ -3,7 +3,7 @@ import { ConfirmDialog } from '../../../components/Dialog';
 import { useDeleteDevice } from '../../devices/api/deleteDevice';
 import { useDeviceList } from '../../devices/api/getDevices';
 import { useIsAdmin } from '../../auth/api/auth';
-import { useLinks } from '../api/getLinks';
+import { useDeviceLinks } from '../api/getLinks';
 import { selectDevice } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import type { Device } from '../../../types';
@@ -21,7 +21,7 @@ export function DeleteDeviceDialog({ device, onClose }: { device: Device; onClos
     const del = useDeleteDevice();
     // Only the count matters, so ask for one row and read the total.
     const { data: childPage } = useDeviceList({ parent_id: device.id, per_page: 1, fields: 'summary' });
-    const { data: links } = useLinks();
+    const { data: links } = useDeviceLinks(device.id);
 
     if (!isAdmin) return null;
 

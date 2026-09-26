@@ -42,39 +42,55 @@ class GeoController extends Controller
      * monitored, placed devices are emitted (a paused device isn't on the live map).
      *
      * `down_since` is the still-open outage's `started_at` (the precise "went down" moment; a
-     * device's `last_change` is overwritten on recovery too, so it can't answer this). Read as a
-     * scalar subquery rather than a join: a device should only ever have one open outage, but a
-     * racing poller could briefly leave two, and a join would then emit the device twice and
-     * double-count it in the site's device/down tallies. MIN() also picks the earliest start,
-     * which is the honest answer for how long the thing has actually been dark.
+     * device's `last_change` is overwritten on recovery too, so it can't answer this). Joined from
+     * open outages grouped per device, so a racing poller that briefly leaves two open outages
+     * can't emit the device twice. MIN() picks the earliest start, which is the honest answer for
+     * how long the thing has actually been dark.
      */
     public function devices(): JsonResponse
     {
-        $devices = Device::query()
-            ->selectRaw('id, name, status, monitored, site_id, parent_device_id, latitude, longitude,
-                (SELECT MIN(o.started_at) FROM outages o
-                    WHERE o.device_id = devices.id AND o.ended_at IS NULL) AS down_since')
-            ->with('site:id,name,latitude,longitude')
-            ->get();
+        // Plain rows, not models: this reads the whole fleet, and 25k hydrated devices cost about
+        // 270 MB (GitHub #22). toBase() still applies the restricted-operator visibility scope.
+        $rows = Device::query()
+            ->leftJoinSub(
+                DB::table('outages')->whereNull('ended_at')
+                    ->selectRaw('device_id, MIN(started_at) AS down_since')->groupBy('device_id'),
+                'open', 'open.device_id', '=', 'devices.id',
+            )
+            ->toBase()
+            ->get(['devices.id', 'devices.name', 'devices.status', 'devices.monitored', 'devices.site_id',
+                'devices.parent_device_id', 'devices.latitude', 'devices.longitude', 'open.down_since']);
 
-        DeviceGeo::apply($devices);
+        $sites = DB::table('sites')->whereNotNull('latitude')->whereNotNull('longitude')
+            ->get(['id', 'latitude', 'longitude'])
+            ->mapWithKeys(fn ($s) => [(int) $s->id => [(float) $s->latitude, (float) $s->longitude]])
+            ->all();
 
-        $rows = $devices
-            ->filter(fn (Device $d) => Device::countsAsLive((bool) $d->monitored) && $d->geo_latitude !== null)
-            ->values()
-            ->map(fn (Device $d) => [
-                'id' => $d->id,
-                'name' => $d->name,
-                'status' => $d->status->value,
-                'site_id' => $d->site_id,
-                'lat' => $d->geo_latitude,
-                'lng' => $d->geo_longitude,
-                'down_since' => $d->down_since !== null
-                    ? Carbon::parse($d->down_since)->toIso8601String()
-                    : null,
-            ]);
+        $nodes = [];
+        foreach ($rows as $r) {
+            $nodes[(int) $r->id] = [$r->latitude, $r->longitude, $r->site_id !== null ? (int) $r->site_id : null,
+                $r->parent_device_id !== null ? (int) $r->parent_device_id : null];
+        }
+        $geo = DeviceGeo::resolveAll($nodes, $sites);
 
-        return response()->json(['data' => $rows]);
+        $out = [];
+        foreach ($rows as $r) {
+            [$lat, $lng] = $geo[(int) $r->id];
+            if ($lat === null || ! Device::countsAsLive((bool) $r->monitored)) {
+                continue;
+            }
+            $out[] = [
+                'id' => (int) $r->id,
+                'name' => $r->name,
+                'status' => $r->status,
+                'site_id' => $r->site_id !== null ? (int) $r->site_id : null,
+                'lat' => $lat,
+                'lng' => $lng,
+                'down_since' => $r->down_since !== null ? Carbon::parse($r->down_since)->toIso8601String() : null,
+            ];
+        }
+
+        return response()->json(['data' => $out]);
     }
 
     /**

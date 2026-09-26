@@ -233,6 +233,12 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Large fleets: maps no longer download every link, and the geo map loads fast (GitHub #22).** The
+  map, geo map and device panel used to fetch every link in the install with its interface data, which
+  at 25k devices is the next payload that falls over after the device list. They now ask only for the
+  links on the map being viewed, or touching the device being looked at. `GET /api/links` still returns
+  everything when called with no filter, and takes `?map_id=` or `?device_id=`. The geo map's device
+  feed went from 2.3s and 270 MB of server memory to about 140ms and 46 MB at 25k devices.
 - **Graph axes no longer read "250 undefined" on an empty or near-zero traffic chart.** Rates under
   1 bps picked a unit that doesn't exist. Showed up on every device page graph while it loaded.
 - **Asymmetric links show both speeds.** A 500/50 radio link used to label itself "/500M" and then show

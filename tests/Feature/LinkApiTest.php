@@ -3,8 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\DeviceMapPosition;
 use App\Models\Link;
+use App\Models\Map;
 use App\Models\NetworkInterface;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -386,5 +389,45 @@ class LinkApiTest extends TestCase
             ->assertJsonCount(2, 'data')
             ->assertJsonPath('data.0.name', 'ether1')
             ->assertJsonPath('data.0.description', 'Uplink to core'); // shown as sub-text in the binder picker
+    }
+
+    private function link(Device $a, Device $b): Link
+    {
+        return Link::create([
+            'a_device_id' => $a->id, 'a_interface_id' => NetworkInterface::factory()->for($a)->create()->id,
+            'b_device_id' => $b->id, 'b_interface_id' => NetworkInterface::factory()->for($b)->create()->id,
+        ]);
+    }
+
+    public function test_links_can_be_narrowed_to_one_map_or_one_device(): void
+    {
+        $map = Map::create(['name' => 'Site A']);
+        [$a, $b, $c] = [Device::factory()->create(), Device::factory()->create(), Device::factory()->create()];
+        foreach ([$a, $b] as $d) {
+            DeviceMapPosition::create(['map_id' => $map->id, 'device_id' => $d->id, 'x' => 0, 'y' => 0]);
+        }
+        $onMap = $this->link($a, $b);
+        $leaving = $this->link($b, $c); // c isn't on the map
+        $elsewhere = $this->link($c, Device::factory()->create());
+
+        $ids = fn (string $q) => collect($this->getJson("/api/links?{$q}")->assertOk()->json('data'))->pluck('id')->sort()->values()->all();
+
+        $this->assertSame([$onMap->id], $ids("map_id={$map->id}"));
+        $this->assertSame([$onMap->id, $leaving->id], $ids("device_id={$b->id}"));
+        $this->assertCount(3, $this->getJson('/api/links')->json('data')); // bare form still lists everything
+        $this->getJson('/api/links?map_id=999999')->assertNotFound();
+        $this->assertNotContains($elsewhere->id, $ids("map_id={$map->id}"));
+    }
+
+    public function test_a_restricted_operator_cannot_read_links_of_a_hidden_map(): void
+    {
+        $mine = Map::create(['name' => 'Mine']);
+        $hidden = Map::create(['name' => 'Hidden']);
+        $user = User::factory()->create(['is_admin' => false]);
+        $user->forceFill(['restricted' => true])->save();
+        $user->maps()->attach($mine->id);
+
+        $this->actingAs($user)->getJson("/api/links?map_id={$hidden->id}")->assertNotFound();
+        $this->actingAs($user)->getJson("/api/links?map_id={$mine->id}")->assertOk();
     }
 }
