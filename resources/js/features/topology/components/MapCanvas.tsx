@@ -39,6 +39,8 @@ import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
+import { useMapCanvasPlayback } from '../hooks/useMapCanvasPlayback';
+import { PlaybackBadge, PlaybackBar } from '../../geo/components/PlaybackBar';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMapDevices } from '../../devices/api/getDevices';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
@@ -105,8 +107,13 @@ export function MapCanvas() {
     const activeMapId = useActiveMapId();
     // Only this map's devices, not the fleet (GitHub #22) - everything below that looks a device
     // up in `devices` is looking at something drawn on this canvas.
-    const { data: devices, isLoading } = useMapDevices(activeMapId);
-    const { data: links } = useMapLinks(activeMapId);
+    const { data: liveDevices, isLoading } = useMapDevices(activeMapId);
+    const { data: liveLinks } = useMapLinks(activeMapId);
+    // History playback (GitHub #22): while it's on, `devices` / `links` are the frozen frame and
+    // `play.util` etc stand in for the socket-fed state below, which carries on unseen.
+    const play = useMapCanvasPlayback(activeMapId, liveDevices, liveLinks);
+    const { devices, links } = play;
+    const canDrag = isAdmin && !play.pb.active; // nothing moves while looking at the past
     const { data: faceSensors } = useFaceSensors(); // custom SNMP readings shown on device cards (#40)
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
     const edgeAttach = useEdgeAttach(); // 'auto' floats links to the facing side; 'fixed' keeps pinned sides
@@ -333,9 +340,9 @@ export function MapCanvas() {
     const statusRef = useRef(statusById);
     statusRef.current = statusById;
     const deviceUtilRef = useRef(deviceUtil);
-    deviceUtilRef.current = deviceUtil;
+    deviceUtilRef.current = play.deviceUtil ?? deviceUtil;
     const deviceLoadRef = useRef(deviceLoad);
-    deviceLoadRef.current = deviceLoad;
+    deviceLoadRef.current = play.deviceLoad ?? deviceLoad;
     // Current data read inside the (membership-keyed) rebuild effect, so it doesn't need to
     // list these as deps and re-run on every data refetch.
     const mapDevicesRef = useRef(mapDevices);
@@ -422,7 +429,7 @@ export function MapCanvas() {
                     bps: il.bps,
                     util: il.util,
                 },
-                draggable: isAdmin,
+                draggable: canDrag,
                 selectable: true,
             };
         });
@@ -432,7 +439,7 @@ export function MapCanvas() {
             type: 'childmap',
             position: { x: c.node_x ?? 40 + (i % 5) * 240, y: c.node_y ?? 40 + Math.floor(i / 5) * 140 },
             data: { mapId: c.id, name: c.name, deviceCount: c.device_count, onDetach: isAdmin ? () => requestDetachChild(c.id) : undefined },
-            draggable: isAdmin,
+            draggable: canDrag,
             selectable: true,
         }));
         // Free-text notes / labels (GitHub #11).
@@ -446,7 +453,7 @@ export function MapCanvas() {
                 onSaveStyle: isAdmin ? (patch: MapNoteStylePatch) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, ...patch }); } : undefined,
                 onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapNote.mutate({ mapId: m, noteId: n.id }); } : undefined,
             },
-            draggable: isAdmin,
+            draggable: canDrag,
             selectable: true,
         }));
         // Carry each node's selection and measured size across the rebuild. A position save patches
@@ -460,7 +467,7 @@ export function MapCanvas() {
                 return p ? { ...n, measured: p.measured, selected: p.selected } : n;
             });
         });
-    }, [membershipKey, setNodes, isAdmin]);
+    }, [membershipKey, setNodes, isAdmin, canDrag]);
 
     // Intra-map links -> util edges; inter-map links -> dashed portal edges. Seed util.
     useEffect(() => {
@@ -531,24 +538,27 @@ export function MapCanvas() {
         });
     }, [intraLinks, interMapLinks, mapLinks, childDeviceLinks, showChildLinks, setEdges, requestDelete, isAdmin]);
 
-    // Recolour util edges in place when live util or device status changes.
+    // Recolour util edges in place when live util (or the playback frame) or device status changes.
+    const shownUtil = play.util ?? util;
     useEffect(() => {
-        setEdges((eds) => eds.map((e) => (e.type === 'util' ? { ...e, data: { ...e.data, ...computeData(e.data as EdgeMeta, util, statusById) } } : e)));
-    }, [util, statusById, setEdges]);
+        setEdges((eds) => eds.map((e) => (e.type === 'util' ? { ...e, data: { ...e.data, ...computeData(e.data as EdgeMeta, shownUtil, statusById) } } : e)));
+    }, [shownUtil, statusById, setEdges]);
 
     // Patch each device node\'s busiest-util bar (and bps fallback) in place when live util changes.
     // Return the SAME node object when nothing changed, so the memoised DeviceNode skips it - on a
     // big map only the handful of cards that actually moved re-render, not every card every tick.
+    const shownDeviceUtil = play.deviceUtil ?? deviceUtil;
+    const shownDeviceLoad = play.deviceLoad ?? deviceLoad;
     useEffect(() => {
         setNodes((nds) => nds.map((n) => {
             if (n.type !== 'device') return n;
-            const util = deviceUtil[Number(n.id)] ?? null;
-            const load = deviceLoad[Number(n.id)] ?? null;
+            const util = shownDeviceUtil[Number(n.id)] ?? null;
+            const load = shownDeviceLoad[Number(n.id)] ?? null;
             const cur = n.data as { util?: number | null; load?: number | null };
             if (cur.util === util && cur.load === load) return n;
             return { ...n, data: { ...n.data, util, load } };
         }));
-    }, [deviceUtil, deviceLoad, setNodes]);
+    }, [shownDeviceUtil, shownDeviceLoad, setNodes]);
 
     // Patch device data (status / metrics / name / model) in place when the devices query
     // updates - so a status or cpu/mem/temp change never rebuilds the node graph (which would
@@ -721,12 +731,12 @@ export function MapCanvas() {
                 // Loose: any handle is both in & out - direction doesn\'t matter (floating
                 // edges compute geometry from the cards, so a link\'s a/b end is cosmetic).
                 connectionMode={ConnectionMode.Loose}
-                nodesDraggable={isAdmin}
-                nodesConnectable={isAdmin}
+                nodesDraggable={canDrag}
+                nodesConnectable={canDrag}
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onNodeDragStop={(_, node, dragged) => {
-                    if (!isAdmin || activeMapId === null) return;
+                    if (!canDrag || activeMapId === null) return;
                     // A multi-select drag moves every selected node, but React Flow hands us the one
                     // under the cursor as `node` - the full set is the third argument. Persist ALL of
                     // them, in one request; saving only `node` left the rest of the group unsaved and
@@ -762,7 +772,7 @@ export function MapCanvas() {
                     // Drag a link's end onto a different side of a card to pin it there. Only a
                     // side change on the SAME two ends is a "move"; dropping onto another card is
                     // ignored (that would be a rebind). Pins are honoured when Auto-attach is off.
-                    if (!isAdmin || !conn.source || !conn.target) return;
+                    if (!canDrag || !conn.source || !conn.target) return;
                     if (oldEdge.type === 'util') {
                         const l = intraLinks.find((x) => String(x.id) === String(oldEdge.id));
                         if (!l || String(l.a_device_id) !== conn.source || String(l.b_device_id) !== conn.target) return;
@@ -857,6 +867,7 @@ export function MapCanvas() {
                 <div className="flex flex-wrap items-center gap-2">
                     <MapBreadcrumb />
                     <MapSwitcher />
+                    <PlaybackBadge pb={play.pb} />
                     <span className="pointer-events-none hidden rounded-full bg-surface/80 px-3 py-1.5 font-mono text-[11px] tabular-nums text-white/50 ring-1 ring-white/10 backdrop-blur-xl sm:inline-block">
                         {mapDevices.length} nodes - {intraLinks.length} links
                     </span>
@@ -1074,6 +1085,8 @@ export function MapCanvas() {
                     </div>
                 </div>
             </div>
+
+            {play.pb.active && <PlaybackBar pb={play.pb} inset="left-16 right-4" deviceName={(id) => devices?.find((d) => d.id === id)?.name ?? `device ${id}`} />}
 
             {/* Open the inspector sheet on phones/tablets (it\'s off-canvas there). At lg+ the
                 inspector is a permanent column, so this is hidden. */}

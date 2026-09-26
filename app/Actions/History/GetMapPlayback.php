@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Historical playback for one map (GitHub #22): what every device and link on it looked like
- * over a window, as a series of frames the geo map can scrub through.
+ * over a window, as a series of frames the geo and logical maps can scrub through.
  *
  * Everything is aligned to one time axis (`frames`, unix seconds, one per bucket start) and each
  * series is a plain array with one value per frame, null where there was no sample, rather than an
@@ -20,6 +20,11 @@ use Illuminate\Support\Facades\DB;
  *    raw signal the live map colours links from. Util is left to the client, which runs it through
  *    the same computeData as live mode with the link's effective speeds, so colours match exactly.
  *  - devices:    ping rtt/loss per device, averaged over the frame.
+ *  - health:     cpu_pct / mem_used_pct / temp_c per device from the device_metric family, the
+ *                same chunked shape. Only the metrics a device actually reported in the chunk are
+ *                there (a switch with no temp sensor has no temp_c array), and a device that
+ *                reported none at all is left out, so the ping-only majority of a big map costs
+ *                nothing.
  *  - down:       per device, the frame indexes it was down in, from the outages table (exact
  *                down/up times, so a 40 second blip still shows on a 5 minute frame).
  *  - outages:    the outages themselves, [device_id, start, end|null], for markers on the scrubber.
@@ -50,6 +55,9 @@ class GetMapPlayback
 
     /** How far back an `at` frame looks for samples while the moment is still in raw history. */
     public const AT_LOOKBACK = 300;
+
+    /** Precision for a percentage: a tenth under 10, whole numbers above, as the tiles show it. */
+    private const AS_SHOWN = -1;
 
     public function __construct(
         private readonly HistoryQuery $history,
@@ -163,9 +171,9 @@ class GetMapPlayback
         // No limit asked for: as many frames as fit the budget, so a small map gets the whole
         // window in one go and a big one gets a first chunk quickly and pages through the rest.
         // A frame wider than its source rows costs a few rows per key (raw is polled about once
-        // a minute), so it counts for more.
+        // a minute), so it counts for more. Devices count twice, once for ping and once for health.
         $rowsPerFrame = max(1, intdiv($grid['bucketSeconds'], $grid['tier'] === 'raw' ? self::MIN_STEP : HistoryTiers::step($grid['tier'])));
-        $limit ??= max(self::MIN_CHUNK, intdiv(self::CHUNK_VALUES, max(1, (count($deviceIds) + count($interfaceIds)) * $rowsPerFrame)));
+        $limit ??= max(self::MIN_CHUNK, intdiv(self::CHUNK_VALUES, max(1, (2 * count($deviceIds) + count($interfaceIds)) * $rowsPerFrame)));
         $limit = max(0, min(count($frames) - $offset, $limit));
 
         // The chunk's own grid: same bucket width, origin moved up to the chunk's first frame, so
@@ -181,6 +189,13 @@ class GetMapPlayback
             'rtt_ms' => 2,
             'loss_pct' => 1,
         ]);
+        // Rounded to what the tiles and inspector display anyway, which on a map where every device
+        // reports all three is a good third off the health arrays against a flat tenth.
+        $health = $this->series('device_metric', 'device_id', $deviceIds, $chunk, $chunkTo, $limit, [
+            'cpu_pct' => self::AS_SHOWN,
+            'mem_used_pct' => self::AS_SHOWN,
+            'temp_c' => 0,
+        ], true);
         [$down, $outages] = $this->outages($deviceIds, $grid, $to, count($frames), $at);
 
         return [
@@ -196,6 +211,7 @@ class GetMapPlayback
             'device_ids' => $deviceIds,
             'interfaces' => (object) $interfaces,
             'devices' => (object) $devices,
+            'health' => (object) $health,
             'down' => (object) $down,
             'outages' => $outages,
         ];
@@ -204,13 +220,14 @@ class GetMapPlayback
     /**
      * Dense per-key arrays for one family: the bucketed rows from HistoryQuery (or straight off the
      * rollup tier, see below) laid onto the frame axis, one value per frame and null where there
-     * was no sample. Keys with no samples at all are left out.
+     * was no sample. Keys with no samples at all are left out, and with $sparse so is any metric
+     * that's null in every frame (the key goes too if that leaves it empty).
      *
      * @param  list<int>  $ids
-     * @param  array<string, int>  $metrics  metric => decimals to round it to
+     * @param  array<string, int>  $metrics  metric => decimals to round it to (or AS_SHOWN)
      * @return array<int, array<string, list<int|float|null>>>
      */
-    private function series(string $family, string $key, array $ids, array $grid, Carbon $to, int $n, array $metrics): array
+    private function series(string $family, string $key, array $ids, array $grid, Carbon $to, int $n, array $metrics, bool $sparse = false): array
     {
         if ($ids === [] || $n === 0) {
             return [];
@@ -259,8 +276,21 @@ class GetMapPlayback
                 $out[$k] ??= array_fill_keys(array_keys($metrics), $empty);
                 foreach ($metrics as $m => $precision) {
                     if ($r->{$m} !== null) {
-                        $out[$k][$m][$i] = $precision === 0 ? (int) round((float) $r->{$m}) : round((float) $r->{$m}, $precision);
+                        $v = (float) $r->{$m};
+                        $p = $precision === self::AS_SHOWN ? (abs($v) < 10 ? 1 : 0) : $precision;
+                        $out[$k][$m][$i] = $p === 0 ? (int) round($v) : round($v, $p);
                     }
+                }
+            }
+        }
+
+        if ($sparse) {
+            foreach ($out as $k => $row) {
+                $row = array_filter($row, fn (array $vals) => array_filter($vals, fn ($v) => $v !== null) !== []);
+                if ($row === []) {
+                    unset($out[$k]);
+                } else {
+                    $out[$k] = $row;
                 }
             }
         }

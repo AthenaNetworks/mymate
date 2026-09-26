@@ -12,7 +12,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Historical playback for the geo map (GitHub #22).
+ * Historical playback for the geo and logical maps (GitHub #22).
  *
  * GET /api/maps/{map}/playback?from=&to=&points=   a series of frames over [from, to)
  *     &offset=&limit=                              only load the series for some of the frames
