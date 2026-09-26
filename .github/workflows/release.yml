@@ -87,13 +87,44 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: mymate-agent, path: agent/dist/*, if-no-files-found: error }
 
+  agent-image:
+    name: Build agent container image (RouterOS / docker)
+    runs-on: ubuntu-24.04
+    # Best-effort like the LXC: the binaries and .deb are the main agent artifacts, so a Docker
+    # Hub hiccup pulling the Go base image shouldn't hold a release up.
+    continue-on-error: true
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # One plain `docker save` style tarball per arch. RouterOS can't pull a multi-arch index
+      # from a file, it wants a single-arch image tar for /container/add file=... so that's what
+      # we ship. Nothing is pushed to a registry here, publishing is done by hand.
+      - name: Build per-arch image tarballs
+        run: |
+          mkdir -p dist/agent-image
+          for p in linux/amd64 linux/arm64 linux/arm/v7; do
+            arch=$(echo "${p#linux/}" | tr -d /)   # amd64, arm64, armv7
+            out="dist/agent-image/mymate-agent-image_${GITHUB_REF_NAME}_linux_${arch}.tar"
+            docker buildx build agent \
+              --platform "$p" \
+              --build-arg VERSION="${GITHUB_REF_NAME}" \
+              --provenance=false --sbom=false \
+              --tag "mymate-agent:${GITHUB_REF_NAME}" \
+              --output "type=docker,dest=${out}"
+          done
+          ( cd dist/agent-image && sha256sum ./*.tar > "mymate-agent-image_${GITHUB_REF_NAME}_SHA256SUMS" )
+          ls -l dist/agent-image
+      - uses: actions/upload-artifact@v4
+        with: { name: mymate-agent-image, path: dist/agent-image/*, if-no-files-found: error }
+
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-24.04
     # Wait for build-lxc too so its artifact is uploaded before we download it (otherwise
     # the release races ahead and the LXC template is missing). LXC stays optional: the `if`
     # only requires deb + agent, so a failed/skipped LXC still publishes the release.
-    needs: [build-deb, agent, build-lxc]
+    needs: [build-deb, agent, build-lxc, agent-image]
     if: always() && needs.build-deb.result == 'success' && needs.agent.result == 'success'
     steps:
       - name: Download .deb
@@ -106,6 +137,10 @@ jobs:
       - name: Download agent binaries
         uses: actions/download-artifact@v4
         with: { name: mymate-agent, path: dist/agent }
+      - name: Download agent container image tarballs (optional)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with: { name: mymate-agent-image, path: dist/agent-image }
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
@@ -116,5 +151,7 @@ jobs:
             dist/agent/*.zip
             dist/agent/*.deb
             dist/agent/SHA256SUMS
+            dist/agent-image/*.tar
+            dist/agent-image/*_SHA256SUMS
           fail_on_unmatched_files: false
           generate_release_notes: true

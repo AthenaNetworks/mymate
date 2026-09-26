@@ -57,6 +57,14 @@ starts at boot and restarts on failure - **systemd** on Linux, **launchd** on ma
 - Linux logs: `journalctl -u mymate-agent -f`
 - macOS logs: `tail -f /var/log/mymate-agent.log`
 
+### MikroTik RouterOS container (or any Docker host)
+
+Each release also ships a small agent-only container image (~7 MB) as a `docker save`
+tarball per arch: `mymate-agent-image_<version>_linux_{amd64,arm64,armv7}.tar`. That lets
+a site's own RouterOS 7 router run the agent in its container feature, Dude style, with no
+extra box. Step by step setup is in [ROUTEROS.md](ROUTEROS.md) (not yet tested on real
+RouterOS hardware, feedback welcome). Configure it with the same env vars as below.
+
 ## Configuration
 
 Environment variables (see `packaging/agent.env.example`):
