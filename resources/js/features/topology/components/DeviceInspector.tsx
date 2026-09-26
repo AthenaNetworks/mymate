@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -36,6 +36,7 @@ import { ProbesSection } from './ProbesSection';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { MapDevicePalette } from './MapDevicePalette';
 import { pushToast } from '../../../lib/toast';
+import { openDevicePage } from '../../device-page/lib/location';
 import { useDeviceSamples } from '../api/getDeviceSamples';
 import { useIsAdmin } from '../../auth/api/auth';
 import { InterfaceChart } from './InterfaceChart';
@@ -728,6 +729,11 @@ export function DeviceInspector() {
                     </button>
                 )}
             </div>
+
+            {/* The full device page: every graph over any range, ports, billing, events. */}
+            <button onClick={() => openDevicePage(device.id)} className={`${actionBtn} w-full justify-center`}>
+                <ChartLine weight="bold" className="h-3.5 w-3.5" /> Open device page
+            </button>
 
             {isAdmin && (
                 <button onClick={() => setEditingDevice(true)} className={`${actionBtn} w-full justify-center`}>

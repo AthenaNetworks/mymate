@@ -9,6 +9,7 @@ import { DeviceInspector } from '../topology/components/DeviceInspector';
 import { GeoView } from '../geo/components/GeoView';
 import { DashboardView } from '../dashboard/components/DashboardView';
 import { DevicesView } from '../devices/components/DevicesView';
+import { DevicePage } from '../device-page/components/DevicePage';
 import { DiscoveryView } from '../discovery/components/DiscoveryView';
 import { GraphsView } from '../graphs/components/GraphsView';
 import { ToolsView } from '../tools/components/ToolsView';
@@ -68,6 +69,7 @@ export function AppShell() {
             {view === 'geo' && <GeoView />}
             {view === 'dashboard' && <DashboardView />}
             {view === 'devices' && <DevicesView />}
+            {view === 'device' && <DevicePage />}
             {view === 'discovery' && <DiscoveryView />}
             {view === 'graphs' && <GraphsView />}
             {view === 'tools' && <ToolsView />}

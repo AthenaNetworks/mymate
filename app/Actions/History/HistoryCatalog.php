@@ -183,6 +183,9 @@ class HistoryCatalog
                 'group' => $meta['group'],
                 'key_label' => $scope['keyExpr'] === null ? null : $meta['key_label'],
                 'keyed' => $scope['keyExpr'] !== null,
+                // 'interfaces' / 'probes' when the keys are the device's own child rows, so the
+                // page can hang a family off the port picker without knowing its name
+                'owner' => $scope['owner'],
                 'metrics' => $metrics,
                 'keys' => $scope['keyExpr'] === null ? null : $this->labelKeys($family, $scope, $device, array_keys($found['keys'])),
             ];
