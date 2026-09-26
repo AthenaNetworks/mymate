@@ -15,6 +15,7 @@ use App\Models\DiscoveryCandidate;
 use App\Models\Link;
 use App\Models\NetworkInterface;
 use App\Support\DeviceScope;
+use App\Support\InterfaceFilter;
 use App\Support\MaintenanceGuard;
 
 /**
@@ -51,7 +52,7 @@ class EvaluateAlerts
             if ($ids === null) {
                 continue; // fleet-wide policy claims nothing specifically
             }
-            $cond = $policy->condition->value;
+            $cond = self::claimBucket($policy);
             $claimed[$cond] ??= [];
             foreach ($ids as $id) {
                 $claimed[$cond][$id] = true;
@@ -60,10 +61,32 @@ class EvaluateAlerts
 
         foreach ($policies as $policy) {
             $suppress = $scopes[$policy->id] === null
-                ? ($claimed[$policy->condition->value] ?? [])
+                ? ($claimed[self::claimBucket($policy)] ?? [])
                 : [];
             $this->reconcile($policy, $guard, $suppress);
         }
+    }
+
+    /**
+     * Which policies compete for the same device under specific-over-general. Normally just the
+     * condition, but low_throughput has two targets that watch different things (a link vs a
+     * single interface like a VLAN) so a map-scoped link policy mustn't swallow a fleet-wide
+     * VLAN policy's alerts, or the other way round.
+     */
+    private static function claimBucket(AlertPolicy $policy): string
+    {
+        $cond = $policy->condition->value;
+        if ($policy->condition === AlertCondition::LowThroughput) {
+            return $cond.':'.self::throughputTarget($policy);
+        }
+
+        return $cond;
+    }
+
+    /** 'links' (the original behaviour) or 'interfaces' for a per-interface low_throughput. */
+    private static function throughputTarget(AlertPolicy $policy): string
+    {
+        return ($policy->params['target'] ?? 'links') === 'interfaces' ? 'interfaces' : 'links';
     }
 
     /**
@@ -189,8 +212,10 @@ class EvaluateAlerts
             // Dependency suppression is on by default - opt out per policy.
             AlertCondition::DeviceDown => $this->downDevices((bool) ($policy->params['suppress_dependent'] ?? true), $scope),
             AlertCondition::HighUtil => $this->highUtil((float) ($policy->params['threshold'] ?? 90), $scope),
-            AlertCondition::LowThroughput => $this->lowThroughput((float) ($policy->params['threshold'] ?? 1), $scope),
-            AlertCondition::InterfaceDown => $this->interfacesDown($scope),
+            AlertCondition::LowThroughput => self::throughputTarget($policy) === 'interfaces'
+                ? $this->lowThroughputInterfaces((float) ($policy->params['threshold'] ?? 1), $scope, InterfaceFilter::fromParams($policy->params ?? []))
+                : $this->lowThroughput((float) ($policy->params['threshold'] ?? 1), $scope),
+            AlertCondition::InterfaceDown => $this->interfacesDown($scope, InterfaceFilter::fromParams($policy->params ?? [])),
             AlertCondition::UpgradeFailed => $this->failedUpgrades($scope),
             // Discovery candidates aren't devices yet -> device-scope doesn't apply; always fleet-wide.
             AlertCondition::NewDiscovery => $this->newCandidates(),
@@ -513,16 +538,62 @@ class EvaluateAlerts
     }
 
     /**
+     * Per-interface low throughput (GitHub #11) - the same floor as the link version but judged
+     * on one interface's own counters, so a VLAN or any port that isn't one end of a map link
+     * can be watched. The interface filter decides which ports count (a policy can't target
+     * every port, see the request validation, that would page for every idle access port).
+     * Ports on a down device are skipped like the link version, and a port with no reading
+     * yet can't be judged. Keyed `device:{id}:iface:{id}:low` so maintenance applies and it
+     * can't collide with an interface_down event for the same port.
+     *
+     * @param  array<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function lowThroughputInterfaces(float $thresholdMbps, ?array $scope, InterfaceFilter $filter): array
+    {
+        $out = [];
+        // Belt and braces: validation already refuses a per-interface policy on every port,
+        // but if one sneaks in (hand edited row, old API client) don't page for the whole fleet.
+        if ($filter->isAll()) {
+            return $out;
+        }
+        $floorBps = $thresholdMbps * 1_000_000;
+
+        $query = NetworkInterface::query()
+            ->whereHas('device', fn ($q) => $q->where('status', '!=', DeviceStatus::Down))
+            ->where(fn ($q) => $q->whereNotNull('bps_in')->orWhereNotNull('bps_out'))
+            ->with('device:id,name,mgmt_ip');
+        if ($scope !== null) {
+            $query->whereIn('device_id', $scope);
+        }
+        $ifaces = $filter->narrow($query)->get(['id', 'device_id', 'name', 'bps_in', 'bps_out']);
+
+        foreach ($ifaces as $if) {
+            $bps = max((int) $if->bps_in, (int) $if->bps_out);
+            if ($bps >= $floorBps) {
+                continue;
+            }
+            $dev = self::label($if->device?->name ?? "device {$if->device_id}", $if->device?->mgmt_ip);
+            $out["device:{$if->device_id}:iface:{$if->id}:low"] = 'Low throughput '.$this->fmtBps($bps).' (below '.$this->fmtBps($floorBps).") on interface {$if->name} on {$dev}.";
+        }
+
+        return $out;
+    }
+
+    /**
      * Interfaces that are operationally down while their device is up - a customer/edge port
      * dropping even though the box (and its uplink) stay reachable. Device-down is handled
      * separately, so a down device's ports are skipped (its ports are moot, and it avoids an
      * alert storm). Only ports the poller marked 'down' fire; a null (unknown/not polled) port
      * never does. Keyed `device:{id}:iface:{id}` so maintenance windows suppress it.
      *
+     * The policy's interface filter (GitHub #22) narrows which ports count, eg only the
+     * uplinks. Left at 'all' it's every port, same as it always was.
+     *
      * @param  array<int>|null  $scope
      * @return array<string, string>
      */
-    private function interfacesDown(?array $scope): array
+    private function interfacesDown(?array $scope, InterfaceFilter $filter): array
     {
         $out = [];
         $inScope = $scope === null ? null : array_flip($scope);
@@ -533,9 +604,9 @@ class EvaluateAlerts
             return $out;
         }
 
-        $ifaces = NetworkInterface::where('oper_status', 'down')
-            ->whereIn('device_id', $upDevices->keys())
-            ->get(['id', 'device_id', 'name']);
+        $query = NetworkInterface::where('oper_status', 'down')
+            ->whereIn('device_id', $upDevices->keys());
+        $ifaces = $filter->narrow($query)->get(['id', 'device_id', 'name']);
 
         foreach ($ifaces as $if) {
             if ($inScope !== null && ! isset($inScope[$if->device_id])) {

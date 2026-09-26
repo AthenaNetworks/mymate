@@ -522,12 +522,31 @@ export interface MaintenanceWindow {
     active: boolean;
 }
 
+/**
+ * Which interfaces an interface-level policy watches (interface_down, per-interface
+ * low_throughput). Mirrors App\Support\InterfaceFilter. Missing = every port.
+ */
+export interface AlertInterfaceFilter {
+    mode: 'all' | 'linked' | 'match' | 'selected';
+    match?: string; // comma separated globs, eg "sfp*, vlan*"
+    interface_ids?: number[];
+}
+
+export interface AlertPolicyParams {
+    threshold?: number;
+    duration_minutes?: number;
+    suppress_dependent?: boolean;
+    metric?: DeviceMetricKey;
+    target?: 'links' | 'interfaces'; // low_throughput only
+    interfaces?: AlertInterfaceFilter;
+}
+
 export interface AlertPolicy {
     id: number;
     name: string;
     condition: AlertConditionType;
     condition_label: string;
-    params: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean; metric?: DeviceMetricKey };
+    params: AlertPolicyParams;
     scope: AlertScope;
     enabled: boolean;
     transport_ids: number[];

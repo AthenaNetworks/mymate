@@ -39,6 +39,25 @@ of commit subjects.
   side, clearly labelled, in the node menu and the inspector. Delete is admin-only and always confirms
   first - the dialog names the device and counts what goes with it (links, map placements, interfaces and
   history), and warns you when it has child devices, which survive with no parent.
+- **Choose which interfaces raise an interface-down alert (GitHub #22).** An interface-down policy used
+  to fire for every down port on the devices it covers, so a policy meant for uplinks also paged for
+  every access port. The policy now has an Interfaces setting: every port (still the default, existing
+  policies behave exactly as before), only ports that are one end of a map link, ports whose name or
+  description matches a pattern like `sfp*, *uplink*`, or ports you pick by hand on the devices it's
+  scoped to. A narrower policy still wins over a fleet-wide one for its devices, so "all devices, every
+  port" plus "core routers, uplinks only" gives the core routers just their uplink alerts.
+- **Low-throughput alerts on a single interface, eg a VLAN (GitHub #11).** Low throughput could only
+  watch a link, so a VLAN or any port not drawn as a link couldn't be alerted on. A low-throughput policy
+  can now watch interfaces instead, picked with the same Interfaces setting (by pattern like `vlan*`, by
+  hand, or linked ports). It fires when the interface's busier direction drops under the floor while
+  its device is up. It won't let you pick every port, that would alert on every idle port you have.
+
+### Changed
+- **"Sustained for" is on every alert condition it applies to (GitHub #22).** The delay was only in the
+  form for device down, high utilisation and high metric, though the engine already honoured it for
+  everything. It's now there for interface down, low throughput, service probes and remote agents too.
+  Set it to a couple of minutes on an interface-down policy and a flapping port stops sending you
+  down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
 - **A device found by an agent's discovery sweep is now polled by that agent.** Discovery candidates

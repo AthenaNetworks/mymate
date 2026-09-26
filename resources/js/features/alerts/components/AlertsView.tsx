@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Bell, Plus, PencilSimple, Trash, PaperPlaneTilt, Wrench } from '@phosphor-icons/react';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { ScopeEditor } from '../../../components/ScopeEditor';
+import { InterfaceFilterEditor, interfaceFilterSummary } from './InterfaceFilterEditor';
 import { useAlertPolicies, useSaveAlertPolicy, useDeleteAlertPolicy, type AlertPolicyInput } from '../api/alertPolicies';
 import {
     useMaintenanceWindows,
@@ -31,6 +32,33 @@ function scopeSummary(scope: AlertScope): string {
         default:
             return 'all devices';
     }
+}
+
+// Conditions that get the generic "Sustained for" field. device_down has its own wording for
+// the same setting; the one-shot events (upgrade/backup failed, new discovery) have nothing to
+// sustain - they stay true until something else changes them.
+const SUSTAINABLE_CONDITIONS: AlertConditionType[] = ['high_util', 'low_throughput', 'interface_down', 'high_metric', 'probe_down', 'probe_slow', 'agent_down'];
+
+const numberInput =
+    'w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60';
+
+/** The breach has to hold this long before it notifies, and clear this long before it resolves. */
+function SustainedField({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+    return (
+        <>
+            <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                <span>
+                    Sustained for (min)
+                    <span className="ml-1 text-[11px] text-white/35">0 = instant</span>
+                </span>
+                <input type="number" min={0} max={1440} value={value} onChange={(e) => onChange(Number(e.target.value))} className={numberInput} />
+            </label>
+            <p className="px-1 text-[11px] text-white/35">
+                Has to stay true this long before it notifies, and clear this long before it resolves - so something
+                that flaps inside the window never sends anything.
+            </p>
+        </>
+    );
 }
 
 const field =
@@ -64,6 +92,8 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
             duration_minutes: initial?.params?.duration_minutes ?? 0,
             suppress_dependent: initial?.params?.suppress_dependent ?? true,
             metric: initial?.params?.metric ?? 'cpu',
+            target: initial?.params?.target ?? 'links',
+            interfaces: initial?.params?.interfaces ?? { mode: 'all' },
         },
         scope: initial?.scope ?? { type: 'all' },
         enabled: initial?.enabled ?? true,
@@ -145,20 +175,6 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                             className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
                         />
                     </label>
-                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
-                        <span>
-                            Sustained for (min)
-                            <span className="ml-1 text-[11px] text-white/35">0 = instant</span>
-                        </span>
-                        <input
-                            type="number"
-                            min={0}
-                            max={1440}
-                            value={form.params?.duration_minutes ?? 0}
-                            onChange={(e) => set('params', { ...form.params, duration_minutes: Number(e.target.value) })}
-                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
-                        />
-                    </label>
                     <p className="px-1 text-[11px] text-white/35">
                         Evaluated per link, against its effective speed (override or slowest end).
                     </p>
@@ -166,6 +182,33 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
             )}
             {form.condition === 'low_throughput' && (
                 <>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>Watch</span>
+                        <select
+                            className="w-52 rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                            value={form.params?.target ?? 'links'}
+                            onChange={(e) => {
+                                const target = e.target.value as 'links' | 'interfaces';
+                                // Every port isn't allowed here, so start from a pattern instead.
+                                const interfaces =
+                                    target === 'interfaces' && (form.params?.interfaces?.mode ?? 'all') === 'all'
+                                        ? { mode: 'match' as const, match: 'vlan*' }
+                                        : form.params?.interfaces;
+                                set('params', { ...form.params, target, interfaces });
+                            }}
+                        >
+                            <option value="links">Links</option>
+                            <option value="interfaces">Interfaces (eg a VLAN)</option>
+                        </select>
+                    </label>
+                    {form.params?.target === 'interfaces' && (
+                        <InterfaceFilterEditor
+                            value={form.params?.interfaces ?? { mode: 'match' }}
+                            scope={form.scope ?? { type: 'all' }}
+                            allowAll={false}
+                            onChange={(interfaces) => set('params', { ...form.params, interfaces })}
+                        />
+                    )}
                     <label className="flex items-center justify-between gap-3 text-sm text-white/70">
                         <span>Throughput floor (Mbps)</span>
                         <input
@@ -178,7 +221,9 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                         />
                     </label>
                     <p className="px-1 text-[11px] text-white/35">
-                        Fires when a link's busiest direction drops below this floor while both ends are up - for a circuit that should always carry traffic. Scope it to those links.
+                        {form.params?.target === 'interfaces'
+                            ? "Fires when an interface's busiest direction (in or out) drops below this floor while its device is up - eg a VLAN that should always carry traffic, even one that isn't on a link."
+                            : "Fires when a link's busiest direction drops below this floor while both ends are up - for a circuit that should always carry traffic. Scope it to those links."}
                     </p>
                 </>
             )}
@@ -196,9 +241,16 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
             )}
 
             {form.condition === 'interface_down' && (
-                <p className="px-1 text-[11px] text-white/35">
-                    Fires per port when an interface goes operationally down while its device stays up (eg a customer port drops but the uplink is fine). Read over SNMP; scope it to the devices you care about.
-                </p>
+                <>
+                    <InterfaceFilterEditor
+                        value={form.params?.interfaces ?? { mode: 'all' }}
+                        scope={form.scope ?? { type: 'all' }}
+                        onChange={(interfaces) => set('params', { ...form.params, interfaces })}
+                    />
+                    <p className="px-1 text-[11px] text-white/35">
+                        Fires per port when an interface goes operationally down while its device stays up (eg a customer port drops but the uplink is fine). Scope it to the devices you care about, and narrow the ports above if you only want some of them.
+                    </p>
+                </>
             )}
             {form.condition === 'high_metric' && (
                 <>
@@ -231,26 +283,18 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                             className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
                         />
                     </label>
-                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
-                        <span>
-                            Sustained for (min)
-                            <span className="ml-1 text-[11px] text-white/35">0 = instant</span>
-                        </span>
-                        <input
-                            type="number"
-                            min={0}
-                            max={1440}
-                            value={form.params?.duration_minutes ?? 0}
-                            onChange={(e) => set('params', { ...form.params, duration_minutes: Number(e.target.value) })}
-                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
-                        />
-                    </label>
                     <p className="px-1 text-[11px] text-white/35">
                         Uses each device's latest reading (CPU / memory / temperature from the metrics poll, latency
                         and loss from the ping sweep). Stale readings are ignored - a down device alerts via "Device
                         down" instead.
                     </p>
                 </>
+            )}
+            {SUSTAINABLE_CONDITIONS.includes(form.condition) && (
+                <SustainedField
+                    value={form.params?.duration_minutes ?? 0}
+                    onChange={(duration_minutes) => set('params', { ...form.params, duration_minutes })}
+                />
             )}
             {form.condition === 'agent_down' && (
                 <p className="px-1 text-[11px] text-white/35">
@@ -584,6 +628,11 @@ export function AlertsView() {
                                         {p.name}
                                         <span className="text-white/35"> - {p.condition_label}</span>
                                         {p.scope && p.scope.type !== 'all' && <span className="text-emerald-300/60"> - {scopeSummary(p.scope)}</span>}
+                                        {(p.condition === 'interface_down' || (p.condition === 'low_throughput' && p.params?.target === 'interfaces')) &&
+                                            interfaceFilterSummary(p.params?.interfaces) && (
+                                                <span className="text-emerald-300/60"> - {interfaceFilterSummary(p.params?.interfaces)}</span>
+                                            )}
+                                        {(p.params?.duration_minutes ?? 0) > 0 && <span className="text-white/35"> - {p.params.duration_minutes} min</span>}
                                     </span>
                                     {isAdmin && (
                                         <>
