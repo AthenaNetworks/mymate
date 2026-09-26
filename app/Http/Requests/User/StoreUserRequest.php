@@ -32,6 +32,9 @@ class StoreUserRequest extends FormRequest
             'passkey_exempt' => ['sometimes', 'boolean'],
             'map_ids' => ['sometimes', 'array'],
             'map_ids.*' => ['integer', 'exists:maps,id'],
+            // Named groups (GitHub #28) - their access applies on top, see User::isRestricted().
+            'group_ids' => ['sometimes', 'array'],
+            'group_ids.*' => ['integer', 'exists:user_groups,id'],
         ];
     }
 }

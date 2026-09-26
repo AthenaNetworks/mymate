@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Laravel\Passkeys\Contracts\PasskeyUser;
 use Laravel\Passkeys\PasskeyAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
@@ -53,16 +54,36 @@ class User extends Authenticatable implements PasskeyUser
 
     private ?array $memoDeviceIds = null;
 
+    private ?bool $memoGroupRestricted = null;
+
     /** Admins can manage operator accounts; normal operators are view-only. */
     public function isAdmin(): bool
     {
         return (bool) $this->is_admin;
     }
 
-    /** A restricted operator only sees the maps they've been granted (GitHub #28). */
+    /**
+     * A restricted operator only sees the maps they've been granted (GitHub #28). Precedence:
+     *
+     *  1. Their own `restricted` flag, exactly as before groups existed.
+     *  2. Admins are never restricted by a group - admin sees everything.
+     *  3. Otherwise they're restricted if ANY of their groups is. The most restrictive group wins,
+     *     so dropping someone into "Field techs" can't be undone by also being in a read-only-
+     *     everything group. Fails closed.
+     *
+     * Everything that scopes reads (Visibility, the global scopes, RestrictedAccess, /api/user)
+     * goes through here, so group restriction is enforced wherever the per-user one is.
+     */
     public function isRestricted(): bool
     {
-        return (bool) $this->restricted;
+        if ($this->restricted) {
+            return true;
+        }
+        if ($this->is_admin) {
+            return false;
+        }
+
+        return $this->memoGroupRestricted ??= $this->groups()->where('user_groups.restricted', true)->exists();
     }
 
     /** Maps explicitly granted to this operator. */
@@ -71,10 +92,20 @@ class User extends Authenticatable implements PasskeyUser
         return $this->belongsToMany(Map::class, 'map_user');
     }
 
+    /** Named groups this operator belongs to (GitHub #28). */
+    public function groups(): BelongsToMany
+    {
+        return $this->belongsToMany(UserGroup::class, 'user_group_user');
+    }
+
     /**
      * Map ids this operator may see: the granted maps plus all their sub-maps (grant a region,
      * see its towns). Computed without the visibility scope to avoid recursing through it, and
      * memoised for the request.
+     *
+     * The granted set is the union of their own grants (only when they're individually restricted,
+     * same as before groups) and the maps of every restricted group they're in. A read-only-
+     * everything group adds nothing here, it just doesn't restrict.
      *
      * @return array<int>
      */
@@ -85,7 +116,13 @@ class User extends Authenticatable implements PasskeyUser
         }
 
         // withoutGlobalScopes so resolving the grant doesn't recurse through the visibility scope.
-        $granted = $this->maps()->withoutGlobalScopes()->pluck('maps.id')->all();
+        $granted = $this->restricted ? $this->maps()->withoutGlobalScopes()->pluck('maps.id')->all() : [];
+
+        $groupIds = $this->is_admin ? [] : $this->groups()->where('user_groups.restricted', true)->pluck('user_groups.id')->all();
+        if ($groupIds !== []) {
+            $granted = array_merge($granted, DB::table('map_user_group')
+                ->whereIn('user_group_id', $groupIds)->pluck('map_id')->all());
+        }
 
         // Walk the full map tree (unscoped) to add descendants of each granted map.
         $childrenOf = [];
