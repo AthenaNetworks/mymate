@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
  * Lives in the shared core so the shell and the topology feature both read/write
  * it without a cross-feature import. No provider needed.
  */
-export type View = 'map' | 'geo' | 'dashboard' | 'devices' | 'discovery' | 'graphs' | 'tools' | 'outages' | 'alerts' | 'upgrades' | 'backups' | 'settings' | 'import';
+export type View = 'map' | 'geo' | 'dashboard' | 'devices' | 'device' | 'discovery' | 'graphs' | 'tools' | 'outages' | 'alerts' | 'upgrades' | 'backups' | 'settings' | 'import';
 
 /** Per-device inspector view prefs. */
 export type ChartMode = 'util' | 'rate';
@@ -64,6 +64,7 @@ const VIEW_TO_PATH: Record<View, string> = {
     geo: '/geo',
     dashboard: '/dashboard',
     devices: '/devices',
+    device: '/devices', // the real path carries the id, see DEVICE_PAGE
     discovery: '/discovery',
     graphs: '/graphs',
     tools: '/tools',
@@ -75,8 +76,13 @@ const VIEW_TO_PATH: Record<View, string> = {
     import: '/import',
 };
 
+// The full device page (/devices/{id}, /devices/{id}/ports/{ifId}) carries ids in its path,
+// so it's matched by pattern rather than looked up. The page reads the rest of the URL itself.
+const DEVICE_PAGE = /^\/devices\/\d+(\/ports\/\d+)?$/;
+
 function pathToView(pathname: string): View {
     const p = pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    if (DEVICE_PAGE.test(p)) return 'device';
     return (Object.keys(VIEW_TO_PATH) as View[]).find((v) => VIEW_TO_PATH[v] === p) ?? 'map';
 }
 
@@ -181,6 +187,21 @@ function applyView(view: View, opts: { push: boolean }): void {
 
 export function setView(view: View): void {
     applyView(view, { push: true });
+}
+
+/** Fired after navigateTo() changes the URL, so pages that read their own path/query re-render. */
+export const NAVIGATE_EVENT = 'mymate:navigate';
+
+/**
+ * Go to a full URL (path + query) inside the app, eg the device page. The view follows the
+ * path; `replace` swaps the history entry instead of adding one (range/tab tweaks).
+ */
+export function navigateTo(url: string, opts: { replace?: boolean } = {}): void {
+    if (typeof window === 'undefined') return;
+    if (opts.replace) window.history.replaceState({}, '', url);
+    else window.history.pushState({}, '', url);
+    applyView(pathToView(window.location.pathname), { push: false });
+    window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
 export function selectDevice(id: number | null): void {
@@ -380,5 +401,6 @@ export function useDashboardCycleS(): number {
 // can\'t double-register and there\'s no listener to clean up.
 if (typeof window !== 'undefined') {
     window.addEventListener('popstate', () => applyView(pathToView(window.location.pathname), { push: false }));
-    window.history.replaceState({ view: state.view }, '', VIEW_TO_PATH[state.view]);
+    // the device page's own path + query (ids, tab, graph range) is the page, keep it as is
+    if (state.view !== 'device') window.history.replaceState({ view: state.view }, '', VIEW_TO_PATH[state.view]);
 }

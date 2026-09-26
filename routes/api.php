@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\CredentialController;
 use App\Http\Controllers\Api\DeviceBackupController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DeviceHistoryController;
 use App\Http\Controllers\Api\DeviceIconController;
 use App\Http\Controllers\Api\DiscoverDeviceController;
 use App\Http\Controllers\Api\DiscoveryCandidateController;
@@ -272,6 +273,14 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Recent history: bucketed cpu/mem/temp series for one device (resource chart).
     Route::get('devices/{device}/metric-samples', [InterfaceSampleController::class, 'metrics'])
         ->name('devices.metric-samples');
+
+    // Full device page (GitHub #28): history catalog + generic history read, port 95th
+    // percentile billing, the merged event timeline and extra Overview facts.
+    Route::get('devices/{device}/history/catalog', [DeviceHistoryController::class, 'catalog'])->name('devices.history.catalog');
+    Route::get('devices/{device}/history', [DeviceHistoryController::class, 'history'])->name('devices.history');
+    Route::get('devices/{device}/billing', [DeviceHistoryController::class, 'billing'])->name('devices.billing');
+    Route::get('devices/{device}/events', [DeviceHistoryController::class, 'events'])->name('devices.events');
+    Route::get('devices/{device}/summary', [DeviceHistoryController::class, 'summary'])->name('devices.summary');
 
     // Topology links (interface-to-interface). Update re-binds either end.
     Route::apiResource('links', LinkController::class)->only(['index', 'store', 'update', 'destroy']);

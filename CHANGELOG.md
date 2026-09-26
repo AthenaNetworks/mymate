@@ -14,6 +14,23 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **A full page per device, LibreNMS style (GitHub #28).** Open a device from the Devices list or with
+  "Open device page" in the map inspector and you get /devices/{id} with Overview, Graphs, Ports, Events
+  and Config tabs. The Graphs tab shows every history we keep for the device (traffic for the whole box
+  and per port, latency / loss / jitter, CPU, memory, temperature, sensors, wireless, probes, and anything
+  new we start recording) over 1h to 1y or a custom window. Every graph shares the range and the hover
+  crosshair, drag across any graph to zoom in, Back undoes the zoom, and "compare to previous period"
+  lays last week (or whatever the span is) over this one. Each graph has a min / avg / max / last table
+  underneath, traffic adds the 95th percentile, and graphs export to CSV or PNG. The range lives in the
+  URL, so a link opens the same view. Graphs only load as you scroll to them, so a big switch stays quick.
+- **95th percentile billing per port.** Click a port on the Ports tab for its own page: traffic,
+  utilisation and whatever else is recorded for it, plus a billing panel for this month, last month or
+  any dates you pick. It shows the 95th percentile of the 5 minute rates in, out and max(in, out) with the
+  top 5% of intervals dropped, and the data transferred each way, and can draw those lines on the traffic
+  graph. Tick other ports to bill them as one (summed per interval, then the percentile). Periods that
+  start before the 5 minute rollups are kept fall back to hourly averages and say so, since that reads low.
+- **Device events timeline.** Outages, alerts firing and clearing, config changes from backups, the last
+  upgrade and the last reboot, merged newest first on the device page's Events tab.
 - **Port alerts show up on the map screen (GitHub #22).** When an alert starts firing or a firing one
   clears, the map now pops it up live the way it does a device outage, so a port going down on a core
   link gets noticed without anyone sitting on the Alerts page. Only port-level alerts toast (device

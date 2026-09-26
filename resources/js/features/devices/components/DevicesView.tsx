@@ -12,6 +12,7 @@ import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
 import { selectDevice, setView } from '../../../lib/shellStore';
+import { openDevicePage } from '../../device-page/lib/location';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
 import type { Device } from '../../../types';
@@ -312,7 +313,7 @@ export function DevicesView() {
                                                 className="mr-2.5 h-3.5 w-3.5 shrink-0 cursor-pointer accent-amber-400"
                                             />
                                         )}
-                                        <button onClick={() => open(d.id)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
+                                        <button onClick={() => openDevicePage(d.id)} title="Open device page" className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
                                             <StatusDot status={d.status} />
                                             <DeviceTypeBadge type={d.device_type} className="h-6 w-7 shrink-0" />
                                             <span className="min-w-0 flex-1">

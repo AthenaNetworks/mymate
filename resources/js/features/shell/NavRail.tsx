@@ -33,7 +33,7 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
 
             <ul className="space-y-0.5">
                 {ITEMS.map((it) => {
-                    const active = view === it.id;
+                    const active = view === it.id || (view === 'device' && it.id === 'devices');
                     const Icon = it.icon;
                     return (
                         <li key={it.id}>

@@ -121,7 +121,7 @@ function ScheduleCard({ isAdmin }: { isAdmin: boolean }) {
 
 type PanelMode = 'diff' | 'compare' | 'config';
 
-function VersionPanel({ device }: { device: Device }) {
+export function VersionPanel({ device }: { device: Device }) {
     const { data: versions, isLoading } = useDeviceVersions(device.id);
     const [focus, setFocus] = useState<string | null>(null);
     const [mode, setMode] = useState<PanelMode>('diff');

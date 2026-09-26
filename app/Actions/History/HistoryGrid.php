@@ -17,9 +17,9 @@ use Illuminate\Support\Carbon;
 class HistoryGrid
 {
     /** @return array{bucketSeconds:int, origin:Carbon, tier:string, buckets:list<string>, indexOf:array<string,int>} */
-    public static function build(Carbon $from, Carbon $to): array
+    public static function build(Carbon $from, Carbon $to, ?int $maxPoints = null): array
     {
-        $plan = app(HistoryTiers::class)->plan($from, $to);
+        $plan = app(HistoryTiers::class)->plan($from, $to, $maxPoints);
         $origin = $plan['origin'];
         $bucketSeconds = $plan['bucketSeconds'];
         $span = max(1, $origin->diffInSeconds($to));
