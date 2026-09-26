@@ -34,6 +34,7 @@ import { MapNodeMenu, type NodeMenuState } from './MapNodeMenu';
 import { SetParentDialog } from './SetParentDialog';
 import { DeleteDeviceDialog } from './DeleteDeviceDialog';
 import { MapControls } from './MapControls';
+import { MapBackground } from './MapBackground';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
@@ -774,6 +775,8 @@ export function MapCanvas() {
                     React Flow dot field, and gives the canvas depth against the mesh glow. */}
                 <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color={theme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.028)'} />
                 <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color={theme === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'} />
+                {/* Custom background image (GitHub #37) - self-contained layer + its admin panel. */}
+                <MapBackground mapId={activeMapId} />
                 <MapControls />
                 <MiniMap
                     pannable

@@ -18,6 +18,8 @@ import { MapLinkEdge } from '../../topology/edges/MapLinkEdge';
 import { ChildLinkEdge } from '../../topology/edges/ChildLinkEdge';
 import { computeData, linkUtil, metaOf } from '../../topology/lib/edgeData';
 import { useWallDevices, useWallLinks, useWallMap } from '../api/wall';
+import { MapBackgroundLayer } from '../../topology/components/MapBackgroundLayer';
+import { wallToken } from '../../../lib/wall';
 import type { DeviceStatus } from '../../../types';
 
 // Read-only presentation of one map for the public wallboard (GitHub #15). Reuses the exact node
@@ -51,6 +53,7 @@ export function WallCanvas() {
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
     const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]);
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]);
+    const background = mapDetail?.background ?? null; // custom map image (GitHub #37)
 
     const statusById = useMemo<Record<number, DeviceStatus>>(
         () => Object.fromEntries((devices ?? []).map((d) => [d.id, d.status])),
@@ -168,6 +171,17 @@ export function WallCanvas() {
         >
             <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color="rgba(255,255,255,0.028)" />
             <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color="rgba(255,255,255,0.05)" />
+            {background && (
+                <MapBackgroundLayer
+                    src={`/api/public/wall/${wallToken()}/background?v=${encodeURIComponent(background.version)}`}
+                    width={background.width}
+                    height={background.height}
+                    x={background.x}
+                    y={background.y}
+                    scale={background.scale}
+                    opacity={background.opacity}
+                />
+            )}
         </ReactFlow>
     );
 }
