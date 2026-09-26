@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-09-26
+
 ### Added
 - **A full page per device, LibreNMS style (GitHub #28).** Open a device from the Devices list or with
   "Open device page" in the map inspector and you get /devices/{id} with Overview, Graphs, Ports, Events
@@ -1035,7 +1037,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/AthenaNetworks/mymate/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AthenaNetworks/mymate/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/AthenaNetworks/mymate/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/AthenaNetworks/mymate/compare/v1.7.0...v1.7.1
