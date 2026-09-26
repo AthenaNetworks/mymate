@@ -61,6 +61,13 @@ class CaptureDeviceFacts
         $detectedType = $facts['device_type'] ?? null;
         unset($facts['device_type']);
 
+        // Keep what the location advertised in its own columns, manual pin or not, so "use the
+        // SNMP location" (GitHub #22) can hand a device straight back without waiting for another
+        // capture. Unlike the other facts a null here is real: the location lost its coordinates.
+        $snmpGeo = array_key_exists('latitude', $facts)
+            ? ['snmp_latitude' => $facts['latitude'], 'snmp_longitude' => $facts['longitude'] ?? null]
+            : [];
+
         $facts = array_filter($facts, static fn ($v): bool => $v !== null && $v !== '');
 
         // Never let an SNMP-derived coordinate overwrite a pin the operator placed by hand.
@@ -74,6 +81,8 @@ class CaptureDeviceFacts
             && ($device->device_type ?? DeviceType::Unknown) === DeviceType::Unknown) {
             $facts['device_type'] = $detectedType;
         }
+
+        $facts += $snmpGeo;
 
         if ($facts === []) {
             return;

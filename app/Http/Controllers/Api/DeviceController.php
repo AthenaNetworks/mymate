@@ -7,6 +7,7 @@ use App\Actions\Devices\DeleteDevice;
 use App\Actions\Devices\UpdateDevice;
 use App\Actions\Devices\UpdateDevicePosition;
 use App\Actions\Devices\UpgradePreflight;
+use App\Actions\Devices\UseSnmpLocation;
 use App\Enums\UpgradeStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Device\StoreDeviceRequest;
@@ -60,6 +61,19 @@ class DeviceController extends Controller
         \App\Support\DeviceGeo::apply([$device]);
 
         return new DeviceResource($device);
+    }
+
+    /**
+     * Drop a manual pin and put the device back on its SNMP / RouterOS location (GitHub #22).
+     * `moved` says whether it moved now or waits for the next capture to place it.
+     */
+    public function useSnmpLocation(Device $device, UseSnmpLocation $useSnmpLocation): JsonResponse
+    {
+        $moved = $useSnmpLocation($device);
+        $device->loadMissing('parent', 'site');
+        \App\Support\DeviceGeo::apply([$device]);
+
+        return (new DeviceResource($device))->additional(['meta' => ['moved' => $moved]])->response();
     }
 
     public function updatePosition(UpdateDevicePositionRequest $request, Device $device, UpdateDevicePosition $updatePosition): DeviceResource

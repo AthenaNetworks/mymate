@@ -14,6 +14,12 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **"Use SNMP location" for a hand-placed device (GitHub #22).** Once a device is dragged on the geo map
+  or has coordinates typed in, it's a manual pin and its SNMP / RouterOS location stops moving it. Admins
+  now get a "Use SNMP location" action in the device inspector and in both device editors that hands it
+  back. We now remember the coordinates the location advertises even while a pin is manual, so if we
+  already know them the device moves there straight away; if not, the manual flag is dropped and the
+  next discovery pass places it.
 - **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
   building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
   elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet
@@ -92,6 +98,10 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Saving a device no longer turns its SNMP-placed pin into a manual one (GitHub #22).** The device
+  editors send the coordinates back on every save, which marked the location manual even when nothing
+  about it changed, so a simple rename stopped the SNMP location from ever moving the device again. Only
+  an actual change of coordinates counts as a manual pin now.
 - **Restricted operators no longer receive live updates for devices outside their maps.** The live
   map's websocket channel carried the whole fleet and let any signed-in user subscribe, so a
   map-restricted operator (per-user or through a group) was sent live status, traffic and metrics for

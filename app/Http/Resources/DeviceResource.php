@@ -27,6 +27,10 @@ class DeviceResource extends JsonResource
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'geo_source' => $this->geo_source,
+            // What the device's own SNMP / RouterOS location advertises, kept even under a manual
+            // pin so the editor can offer to hand the device back to it (GitHub #22).
+            'snmp_latitude' => $this->snmp_latitude,
+            'snmp_longitude' => $this->snmp_longitude,
             // Site placement: a site carries coordinates once and every device at it inherits
             // them at read time, so assigning a site places a whole tower's worth of gear
             // without copying coordinates onto each row.

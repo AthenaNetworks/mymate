@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, PencilSimple } from '@phosphor-icons/react';
 import { useUpdateDevice } from '../api/updateDevice';
 import { Toggle } from '../../../components/Toggle';
+import { UseSnmpLocationButton } from './UseSnmpLocationButton';
 import { useCredentials } from '../../settings/api/credentials';
 import { useDevices } from '../api/getDevices';
 import { useGeocode, useMapConfig } from '../../geo/api/geo';
@@ -235,11 +236,17 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                                     </button>
                                 </div>
                             )}
-                            {(lat.trim() !== '' || lng.trim() !== '') && (
-                                <button type="button" onClick={() => { setLat(''); setLng(''); }} className="text-[11px] text-white/45 hover:text-white/80">
-                                    Clear location
-                                </button>
-                            )}
+                            <div className="flex items-center gap-4">
+                                {(lat.trim() !== '' || lng.trim() !== '') && (
+                                    <button type="button" onClick={() => { setLat(''); setLng(''); }} className="text-[11px] text-white/45 hover:text-white/80">
+                                        Clear location
+                                    </button>
+                                )}
+                                <UseSnmpLocationButton
+                                    device={device}
+                                    onMoved={(d) => { setLat(d.latitude != null ? String(d.latitude) : ''); setLng(d.longitude != null ? String(d.longitude) : ''); }}
+                                />
+                            </div>
                         </div>
 
                         <div className="flex items-center justify-end gap-2.5 pt-1">

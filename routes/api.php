@@ -152,6 +152,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // RestrictWritesToAdmins keeps it admin-only.
     Route::delete('devices/{device}/map-positions', [DeviceController::class, 'unplace'])
         ->name('devices.map-positions.destroy');
+    // Hand a hand-placed device back to its SNMP location (GitHub #22). A write, so admin-only.
+    Route::post('devices/{device}/use-snmp-location', [DeviceController::class, 'useSnmpLocation'])
+        ->name('devices.use-snmp-location');
     // Bulk firmware upgrade - one isolated job per device. Before the
     // resource so `devices/upgrade` isn't shadowed by `devices/{device}`.
     // Dry-run the dependency checks first; both before the resource.
