@@ -2,12 +2,19 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { useCurrentUser } from '../../auth/api/auth';
-import { deviceKeys, findCachedDevice, patchCachedDevices, type DeviceStats } from '../../devices/api/getDevices';
+import { deviceExtras, deviceKeys, findCachedDevice, patchCachedDevices, type DeviceStats } from '../../devices/api/getDevices';
 import type { GeoDevice } from '../../geo/api/sites';
 import { outageKeys } from '../../outages/api/getOutages';
 import { linkKeys } from '../api/getLinks';
-import { deviceInterfaceKeys } from '../api/getDeviceInterfaces';
-import type { AlertStateChangedPayload, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import { deviceInterfaceKeys, patchCachedInterfaces } from '../api/getDeviceInterfaces';
+import type {
+    AlertStateChangedPayload,
+    DeviceLatencyUpdatedPayload,
+    DeviceMetricsUpdatedPayload,
+    DeviceRebootedPayload,
+    DeviceStatus,
+    InterfaceUtilUpdatedPayload,
+} from '../../../types';
 
 type DeviceStatusChangedPayload = {
     id: number;
@@ -23,7 +30,9 @@ type DeviceStatusChangedPayload = {
  * Single subscription to the private `map` channel:
  *  - `DeviceStatusChanged` -> folded into every cached copy of the device (map nodes, inspector,
  *    list pages), the geo feed and the header counts.
- *  - `InterfaceUtilUpdated` -> handed to `onUtil` so the caller can recolour edges live.
+ *  - `InterfaceUtilUpdated` -> handed to `onUtil` so the caller can recolour edges live, and
+ *    folded into any cached interface lists (inspector, device page ports).
+ *  - `DeviceRebooted` -> handed to `onReboot` (the map toasts it).
  *
  * On (re)connect it resyncs the device + link snapshot to fill any missed events.
  * One subscription only (Echo caches the channel; a second `leave('map')` would
@@ -33,6 +42,7 @@ export function useMapChannel(
     onUtil?: (payload: InterfaceUtilUpdatedPayload) => void,
     onStatus?: (e: { id: number; name: string; status: DeviceStatus }) => void,
     onAlert?: (e: AlertStateChangedPayload) => void,
+    onReboot?: (e: DeviceRebootedPayload) => void,
 ) {
     const qc = useQueryClient();
     // An unrestricted operator hears the whole fleet on the shared `map` channel. A restricted one
@@ -104,6 +114,11 @@ export function useMapChannel(
 
         channel.listen('.InterfaceUtilUpdated', (e: InterfaceUtilUpdatedPayload) => {
             onUtil?.(e);
+            patchCachedInterfaces(qc, e);
+        });
+
+        channel.listen('.DeviceRebooted', (e: DeviceRebootedPayload) => {
+            onReboot?.(e);
         });
 
         // Live cpu/mem/temp -> folded into the devices cache so both the map tiles and the
@@ -123,6 +138,7 @@ export function useMapChannel(
                           ccq_pct: f.ccq_pct,
                           wireless_clients: f.wireless_clients,
                           ospf_neighbors: f.ospf_neighbors,
+                          ...deviceExtras(f),
                       }
                     : null;
             });
@@ -152,5 +168,5 @@ export function useMapChannel(
             if (outageTimer !== null) clearTimeout(outageTimer);
             echo.leave(channelName);
         };
-    }, [qc, onUtil, onStatus, onAlert, channelName]);
+    }, [qc, onUtil, onStatus, onAlert, onReboot, channelName]);
 }

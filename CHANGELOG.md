@@ -201,8 +201,21 @@ of commit subjects.
   when Rx or Tx goes below (or above) a dBm threshold you set, default Rx below -25 dBm, with the usual
   scoping and sustained-duration options. Pulling a module clears its reading. Agent-polled devices need
   the agent updated to report optical power; older agents keep working, they just don't send it.
+- **The device page is live.** Port state, packet / error / discard rates and optical power update on the
+  Ports tab, the port page and the map inspector's port list as they're polled, and a port going down
+  flips its chip straight away. Uptime and per-processor load tick on the Overview, which also gets a
+  Processors and a Storage card (storage refreshes whenever the metrics poll reads it). Normally only
+  ports that are one end of a link are pushed live, to keep the websocket small on a big fleet; while a
+  device page or the inspector has a device open, all of that device's ports are sent. When a device
+  reboots the map pops "sw1 rebooted (was up 41d 3h)" (a batch of them becomes one "12 devices
+  rebooted"), and an open device page adds it to its Events tab. Restricted operators only get their own
+  devices, as with everything else live. Graphs on a live range keep refreshing once a minute as before.
 
 ### Changed
+- **Live port updates are smaller.** Each interface in the per-tick util update no longer repeats its
+  device id and status, util is sent to two decimal places and bps as whole bits. A 48 port switch's
+  frame is about 40% smaller on an ordinary tick (8.9 KB down to 5.4 KB), and the new port fields are
+  only sent when they change.
 - **`GET /api/devices` is now paginated (GitHub #22). API change.** It used to return the whole fleet
   in one go, which at ~25,000 devices was a 36 MB response that ran php-fpm out of memory. It now
   returns one page in Laravel's usual `data` / `links` / `meta` shape, 50 per page by default and at
@@ -233,6 +246,10 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Live cpu / memory / temperature on bigger fleets.** A metrics poll sent its whole shard as one
+  websocket message, which past a few dozen devices was over Reverb's 10 KB limit and was dropped, so the
+  map tiles only moved on a refetch. It's now split to fit, the same as the port updates. Agent-polled
+  port updates are split the same way.
 - **Large fleets: header counts, the map inspector and the Devices page work again (GitHub #22).** On a
   network of ~25,000 devices the header showed "0 up / 0 down", clicking a device on the map did nothing
   and the Devices page hung the tab, all because the one fleet-wide device request never finished. See

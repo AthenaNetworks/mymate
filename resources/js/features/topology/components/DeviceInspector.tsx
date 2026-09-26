@@ -14,6 +14,7 @@ import {
 } from '../../../lib/shellStore';
 import { useDevice, useDeviceStats, useDevicesByIds, useMapDevices } from '../../devices/api/getDevices';
 import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
+import { useWatchDevice } from '../../devices/api/watchDevice';
 import { useDiscoverDevice } from '../api/discoverDevice';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useUpgradeDevices } from '../../devices/api/upgradeDevices';
@@ -543,6 +544,8 @@ export function DeviceInspector() {
     const { data: mapDevices } = useMapDevices(activeMapId);
     const { data: stats } = useDeviceStats();
     const { data: interfaces } = useDeviceInterfaces(id);
+    // all its ports on the live stream while it's selected, not just the link ends
+    useWatchDevice(deviceGone ? null : id);
     const { data: links } = useLinks();
     const upgrade = useUpgradeDevices();
     const discover = useDiscoverDevice();

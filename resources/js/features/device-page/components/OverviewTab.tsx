@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 import { Bell } from '@phosphor-icons/react';
 import { relativeTime } from '../../../lib/relativeTime';
-import { useHistoryCatalog, type DeviceSummary } from '../api/devicePage';
+import { useDeviceStorage, useHistoryCatalog, type DeviceSummary } from '../api/devicePage';
 import { deviceSections, findSpec, type GraphSpec } from '../lib/specs';
 import { useGraphRange } from '../lib/range';
-import { fmtDuration, fmtValue } from '../lib/format';
+import { fmtBytes, fmtDuration, fmtValue } from '../lib/format';
 import { openDevicePage, setQuery, showOnMap } from '../lib/location';
 import { HistoryGraph } from './HistoryGraph';
 import { Card, Detail, Empty } from './ui';
@@ -29,6 +29,58 @@ function Tile({ label, value, tone = 'text-white/85', sub }: { label: string; va
 }
 
 const pctTone = (v: number | null) => (v === null ? 'text-white/40' : v >= 90 ? 'text-rose-300' : v >= 75 ? 'text-amber-300' : 'text-white/85');
+const barColor = (v: number) => (v >= 90 ? 'bg-rose-400' : v >= 75 ? 'bg-amber-300' : 'bg-emerald-400/80');
+
+function Bar({ label, pct, sub }: { label: string; pct: number | null; sub?: string }) {
+    return (
+        <div className="flex items-center gap-2.5 text-xs">
+            <span className="w-28 shrink-0 truncate text-white/55" title={label}>{label}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                {pct !== null && <div className={`h-full rounded-full ${barColor(pct)}`} style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />}
+            </div>
+            <span className={`w-12 shrink-0 text-right font-mono tabular-nums ${pctTone(pct)}`}>{fmtValue(pct, '%')}</span>
+            {sub !== undefined && <span className="hidden w-32 shrink-0 text-right font-mono text-[10px] text-white/35 sm:block">{sub}</span>}
+        </div>
+    );
+}
+
+/**
+ * Per-processor load and storage (disks, RAM, swap), both live: cpu_loads rides the metrics frame
+ * onto the device, storage is refetched when a frame says it was read. Hidden when there's neither.
+ */
+function Resources({ device }: { device: Device }) {
+    const { data: storage } = useDeviceStorage(device.id);
+    const cpus = device.cpu_loads ?? [];
+    if (cpus.length < 2 && (storage ?? []).length === 0) return null;
+
+    return (
+        <div className="grid gap-4 lg:grid-cols-2">
+            {cpus.length >= 2 && (
+                <Card title={`Processors (${cpus.length})`}>
+                    <div className="space-y-1.5">
+                        {cpus.map((c, i) => (
+                            <Bar key={c.index} label={`CPU ${i + 1}`} pct={c.load_pct} />
+                        ))}
+                    </div>
+                </Card>
+            )}
+            {storage && storage.length > 0 && (
+                <Card title="Storage">
+                    <div className="space-y-1.5">
+                        {storage.map((s) => (
+                            <Bar
+                                key={s.id}
+                                label={s.descr}
+                                pct={s.used_pct}
+                                sub={s.size_bytes !== null ? `${fmtBytes(s.used_bytes)} / ${fmtBytes(s.size_bytes)}` : undefined}
+                            />
+                        ))}
+                    </div>
+                </Card>
+            )}
+        </div>
+    );
+}
 
 export function OverviewTab({ device, summary }: { device: Device; summary: DeviceSummary | undefined }) {
     const { data: catalog } = useHistoryCatalog(device.id);
@@ -152,6 +204,8 @@ export function OverviewTab({ device, summary }: { device: Device; summary: Devi
                     )}
                 </Card>
             </div>
+
+            <Resources device={device} />
 
             <Card title="Last 24 hours" right={<button type="button" onClick={() => setQuery({ tab: 'graphs' }, { push: true })} className="text-xs text-emerald-300/90 hover:underline">All graphs</button>}>
                 {!catalog ? (

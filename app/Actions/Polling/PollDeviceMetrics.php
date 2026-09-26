@@ -6,6 +6,7 @@ use App\Enums\PollMethod;
 use App\Events\DeviceMetricsUpdated;
 use App\Models\Device;
 use App\Services\Polling\DeviceMetricsDriverFactory;
+use App\Services\Polling\LiveDeviceFrame;
 use App\Services\Polling\OpticalPowerReader;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
@@ -88,6 +89,9 @@ class PollDeviceMetrics
                 continue; // nothing readable - don't stamp metrics_at or write fake zeroes
             }
 
+            // per-CPU loads + uptime (and the reboot check), for the device page
+            $extras = RecordDeviceResources::deviceAttributes($device, $metrics, now());
+
             // Latest values onto the device row (individually so one persist keeps the
             // others - no bulk upsert here, the metrics fleet is device-count, not
             // interface-count, so per-device updates are cheap enough).
@@ -101,8 +105,7 @@ class PollDeviceMetrics
                 'wireless_clients' => $metrics->wirelessClients,
                 'ospf_neighbors' => $ospf,
                 'metrics_at' => now(),
-                // per-CPU loads + uptime (and the reboot check), for the device page
-                ...RecordDeviceResources::deviceAttributes($device, $metrics, now()),
+                ...$extras,
             ])->save();
             $resources[] = [$device, $metrics];
 
@@ -116,6 +119,8 @@ class PollDeviceMetrics
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
                 'ospf_neighbors' => $ospf,
+                // uptime, per-CPU and a storage-read flag, only when read (device page)
+                ...LiveDeviceFrame::resources($extras, $metrics),
             ];
             $sampleRows[] = [
                 'device_id' => $device->id,
@@ -188,6 +193,6 @@ class PollDeviceMetrics
             return;
         }
 
-        LiveBroadcast::send(new DeviceMetricsUpdated($frames));
+        LiveBroadcast::sendFrames(static fn (array $chunk) => new DeviceMetricsUpdated($chunk), $frames);
     }
 }

@@ -112,6 +112,8 @@ export interface Device {
     mem_used_pct: number | null;
     temp_c: number | null;
     metrics_at: string | null;
+    /** Per-processor load from the last poll. Only on the single device read (GET /devices/{id}). */
+    cpu_loads?: CpuLoad[];
     signal_dbm: number | null;
     snr_db: number | null;
     ccq_pct: number | null;
@@ -215,6 +217,13 @@ export interface NetworkInterface {
     optical_rx_dbm: number | null;
     optical_tx_dbm: number | null;
     optical_at: string | null;
+    // Port rates per second from the last counter read, null until two reads have landed.
+    pkts_in?: number | null;
+    pkts_out?: number | null;
+    errors_in?: number | null;
+    errors_out?: number | null;
+    discards_in?: number | null;
+    discards_out?: number | null;
 }
 
 export interface Link {
@@ -632,15 +641,30 @@ export interface Outage {
 }
 
 // Live throughput event (App\Events\InterfaceUtilUpdated) - coalesced across devices.
-export interface InterfaceUtilFrame {
+// Port-list extras on a live interface frame (App\Services\Polling\LiveInterfaceFrame). Each is only
+// there when it changed, a missing key means keep what you have.
+export interface InterfacePortExtras {
+    oper_status?: 'up' | 'down';
+    pkts_in?: number;
+    pkts_out?: number;
+    errors_in?: number;
+    errors_out?: number;
+    discards_in?: number;
+    discards_out?: number;
+    optical_rx_dbm?: number;
+    optical_tx_dbm?: number;
+}
+
+export interface InterfaceUtilFrame extends InterfacePortExtras {
     interface_id: number;
-    device_id: number;
     util_in: number | null;
     util_out: number | null;
-    speed_mbps: number | null;
+    speed_mbps?: number | null; // left off `ports` entries
     bps_in: number | null;
     bps_out: number | null;
-    status: DeviceStatus;
+    // Older servers repeated these per interface; they're on the device frame.
+    device_id?: number;
+    status?: DeviceStatus;
 }
 
 // An alert started firing or a firing one resolved (GitHub #22) - drives the map-screen popup for a
@@ -655,7 +679,10 @@ export interface AlertStateChangedPayload {
 }
 
 export interface InterfaceUtilUpdatedPayload {
-    devices: { device_id: number; status: DeviceStatus; interfaces: InterfaceUtilFrame[] }[];
+    // `interfaces` are link ends (what the map draws). `ports` are the rest of a device someone has
+    // open (device page / inspector), for the port lists only; a frame can carry just those, with
+    // `interfaces` empty, when a big device is split to fit.
+    devices: { device_id: number; status: DeviceStatus; interfaces: InterfaceUtilFrame[]; ports?: InterfaceUtilFrame[] }[];
     device_count: number;
     interface_count: number;
 }
@@ -673,6 +700,11 @@ export interface InterfaceSample {
 // (the default, unchanged); the rest come from the device-metrics pipeline.
 export type TileMetric = 'throughput' | 'cpu' | 'mem' | 'temp';
 
+export interface CpuLoad {
+    index: number; // the cpu history family's key (hrDeviceIndex, or the core number over RouterOS)
+    load_pct: number;
+}
+
 // Live device-metrics event (App\Events\DeviceMetricsUpdated) - coalesced across devices.
 export interface DeviceMetricsFrame {
     device_id: number;
@@ -684,6 +716,18 @@ export interface DeviceMetricsFrame {
     ccq_pct: number | null;
     wireless_clients: number | null;
     ospf_neighbors: number | null;
+    // Device page extras (App\Services\Polling\LiveDeviceFrame), only there when the poll read them.
+    uptime_seconds?: number;
+    cpu_loads?: CpuLoad[];
+    storage?: true; // storage was read this tick, refetch the list if it's on screen
+}
+
+// A device's uptime went backwards (App\Events\DeviceRebooted).
+export interface DeviceRebootedPayload {
+    device_id: number;
+    name: string;
+    booted_at: string;
+    previous_uptime_s: number | null;
 }
 
 export interface DeviceMetricsUpdatedPayload {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\DeviceStorage;
+use App\Support\LiveWatch;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -51,5 +52,17 @@ class DeviceHealthController extends Controller
             'processors' => $loads,
             'updated_at' => $device->metrics_at,
         ]]);
+    }
+
+    /**
+     * POST /api/devices/{device}/live - the device is open on someone's screen, send all its ports
+     * on the live stream for the next couple of minutes (App\Support\LiveWatch). Route binding
+     * already 404s a device a restricted operator can't see, and the frames still go out scoped.
+     */
+    public function watch(Device $device): JsonResponse
+    {
+        LiveWatch::touch($device->id);
+
+        return response()->json(['data' => ['ttl' => LiveWatch::TTL]]);
     }
 }

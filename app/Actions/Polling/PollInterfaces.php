@@ -6,9 +6,11 @@ use App\Events\InterfaceUtilUpdated;
 use App\Models\Device;
 use App\Models\Link;
 use App\Models\NetworkInterface;
+use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\PortStats;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
+use App\Support\LiveWatch;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -158,11 +160,12 @@ class PollInterfaces
      * (`UtilEdge` colours edges from a link's two interface ids - nothing reads a
      * non-link interface's *live* util, only its last-polled value via the REST API).
      *
-     * A single device's frame is never split across events (a soft bound, same as
-     * before) - but if it alone exceeds the byte budget, sending it would just be
-     * rejected by Reverb the same way (and could take any co-chunked devices down
-     * with it), so it's skipped for the live broadcast - persistence/history above
-     * are unaffected - with a warning logged instead of silently failing.
+     * A single device's link-bound interfaces are never split across events (a soft bound,
+     * same as before) - but if they alone exceed the byte budget, sending them would just
+     * be rejected by Reverb the same way (and could take any co-chunked devices down
+     * with it), so they're skipped for the live broadcast - persistence/history above
+     * are unaffected - with a warning logged instead of silently failing. A watched
+     * device's other `ports` are the exception, see {@see fitFrame}.
      *
      * @param  list<array{device_id:int, status:string, interfaces:list<array<string,mixed>>}>  $deviceFrames
      * @return int total bytes actually broadcast (for the batch-complete heartbeat)
@@ -192,32 +195,22 @@ class PollInterfaces
         $chunkBytes = 0;
         $totalBytes = 0;
 
-        foreach ($deviceFrames as $frame) {
-            $n = count($frame['interfaces']);
-            $bytes = strlen(json_encode($frame));
+        foreach ($deviceFrames as $whole) {
+            foreach ($this->fitFrame($whole, $capBytes) as [$frame, $bytes]) {
+                $n = count($frame['interfaces']) + count($frame['ports'] ?? []);
 
-            if ($bytes + self::WRAPPER_OVERHEAD_BYTES > $capBytes) {
-                EngineLog::warning('poll: device broadcast frame exceeds byte budget', [
-                    'device_id' => $frame['device_id'],
-                    'interfaces' => $n,
-                    'bytes' => $bytes,
-                    'budget' => $capBytes,
-                ]);
+                if ($chunk !== [] && ($chunkCount + $n > $capCount || $chunkBytes + $bytes + self::WRAPPER_OVERHEAD_BYTES > $capBytes)) {
+                    LiveBroadcast::send(new InterfaceUtilUpdated($chunk));
+                    $totalBytes += $chunkBytes + self::WRAPPER_OVERHEAD_BYTES;
+                    $chunk = [];
+                    $chunkCount = 0;
+                    $chunkBytes = 0;
+                }
 
-                continue;
+                $chunk[] = $frame;
+                $chunkCount += $n;
+                $chunkBytes += $bytes;
             }
-
-            if ($chunk !== [] && ($chunkCount + $n > $capCount || $chunkBytes + $bytes + self::WRAPPER_OVERHEAD_BYTES > $capBytes)) {
-                LiveBroadcast::send(new InterfaceUtilUpdated($chunk));
-                $totalBytes += $chunkBytes + self::WRAPPER_OVERHEAD_BYTES;
-                $chunk = [];
-                $chunkCount = 0;
-                $chunkBytes = 0;
-            }
-
-            $chunk[] = $frame;
-            $chunkCount += $n;
-            $chunkBytes += $bytes;
         }
 
         if ($chunk !== []) {
@@ -229,13 +222,76 @@ class PollInterfaces
     }
 
     /**
+     * One device's frame as the piece(s) that fit the byte budget, each with its size.
+     *
+     * Almost always that's the frame as is. When it's too big the link-bound interfaces stay
+     * together in one frame (skipped with a warning if even that is over, as above), and a watched
+     * device's `ports` are cut into as many extra frames as they need, with `interfaces` empty.
+     * Those only patch the port list so it doesn't matter which event they land in, and a 48 port
+     * switch open on someone's screen still gets through.
+     *
+     * @param  array<string, mixed>  $frame
+     * @return list<array{0: array<string, mixed>, 1: int}>
+     */
+    private function fitFrame(array $frame, int $capBytes): array
+    {
+        $bytes = strlen(json_encode($frame));
+        if ($bytes + self::WRAPPER_OVERHEAD_BYTES <= $capBytes) {
+            return [[$frame, $bytes]];
+        }
+
+        $ports = $frame['ports'] ?? [];
+        unset($frame['ports']);
+
+        $pieces = [];
+        if ($frame['interfaces'] !== []) {
+            $bytes = strlen(json_encode($frame));
+            if ($bytes + self::WRAPPER_OVERHEAD_BYTES > $capBytes) {
+                EngineLog::warning('poll: device broadcast frame exceeds byte budget', [
+                    'device_id' => $frame['device_id'],
+                    'interfaces' => count($frame['interfaces']),
+                    'bytes' => $bytes,
+                    'budget' => $capBytes,
+                ]);
+            } else {
+                $pieces[] = [$frame, $bytes];
+            }
+        }
+
+        $base = ['device_id' => $frame['device_id'], 'status' => $frame['status'], 'interfaces' => []];
+        $baseBytes = strlen(json_encode([...$base, 'ports' => []]));
+        $batch = [];
+        $batchBytes = $baseBytes;
+        foreach ($ports as $port) {
+            $b = strlen(json_encode($port)) + 1; // +1 for the comma
+            if ($batch !== [] && $batchBytes + $b + self::WRAPPER_OVERHEAD_BYTES > $capBytes) {
+                $pieces[] = [[...$base, 'ports' => $batch], $batchBytes];
+                $batch = [];
+                $batchBytes = $baseBytes;
+            }
+            $batch[] = $port;
+            $batchBytes += $b;
+        }
+        if ($batch !== []) {
+            $pieces[] = [[...$base, 'ports' => $batch], $batchBytes];
+        }
+
+        return $pieces;
+    }
+
+    /**
      * Drop every interface that isn't one end of a `Link`, and any device left with
      * none - the live broadcast only ever needs to carry what the map can actually
      * colour. Persistence/history above are unaffected (those keep every interface);
      * this narrowing is for the WS payload alone.
      *
+     * The exception is a device someone has open right now (LiveWatch: the device page or
+     * the inspector). Its other interfaces ride along as `ports` so its whole port list
+     * ticks live. The map ignores `ports`, tiles and edges only ever read link ends.
+     * Every interface frame is compacted on the way (LiveInterfaceFrame::compact).
+     *
      * @param  list<array{device_id:int, status:string, interfaces:list<array<string,mixed>>}>  $deviceFrames
-     * @return list<array{device_id:int, status:string, interfaces:list<array<string,mixed>>}>
+     * @return list<array{device_id:int, status:string, interfaces:list<array<string,mixed>>, ports?:list<array<string,mixed>>}>
      */
     private function narrowToLinkedInterfaces(array $deviceFrames): array
     {
@@ -244,21 +300,28 @@ class PollInterfaces
             $linkedIds[$link->a_interface_id] = true;
             $linkedIds[$link->b_interface_id] = true;
         }
+        $watched = LiveWatch::watched(array_map(static fn (array $f): int => (int) $f['device_id'], $deviceFrames));
 
-        if ($linkedIds === []) {
+        if ($linkedIds === [] && $watched === []) {
             return [];
         }
 
         $out = [];
         foreach ($deviceFrames as $frame) {
-            $interfaces = array_values(array_filter(
-                $frame['interfaces'],
-                static fn (array $f): bool => isset($linkedIds[$f['interface_id']]),
-            ));
-            if ($interfaces === []) {
+            $open = isset($watched[$frame['device_id']]);
+            $interfaces = [];
+            $ports = [];
+            foreach ($frame['interfaces'] as $f) {
+                if (isset($linkedIds[$f['interface_id']])) {
+                    $interfaces[] = LiveInterfaceFrame::compact($f);
+                } elseif ($open) {
+                    $ports[] = LiveInterfaceFrame::compact($f, true);
+                }
+            }
+            if ($interfaces === [] && $ports === []) {
                 continue;
             }
-            $out[] = [...$frame, 'interfaces' => $interfaces];
+            $out[] = [...$frame, 'interfaces' => $interfaces, ...($ports === [] ? [] : ['ports' => $ports])];
         }
 
         return $out;

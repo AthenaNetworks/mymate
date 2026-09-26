@@ -33,8 +33,10 @@ class RestrictWritesToAdmins
      * config. Live device trace start/stop was the first example - the target is locked to
      * the device's own mgmt IP. The Tools page (tools.*) is the same idea: ping/trace/sweep/
      * port-scan/bgp are read-only network diagnostics that don't mutate any monitored config.
+     * devices.live.watch only asks for the device's full port list on the live stream while
+     * it's open.
      */
-    private const OPERATOR_ACTION_ROUTES = ['devices.trace.start', 'devices.trace.stop', 'tools.*'];
+    private const OPERATOR_ACTION_ROUTES = ['devices.trace.start', 'devices.trace.stop', 'devices.live.watch', 'tools.*'];
 
     public function handle(Request $request, Closure $next): Response
     {
