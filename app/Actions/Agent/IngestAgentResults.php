@@ -5,6 +5,7 @@ namespace App\Actions\Agent;
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
+use App\Actions\Polling\RecordOpticalPower;
 use App\Enums\DeviceStatus;
 use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceMetricsUpdated;
@@ -14,6 +15,7 @@ use App\Models\Agent;
 use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Models\Probe;
+use App\Services\Polling\OpticalReading;
 use App\Services\Polling\RateCalculator;
 use App\Services\Probes\ProbeResult;
 use App\Support\EngineLog;
@@ -44,6 +46,7 @@ class IngestAgentResults
         private RateCalculator $rates,
         private CaptureDeviceFacts $facts,
         private PollProbes $probes,
+        private RecordOpticalPower $recordOptical,
     ) {}
 
     /** @param array<string,mixed> $payload */
@@ -54,6 +57,46 @@ class IngestAgentResults
         $this->ingestMetrics($agent, $payload['metrics'] ?? []);
         $this->ingestDiscovery($agent, $payload['discovery'] ?? []);
         $this->ingestProbes($agent, $payload['probes'] ?? []);
+        // Agents older than the optical support (#11) never send this key - nothing to do.
+        $this->ingestOptical($agent, $payload['optical'] ?? []);
+    }
+
+    /**
+     * Fold the agent's SFP optical power reads into the interface rows through the same matcher
+     * the central metrics tick uses (RecordOpticalPower - by port name, then ifIndex). Each entry
+     * is one device the agent read successfully, so a device reported with no ports has had its
+     * modules removed and gets cleared. Only this agent's devices are touched.
+     *
+     * @param  array<int,array<string,mixed>>  $optical
+     */
+    private function ingestOptical(Agent $agent, array $optical): void
+    {
+        if ($optical === []) {
+            return;
+        }
+        $wanted = collect($optical)->pluck('device_id')->all();
+        $owned = Device::where('agent_id', $agent->id)->whereIn('id', $wanted)->pluck('id')->flip();
+
+        foreach ($optical as $d) {
+            $deviceId = (int) ($d['device_id'] ?? 0);
+            if (! isset($owned[$deviceId])) {
+                continue; // not this agent's device - ignore
+            }
+            $readings = [];
+            foreach ((array) ($d['ports'] ?? []) as $p) {
+                if (! is_array($p)) {
+                    continue;
+                }
+                $name = trim((string) ($p['name'] ?? ''));
+                $readings[] = new OpticalReading(
+                    ifIndex: isset($p['if_index']) && (int) $p['if_index'] > 0 ? (int) $p['if_index'] : null,
+                    name: $name !== '' ? $name : null,
+                    rxDbm: OpticalReading::dbm($p['rx_dbm'] ?? null),
+                    txDbm: OpticalReading::dbm($p['tx_dbm'] ?? null),
+                );
+            }
+            ($this->recordOptical)($deviceId, $readings);
+        }
     }
 
     /**

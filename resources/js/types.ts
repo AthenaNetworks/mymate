@@ -192,6 +192,10 @@ export interface NetworkInterface {
     util_out: number | null;
     bps_in: number | null; // latest raw throughput (bits/sec) - the live signal link util derives from
     bps_out: number | null;
+    // SFP / fibre optical power in dBm. Null = no module, copper port, or not readable.
+    optical_rx_dbm: number | null;
+    optical_tx_dbm: number | null;
+    optical_at: string | null;
 }
 
 export interface Link {
@@ -365,7 +369,8 @@ export type AlertConditionType =
     | 'high_metric'
     | 'probe_down'
     | 'probe_slow'
-    | 'agent_down';
+    | 'agent_down'
+    | 'optical_power';
 
 // Service probes (GitHub #19): HTTP/TCP checks attached to a device.
 export type ProbeKind = 'http' | 'tcp';
@@ -528,7 +533,16 @@ export interface AlertPolicy {
     name: string;
     condition: AlertConditionType;
     condition_label: string;
-    params: { threshold?: number; duration_minutes?: number; suppress_dependent?: boolean; metric?: DeviceMetricKey };
+    params: {
+        threshold?: number;
+        duration_minutes?: number;
+        suppress_dependent?: boolean;
+        metric?: DeviceMetricKey;
+        // optical_power: Rx or Tx, fire below or above, the line in dBm.
+        optical?: 'rx' | 'tx';
+        bound?: 'below' | 'above';
+        dbm?: number;
+    };
     scope: AlertScope;
     enabled: boolean;
     transport_ids: number[];

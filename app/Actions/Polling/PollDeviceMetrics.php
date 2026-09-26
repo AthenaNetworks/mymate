@@ -6,6 +6,7 @@ use App\Enums\PollMethod;
 use App\Events\DeviceMetricsUpdated;
 use App\Models\Device;
 use App\Services\Polling\DeviceMetricsDriverFactory;
+use App\Services\Polling\OpticalPowerReader;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
@@ -23,6 +24,8 @@ class PollDeviceMetrics
     public function __construct(
         private DeviceMetricsDriverFactory $drivers,
         private ReadOspf $ospf,
+        private OpticalPowerReader $optical,
+        private RecordOpticalPower $recordOptical,
     ) {}
 
     /** @param  list<int>  $deviceIds */
@@ -70,6 +73,13 @@ class PollDeviceMetrics
                 $read = ($this->ospf)($device->mgmt_ip, $rosCred);
                 $ospf = $read['neighbors'];
                 $this->writeOspfCosts($device, $read['costs']);
+            }
+
+            // SFP / fibre optical power per port (GitHub #11). Its own best-effort read - null
+            // means optics aren't readable on this device, so leave any stored values alone.
+            $optical = $this->optical->read($device);
+            if ($optical !== null) {
+                ($this->recordOptical)($device->id, $optical);
             }
 
             if ($metrics->isEmpty() && $ospf === null) {

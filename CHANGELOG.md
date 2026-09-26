@@ -40,6 +40,14 @@ of commit subjects.
   sets one). Agent-polled devices honour it too, the agent binds its ICMP socket to that address, so
   agents need updating for it to take effect (an older agent just ignores it and pings from its default
   route). A source that isnt a local address on the server/agent makes the ping fail, so it shows down.
+- **Fibre optical Tx/Rx power, with an alert (GitHub #11).** SFP ports now show their optical receive and
+  transmit power in dBm under the port in the device inspector's interface list. Read on the metrics poll
+  from MikroTik, over the RouterOS API (`/interface/ethernet/monitor`) or over SNMP (MIKROTIK-MIB
+  optical table). Other vendors can be added through the SNMP metrics profile in config when their optical
+  table is keyed by ifIndex; none are wired in yet. New alert condition "Fibre optical power" fires per port
+  when Rx or Tx goes below (or above) a dBm threshold you set, default Rx below -25 dBm, with the usual
+  scoping and sustained-duration options. Pulling a module clears its reading. Agent-polled devices need
+  the agent updated to report optical power; older agents keep working, they just don't send it.
 
 ### Fixed
 - **A device found by an agent's discovery sweep is now polled by that agent.** Discovery candidates

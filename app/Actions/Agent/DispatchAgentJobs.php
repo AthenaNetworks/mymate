@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\Probe;
 use App\Models\Subnet;
 use App\Services\Polling\DeviceMetricProfiles;
+use App\Services\Polling\OpticalPowerReader;
 use App\Services\Snmp\SnmpCredential;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
@@ -32,7 +33,10 @@ class DispatchAgentJobs
     /** Redis pub/sub channel the hub listens on. Payload: {agent_id, poll, scan}. */
     public const CHANNEL = 'mymate:agent-dispatch';
 
-    public function __construct(private DeviceMetricProfiles $profiles) {}
+    public function __construct(
+        private DeviceMetricProfiles $profiles,
+        private OpticalPowerReader $optical,
+    ) {}
 
     /** @return int number of agents dispatched to */
     public function __invoke(): int
@@ -78,6 +82,15 @@ class DispatchAgentJobs
             Cache::put($discoverKey, now()->timestamp, now()->addDay());
         }
 
+        // Optical (SFP) power cadence (#11): light levels drift slowly and the RouterOS read is an
+        // extra API login, so only ask for it once per metrics interval, same idea as discovery.
+        $opticalInterval = max(5, (int) config('mymate.device_metrics.interval', 30));
+        $opticalKey = "agent:{$agentId}:last_optical";
+        $opticalDue = (now()->timestamp - (int) Cache::get($opticalKey, 0)) >= $opticalInterval;
+        if ($opticalDue) {
+            Cache::put($opticalKey, now()->timestamp, now()->addDay());
+        }
+
         $ping = [];
         $snmp = [];
         $routeros = [];
@@ -101,6 +114,8 @@ class DispatchAgentJobs
                         'if_index' => $i->if_index,
                     ])->all(),
                     'metrics' => $this->metricsTarget($d),
+                    // The vendor's optical table walk (null = none for this vendor / not due).
+                    'optical' => $opticalDue ? $this->optical->snmpSpec($d) : null,
                     'discover' => $discoverDue,
                 ];
             } elseif ($d->poll_method === PollMethod::RouterOs && $d->credential?->type === 'routeros') {
@@ -114,6 +129,8 @@ class DispatchAgentJobs
                         'interface_id' => $i->id,
                         'name' => $i->name,
                     ])->all(),
+                    // Read SFP power via /interface/ethernet/monitor this cycle.
+                    'optical' => $opticalDue,
                     'discover' => $discoverDue,
                 ];
             }

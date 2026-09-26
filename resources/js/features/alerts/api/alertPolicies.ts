@@ -23,6 +23,9 @@ export interface AlertPolicyInput {
         duration_minutes?: number;
         suppress_dependent?: boolean;
         metric?: 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
+        optical?: 'rx' | 'tx';
+        bound?: 'below' | 'above';
+        dbm?: number;
     };
     scope?: AlertScope;
     enabled?: boolean;

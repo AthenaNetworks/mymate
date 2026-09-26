@@ -19,6 +19,7 @@ enum AlertCondition: string
     case ProbeDown = 'probe_down';         // a service probe (HTTP/TCP) is failing
     case ProbeSlow = 'probe_slow';         // a service probe's response time is over a threshold
     case AgentDown = 'agent_down';         // a remote agent stopped heart-beating (its devices go dark)
+    case OpticalPower = 'optical_power';   // an SFP's optical Rx/Tx power is below/above a dBm threshold
 
     public function label(): string
     {
@@ -34,6 +35,7 @@ enum AlertCondition: string
             self::ProbeDown => 'Service probe down (HTTP / TCP)',
             self::ProbeSlow => 'Service probe slow (high response time)',
             self::AgentDown => 'Remote agent offline',
+            self::OpticalPower => 'Fibre optical power (SFP Rx / Tx)',
         };
     }
 }

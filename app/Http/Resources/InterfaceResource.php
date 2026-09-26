@@ -23,6 +23,10 @@ class InterfaceResource extends JsonResource
             'util_out' => $this->util_out,
             'bps_in' => $this->bps_in,
             'bps_out' => $this->bps_out,
+            // SFP / fibre optical power (dBm), null when there's no module or it can't be read.
+            'optical_rx_dbm' => $this->optical_rx_dbm,
+            'optical_tx_dbm' => $this->optical_tx_dbm,
+            'optical_at' => $this->optical_at,
         ];
     }
 }
