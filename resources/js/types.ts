@@ -53,6 +53,7 @@ export interface Device {
     id: number;
     name: string;
     mgmt_ip: string | null; // null = a static map object (no IP, never polled)
+    ping_source: string | null; // local address the up/down ping is sent FROM; null = global default
     poll_method: PollMethod;
     monitored: boolean; // false = polling paused (no throughput/metrics collected)
     status: DeviceStatus;
@@ -205,6 +206,10 @@ export interface NetworkInterface {
     util_out: number | null;
     bps_in: number | null; // latest raw throughput (bits/sec) - the live signal link util derives from
     bps_out: number | null;
+    // SFP / fibre optical power in dBm. Null = no module, copper port, or not readable.
+    optical_rx_dbm: number | null;
+    optical_tx_dbm: number | null;
+    optical_at: string | null;
 }
 
 export interface Link {
@@ -378,7 +383,8 @@ export type AlertConditionType =
     | 'high_metric'
     | 'probe_down'
     | 'probe_slow'
-    | 'agent_down';
+    | 'agent_down'
+    | 'optical_power';
 
 // Service probes (GitHub #19): HTTP/TCP checks attached to a device.
 export type ProbeKind = 'http' | 'tcp';
@@ -553,6 +559,10 @@ export interface AlertPolicyParams {
     metric?: DeviceMetricKey;
     target?: 'links' | 'interfaces'; // low_throughput only
     interfaces?: AlertInterfaceFilter;
+    // optical_power: Rx or Tx, fire below or above, the line in dBm.
+    optical?: 'rx' | 'tx';
+    bound?: 'below' | 'above';
+    dbm?: number;
 }
 
 export interface AlertPolicy {

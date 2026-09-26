@@ -230,7 +230,52 @@ class EvaluateAlerts
             // Agents aren't devices, so the device-scope bag doesn't apply - always fleet-wide,
             // one event per agent.
             AlertCondition::AgentDown => $this->downAgents(),
+            AlertCondition::OpticalPower => $this->opticalPower($policy->params ?? [], $scope),
         };
+    }
+
+    /**
+     * SFP ports whose optical power has crossed a dBm threshold (GitHub #11) - by default Rx
+     * below -25 dBm (a dirty/failing fibre), or "above" for an overloaded receiver. Only fresh
+     * readings on up devices count: a device that's down or stopped reporting keeps its last
+     * level, and device-down covers that. Keyed per port + direction so an Rx and a Tx policy
+     * on the same port don't collide, and `device:` first so maintenance windows apply.
+     *
+     * @param  array<string, mixed>  $params
+     * @param  list<int>|null  $scope
+     * @return array<string, string>
+     */
+    private function opticalPower(array $params, ?array $scope): array
+    {
+        $dir = ($params['optical'] ?? 'rx') === 'tx' ? 'tx' : 'rx';
+        $above = ($params['bound'] ?? 'below') === 'above';
+        $dbm = (float) ($params['dbm'] ?? -25);
+        $col = "optical_{$dir}_dbm";
+
+        $cadence = max(5, (int) config('mymate.device_metrics.interval', 30));
+        $freshAfter = now()->subSeconds(max(600, $cadence * 10));
+
+        $query = NetworkInterface::query()
+            ->whereNotNull($col)
+            ->where($col, $above ? '>' : '<', $dbm)
+            ->where('optical_at', '>=', $freshAfter)
+            ->whereIn('device_id', Device::where('status', '!=', DeviceStatus::Down)->select('id'))
+            ->with('device:id,name,mgmt_ip');
+        if ($scope !== null) {
+            $query->whereIn('device_id', $scope);
+        }
+
+        $out = [];
+        $label = $dir === 'tx' ? 'Tx' : 'Rx';
+        $cmp = $above ? 'above' : 'below';
+        foreach ($query->get(['id', 'device_id', 'name', $col]) as $if) {
+            $dev = self::label($if->device?->name ?? "device {$if->device_id}", $if->device?->mgmt_ip);
+            $val = number_format((float) $if->{$col}, 2);
+            $out["device:{$if->device_id}:iface:{$if->id}:optical:{$dir}"] =
+                "Optical {$label} power {$val} dBm on {$if->name} of {$dev} ({$cmp} {$dbm} dBm).";
+        }
+
+        return $out;
     }
 
     /**

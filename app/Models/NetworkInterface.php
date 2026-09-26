@@ -18,6 +18,7 @@ class NetworkInterface extends Model
     protected $fillable = [
         'device_id', 'if_index', 'name', 'description', 'speed_mbps', 'oper_status',
         'last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out',
+        'optical_rx_dbm', 'optical_tx_dbm', 'optical_at',
     ];
 
     protected $casts = [
@@ -30,6 +31,9 @@ class NetworkInterface extends Model
         'util_out' => 'float',
         'bps_in' => 'integer',
         'bps_out' => 'integer',
+        'optical_rx_dbm' => 'float',
+        'optical_tx_dbm' => 'float',
+        'optical_at' => 'datetime',
     ];
 
     public function device(): BelongsTo

@@ -63,6 +63,9 @@ type ProbeTarget struct {
 type PingTarget struct {
 	DeviceID int    `json:"device_id"`
 	IP       string `json:"ip"`
+	// Source is a local address to ping FROM (per-device ping source, #11). Empty = let the OS
+	// pick by route, same as before. Older servers never send it.
+	Source string `json:"source,omitempty"`
 }
 
 type SNMPTarget struct {
@@ -73,6 +76,9 @@ type SNMPTarget struct {
 	Interfaces []IfaceTarget `json:"interfaces"`
 	// Metrics OIDs to read for cpu/mem/temp; nil when the device has no metrics profile.
 	Metrics *MetricsTarget `json:"metrics,omitempty"`
+	// Optical is the vendor's SFP optical-power table to walk this cycle (#11); nil when the
+	// vendor has none or it isn't due. Older servers never send it.
+	Optical *OpticalTarget `json:"optical,omitempty"`
 	// Discover: also walk the ifTable (to find interfaces) and the standard facts OIDs
 	// (sysDescr/sysLocation/ENTITY-MIB/uptime/memory) this cycle. Set on the discovery cadence,
 	// so the agent-polled device is (re)discovered from the agent, not the central server (#33).
@@ -108,6 +114,17 @@ type MetricsTarget struct {
 	TempDivisor int      `json:"temp_divisor,omitempty"`
 }
 
+// OpticalTarget describes an SNMP optical table from the server's vendor profile: Rx/Tx power
+// columns keyed by the row index (normally the ifIndex), an optional port-name column, and the
+// divisor that scales the raw integer to dBm (MikroTik reports thousandths). Like MetricsTarget,
+// the agent just executes it - the vendor knowledge stays server-side.
+type OpticalTarget struct {
+	RxWalk   string `json:"rx_walk,omitempty"`
+	TxWalk   string `json:"tx_walk,omitempty"`
+	NameWalk string `json:"name_walk,omitempty"`
+	Divisor  int    `json:"divisor,omitempty"`
+}
+
 type RouterOSTarget struct {
 	DeviceID   int           `json:"device_id"`
 	IP         string        `json:"ip"`
@@ -115,6 +132,8 @@ type RouterOSTarget struct {
 	Password   string        `json:"password"`
 	APIPort    int           `json:"api_port"`
 	Interfaces []IfaceTarget `json:"interfaces"`
+	// Optical: read SFP Rx/Tx power via /interface/ethernet/monitor this cycle (#11).
+	Optical bool `json:"optical,omitempty"`
 	// Discover: also read /interface/print (interfaces) and the /system + /snmp facts this cycle,
 	// so a RouterOS-polled agent device is discovered from the agent, not centrally (#33).
 	Discover bool `json:"discover,omitempty"`
@@ -202,6 +221,24 @@ type ResultPayload struct {
 	Metrics    []MetricsResult   `json:"metrics,omitempty"`
 	Discovery  []DeviceDiscovery `json:"discovery,omitempty"`
 	Probes     []ProbeCheck      `json:"probes,omitempty"`
+	Optical    []DeviceOptical   `json:"optical,omitempty"`
+}
+
+// DeviceOptical is one device's SFP optical power read (#11). It's only sent when the read
+// worked, so an entry with no ports tells the server the modules are gone (it clears them).
+// Ports are identified raw - if_index and/or name - and the server matches them to interfaces.
+type DeviceOptical struct {
+	DeviceID int           `json:"device_id"`
+	Ports    []OpticalPort `json:"ports"`
+}
+
+// OpticalPort is one port's light level in dBm. Pointers so a module that only reports one
+// direction sends null for the other rather than 0 dBm (which is a real, very hot, level).
+type OpticalPort struct {
+	IfIndex int      `json:"if_index,omitempty"`
+	Name    string   `json:"name,omitempty"`
+	RxDbm   *float64 `json:"rx_dbm"`
+	TxDbm   *float64 `json:"tx_dbm"`
 }
 
 // ProbeCheck is the outcome of one service probe the agent ran. LatencyMs/CertExpires are pointers

@@ -101,6 +101,23 @@ function SpeedTag({ iface }: { iface: NetworkInterface }) {
     );
 }
 
+/**
+ * SFP / fibre optical power (GitHub #11) under a port that has a module. Only rendered when the
+ * poller read a level, so copper ports stay as they were. Alerting thresholds live on the
+ * optical-power alert policy, this just shows the numbers.
+ */
+function OpticalPower({ iface }: { iface: NetworkInterface }) {
+    if (iface.optical_rx_dbm === null && iface.optical_tx_dbm === null) return null;
+    const fmt = (v: number | null) => (v === null ? '-' : `${v.toFixed(2)} dBm`);
+    const read = iface.optical_at ? ` (read ${new Date(iface.optical_at).toLocaleTimeString()})` : '';
+    return (
+        <div className="flex gap-3 font-mono text-[10px] leading-tight text-sky-200/60" title={`SFP optical power${read}`}>
+            <span>Rx {fmt(iface.optical_rx_dbm)}</span>
+            <span>Tx {fmt(iface.optical_tx_dbm)}</span>
+        </div>
+    );
+}
+
 function Detail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
     return (
         <div className="min-w-0">
@@ -345,6 +362,8 @@ function InterfacesList({
                                         {i.description}
                                     </div>
                                 ) : null}
+                                <OpticalPower iface={i} />
+
                                 <div className="h-1 overflow-hidden rounded-full bg-white/10">
                                     <div
                                         className="h-full rounded-full transition-all duration-500 ease-fluid"

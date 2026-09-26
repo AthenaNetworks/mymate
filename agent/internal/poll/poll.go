@@ -29,9 +29,13 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 	flows := p.runSNMP(job.SNMP)
 	var metrics []proto.MetricsResult
 	var discovery []proto.DeviceDiscovery
+	var optical []proto.DeviceOptical
 	for _, t := range job.SNMP {
 		if m := p.pollSNMPMetrics(t); m != nil {
 			metrics = append(metrics, *m)
+		}
+		if o := p.pollSNMPOptical(t); o != nil {
+			optical = append(optical, *o)
 		}
 		// Discovery cadence: (re)walk interfaces + facts so an agent-polled device is
 		// discovered from the agent, not the central server (#33).
@@ -45,6 +49,9 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 		flows = append(flows, p.pollRouterOS(t)...)
 		if m := p.pollRouterOSMetrics(t); m != nil {
 			metrics = append(metrics, *m)
+		}
+		if o := p.pollRouterOSOptical(t); o != nil {
+			optical = append(optical, *o)
 		}
 		if t.Discover {
 			if d := p.discoverRouterOS(t); d != nil {
@@ -62,6 +69,7 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 		Metrics:    metrics,
 		Discovery:  discovery,
 		Probes:     probes,
+		Optical:    optical,
 	}
 }
 
@@ -82,7 +90,7 @@ func (p *Poller) runPings(ctx context.Context, targets []proto.PingTarget) []pro
 		go func(i int, t proto.PingTarget) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			up, rtt, loss, jitter := pingStats(t.IP, pingTimeout, pingProbes)
+			up, rtt, loss, jitter := pingStats(t.IP, t.Source, pingTimeout, pingProbes)
 			res := proto.PingResult{DeviceID: t.DeviceID, Up: up, LossPct: &loss}
 			if up {
 				res.RttMs = &rtt

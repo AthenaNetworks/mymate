@@ -10,6 +10,7 @@ type UpdateDeviceInput = {
     icon_color?: string | null;
     name?: string;
     mgmt_ip?: string | null; // null = static object (ping-only devices only)
+    ping_source?: string | null; // local address to ping FROM; null = the global default
     monitored?: boolean;
     parent_device_id?: number | null;
     poll_method?: PollMethod;

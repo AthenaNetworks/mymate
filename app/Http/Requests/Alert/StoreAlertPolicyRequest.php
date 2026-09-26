@@ -34,6 +34,11 @@ class StoreAlertPolicyRequest extends FormRequest
             'params.suppress_dependent' => ['nullable', 'boolean'],
             // Which interfaces interface_down / per-interface low_throughput watch.
             ...$this->interfaceTargetingRules(),
+            // optical_power: which power, which side of the line, and the line itself in dBm
+            // (negative, so it can't share params.threshold's min:0).
+            'params.optical' => ['nullable', Rule::in(['rx', 'tx'])],
+            'params.bound' => ['nullable', Rule::in(['below', 'above'])],
+            'params.dbm' => ['nullable', 'numeric', 'between:-60,30'],
             // Targeting - limit the policy to a device subset. null/all = fleet-wide.
             'scope' => ['nullable', 'array'],
             'scope.type' => ['nullable', Rule::in(['all', 'device_type', 'map', 'devices'])],

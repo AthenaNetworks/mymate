@@ -27,6 +27,8 @@ class StoreDeviceRequest extends FormRequest
                 Rule::requiredIf(fn () => $this->input('poll_method') !== PollMethod::None->value),
                 'nullable', 'string', 'max:45', 'ip', new ManageableIp,
             ],
+            // Ping FROM this local address (fping -S / the agent's bound socket). Null = global default.
+            'ping_source' => ['nullable', 'string', 'max:45', 'ip'],
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],

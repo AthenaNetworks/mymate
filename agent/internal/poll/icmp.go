@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,16 +25,26 @@ import (
 // ping socket is usually refused by ping_group_range, so we end up on the raw socket. A raw
 // socket sees every echo reply arriving at the box, not just ours, so replies are matched on
 // sender + id + seq below. Without that one live host would mark every concurrent ping up.
-func pingOnce(host string, timeout time.Duration) (float64, bool) {
+//
+// source, when set, is the local address to send FROM (per-device ping source, #11) - the socket
+// is bound to it instead of 0.0.0.0, the same as fping -S. A source that isn't a local IPv4
+// address fails the bind and the ping reports unreachable rather than quietly using another
+// path, so a misconfigured source shows up as down instead of a false "up".
+func pingOnce(host, source string, timeout time.Duration) (float64, bool) {
 	dst, err := net.ResolveIPAddr("ip4", host)
 	if err != nil {
 		return 0, false
 	}
 
-	conn, err := icmp.ListenPacket("udp4", "0.0.0.0")
+	bind, ok := bindAddr(source)
+	if !ok {
+		return 0, false
+	}
+
+	conn, err := icmp.ListenPacket("udp4", bind)
 	unprivileged := true
 	if err != nil {
-		conn, err = icmp.ListenPacket("ip4:icmp", "0.0.0.0")
+		conn, err = icmp.ListenPacket("ip4:icmp", bind)
 		unprivileged = false
 	}
 	if err != nil {
@@ -116,20 +127,34 @@ func isOurEchoReply(rm *icmp.Message, peer net.Addr, dst net.IP, id, seq int, ch
 
 // ping reports only reachability - used by discovery, where latency doesn't matter.
 func ping(host string, timeout time.Duration) bool {
-	_, ok := pingOnce(host, timeout)
+	_, ok := pingOnce(host, "", timeout)
 	return ok
+}
+
+// bindAddr is the local address to listen on: 0.0.0.0 when no source is set, else the source
+// itself. ok is false for a source that isn't an IPv4 address (the agent pings over ip4 only).
+func bindAddr(source string) (string, bool) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return "0.0.0.0", true
+	}
+	ip := net.ParseIP(source)
+	if ip == nil || ip.To4() == nil {
+		return "", false
+	}
+	return ip.To4().String(), true
 }
 
 // pingStats sends `count` echoes and summarises them the way the central fping sweep does: up if
 // any replied, plus the average rtt over the replies, loss %, and jitter (the mean absolute
 // difference between consecutive rtts). A fully-missed host is down with 100% loss and no rtt.
-func pingStats(host string, timeout time.Duration, count int) (up bool, rttMs, lossPct, jitterMs float64) {
+func pingStats(host, source string, timeout time.Duration, count int) (up bool, rttMs, lossPct, jitterMs float64) {
 	if count < 1 {
 		count = 1
 	}
 	rtts := make([]float64, 0, count)
 	for i := 0; i < count; i++ {
-		if rtt, ok := pingOnce(host, timeout); ok {
+		if rtt, ok := pingOnce(host, source, timeout); ok {
 			rtts = append(rtts, rtt)
 		}
 	}

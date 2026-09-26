@@ -18,7 +18,7 @@ import { pushToast } from '../../../lib/toast';
 import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
-const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down', 'probe_slow'];
+const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down', 'probe_slow', 'optical_power'];
 
 /** Short targeting label for the policy list row. */
 function scopeSummary(scope: AlertScope): string {
@@ -37,7 +37,7 @@ function scopeSummary(scope: AlertScope): string {
 // Conditions that get the generic "Sustained for" field. device_down has its own wording for
 // the same setting; the one-shot events (upgrade/backup failed, new discovery) have nothing to
 // sustain - they stay true until something else changes them.
-const SUSTAINABLE_CONDITIONS: AlertConditionType[] = ['high_util', 'low_throughput', 'interface_down', 'high_metric', 'probe_down', 'probe_slow', 'agent_down'];
+const SUSTAINABLE_CONDITIONS: AlertConditionType[] = ['high_util', 'low_throughput', 'interface_down', 'high_metric', 'optical_power', 'probe_down', 'probe_slow', 'agent_down'];
 
 const numberInput =
     'w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60';
@@ -73,6 +73,7 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'low_throughput', label: 'Low link throughput' },
     { value: 'interface_down', label: 'Interface / port down' },
     { value: 'high_metric', label: 'High device metric (CPU / memory / temperature)' },
+    { value: 'optical_power', label: 'Fibre optical power (SFP Rx / Tx)' },
     { value: 'upgrade_failed', label: 'Upgrade failed' },
     { value: 'backup_failed', label: 'Config backup failed' },
     { value: 'probe_down', label: 'Service probe down (HTTP / TCP)' },
@@ -312,6 +313,48 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
                     value={form.params?.duration_minutes ?? 0}
                     onChange={(duration_minutes) => set('params', { ...form.params, duration_minutes })}
                 />
+            )}
+            {form.condition === 'optical_power' && (
+                <>
+                    <div className="flex items-center justify-between gap-2 text-sm text-white/70">
+                        <span>Fire when</span>
+                        <div className="flex items-center gap-1.5">
+                            <select
+                                className="rounded-xl bg-white/[0.03] px-2 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                                value={form.params?.optical ?? 'rx'}
+                                onChange={(e) => set('params', { ...form.params, optical: e.target.value as 'rx' | 'tx' })}
+                            >
+                                <option value="rx">Rx power</option>
+                                <option value="tx">Tx power</option>
+                            </select>
+                            <select
+                                className="rounded-xl bg-white/[0.03] px-2 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                                value={form.params?.bound ?? 'below'}
+                                onChange={(e) => set('params', { ...form.params, bound: e.target.value as 'below' | 'above' })}
+                            >
+                                <option value="below">is below</option>
+                                <option value="above">is above</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label className="flex items-center justify-between gap-3 text-sm text-white/70">
+                        <span>Threshold (dBm)</span>
+                        <input
+                            type="number"
+                            min={-60}
+                            max={30}
+                            step="0.1"
+                            value={form.params?.dbm ?? -25}
+                            onChange={(e) => set('params', { ...form.params, dbm: Number(e.target.value) })}
+                            className="w-24 rounded-xl bg-white/[0.03] px-3 py-2 text-right text-sm tabular-nums text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                        />
+                    </label>
+                    <p className="px-1 text-[11px] text-white/35">
+                        Fires per SFP port. Rx below around -25 dBm usually means a dirty or failing fibre, Rx above
+                        about -3 dBm can overload the receiver. Read from MikroTik over the RouterOS API or SNMP on the
+                        metrics poll; ports with no module never fire.
+                    </p>
+                </>
             )}
             {form.condition === 'agent_down' && (
                 <p className="px-1 text-[11px] text-white/35">

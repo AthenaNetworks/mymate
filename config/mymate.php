@@ -233,6 +233,9 @@ return [
         //   mem_*_walk  used/free columns for the 'cisco' strategy
         //   temp_oids   GET these scalars, take the max -> temp (÷ temp_divisor)
         //   temp_walk   walk this column, take the max -> temp (÷ temp_divisor)
+        //   optical_rx_walk / optical_tx_walk   SFP optical power columns keyed by ifIndex
+        //               (divided by optical_divisor -> dBm); optional optical_name_walk gives each row's
+        //               port name, which is matched first (safer if the index isn't the ifIndex)
         'profiles' => [
             'mikrotik' => [
                 'cpu_walk' => '.1.3.6.1.2.1.25.3.3.1.2',   // hrProcessorLoad
@@ -247,6 +250,12 @@ return [
                 // SNMP aren't standardised on RouterOS - the RouterOS API path fills those in.
                 'clients_walk' => '.1.3.6.1.4.1.14988.1.1.1.2.1.3', // mtxrWlRtabStrength (per client)
                 'signal_oids' => ['.1.3.6.1.4.1.14988.1.1.1.1.1.4'], // mtxrWlStatStrength (station mode)
+                // SFP optical power (GitHub #11) from mtxrOpticalTable, one row per port with a
+                // module, indexed by ifIndex. Power is in thousandths of a dBm (-5123 -> -5.123).
+                'optical_rx_walk' => '.1.3.6.1.4.1.14988.1.1.19.1.1.10', // mtxrOpticalRxPower
+                'optical_tx_walk' => '.1.3.6.1.4.1.14988.1.1.19.1.1.9',  // mtxrOpticalTxPower
+                'optical_name_walk' => '.1.3.6.1.4.1.14988.1.1.19.1.1.2', // mtxrOpticalName
+                'optical_divisor' => 1000,
             ],
             // Ubiquiti airMAX (UBNT-AirMAX-MIB, enterprise 41112.1.4). RF is read from both the
             // per-station table (an AP -> averaged across its clients) and the radio's own

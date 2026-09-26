@@ -67,6 +67,22 @@ of commit subjects.
   no state, so there's nothing to mount. Step by step setup is in `agent/ROUTEROS.md`. The RouterOS
   steps follow MikroTik's container docs and haven't been tried on real router hardware yet, so
   feedback is welcome. The same image runs on any Docker or podman host.
+- **Ping source address per device (GitHub #11).** v1.4.0 only had the global `MYMATE_PING_SOURCE`, which
+  applied to every device - the "per-device" wording there was wrong. Now you can set a ping source
+  address on any device in its edit dialog, so eg a customer-facing router is pinged from its customer
+  interface to prove that path reaches out. The global env var is still the default for devices that
+  dont set one. The central sweep runs one fping per distinct source (still a single fping when nobody
+  sets one). Agent-polled devices honour it too, the agent binds its ICMP socket to that address, so
+  agents need updating for it to take effect (an older agent just ignores it and pings from its default
+  route). A source that isnt a local address on the server/agent makes the ping fail, so it shows down.
+- **Fibre optical Tx/Rx power, with an alert (GitHub #11).** SFP ports now show their optical receive and
+  transmit power in dBm under the port in the device inspector's interface list. Read on the metrics poll
+  from MikroTik, over the RouterOS API (`/interface/ethernet/monitor`) or over SNMP (MIKROTIK-MIB
+  optical table). Other vendors can be added through the SNMP metrics profile in config when their optical
+  table is keyed by ifIndex; none are wired in yet. New alert condition "Fibre optical power" fires per port
+  when Rx or Tx goes below (or above) a dBm threshold you set, default Rx below -25 dBm, with the usual
+  scoping and sustained-duration options. Pulling a module clears its reading. Agent-polled devices need
+  the agent updated to report optical power; older agents keep working, they just don't send it.
 
 ### Changed
 - **"Sustained for" is on every alert condition it applies to (GitHub #22).** The delay was only in the
