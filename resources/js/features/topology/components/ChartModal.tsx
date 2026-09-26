@@ -15,6 +15,9 @@ const WINDOWS = [
     ['24h', 86400],
     ['7d', 604800],
     ['30d', 2592000],
+    ['90d', 7776000],
+    ['180d', 15552000],
+    ['1y', 31536000],
 ] as const;
 
 // Distinct series colours (Total first, then per-interface).

@@ -217,8 +217,8 @@ export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: C
                         </g>
                     )}
 
-                    <text x={PAD.l} y={H - 6} textAnchor="start" style={{ fill: axis(0.45) }} fontSize={10}>{times.length ? fmtTime(tMin) : ''}</text>
-                    <text x={W - padR} y={H - 6} textAnchor="end" style={{ fill: axis(0.45) }} fontSize={10}>{times.length ? fmtTime(tMax) : ''}</text>
+                    <text x={PAD.l} y={H - 6} textAnchor="start" style={{ fill: axis(0.45) }} fontSize={10}>{times.length ? (tMax - tMin > 86_400_000 ? fmtDate : fmtTime)(tMin) : ''}</text>
+                    <text x={W - padR} y={H - 6} textAnchor="end" style={{ fill: axis(0.45) }} fontSize={10}>{times.length ? (tMax - tMin > 86_400_000 ? fmtDate : fmtTime)(tMax) : ''}</text>
                 </svg>
 
                 {noData && (
