@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Actions\Alerts\EvaluateAlerts;
 use App\Actions\History\ManageHistoryPartitions;
+use App\Actions\History\RollupHistory;
 use App\Actions\Outages\RecordOutage;
 use App\Enums\AlertCondition;
 use App\Enums\DeviceStatus;
@@ -191,6 +192,9 @@ class DemoCommand extends Command
         foreach (array_chunk($ping, 1000) as $chunk) {
             DB::table('ping_samples')->insert($chunk);
         }
+
+        // The window was rewritten under any rollups already made, recompute them from raw.
+        RollupHistory::rewind(['interface', 'device_metric', 'ping']);
 
         $this->info('Backfilled 24h of demo history ('.count($iface).' throughput, '.count($metric).' metric, '.count($ping).' ping samples).');
     }
