@@ -64,13 +64,29 @@ Demo pieces:
 ## Deploying changes to the demo
 
 The demo shares the production build, but **has its own database** - it is easy to
-migrate prod and forget the demo. After deploying backend changes:
+migrate prod and forget the demo (that's how it ended up 500ing in GitHub #48). After
+deploying backend changes run:
 
 ```bash
-APP_ENV=demo php artisan migrate --force        # <- the step that gets forgotten
-APP_ENV=demo php artisan mymate:demo --seed     # refresh viewer/topology/backfill (idempotent)
-sudo supervisorctl restart mymate-demo-reverb mymate-demo-sim
+deploy/demo/deploy.sh             # migrate mymate_demo, re-seed, restart the demo daemons
+deploy/demo/deploy.sh --no-seed   # same, but leave the 24h backfill alone
 ```
+
+It does, in order, `APP_ENV=demo php artisan migrate --force`, `APP_ENV=demo php artisan
+mymate:demo --seed` and `sudo supervisorctl restart mymate-demo-reverb mymate-demo-sim`.
+Everything in it is idempotent, so running it when nothing changed is harmless.
+
+Before it touches anything it checks that `.env.demo` exists, that the config isn't cached
+(a cached config ignores `APP_ENV`), and that `APP_ENV=demo` really resolves to a different
+database than production. If any of that fails it refuses rather than migrate prod by
+accident.
+
+As a safety net the `mymate-demo-sim` supervisor program runs `deploy.sh --migrate-only`
+before it starts the simulator, so even a bare `supervisorctl restart` (or a reboot) brings
+the demo schema up to date. If that migrate fails the sim doesn't start, and supervisor keeps
+retrying with backoff (see the restart policy comment in `deploy/supervisor/mymate-demo.conf`)
+until it's fixed. **Re-copy the conf to `/etc/supervisor/conf.d/` and `supervisorctl reread
+&& supervisorctl update` after pulling this change**, supervisor doesn't read it from the repo.
 
 The daemons run whatever code was loaded when they started - like Horizon, they must be
 restarted to pick up new code or `.env.demo` changes.
@@ -79,8 +95,8 @@ restarted to pick up new code or `.env.demo` changes.
 
 | Symptom | Likely cause / fix |
 |---|---|
-| Map shows "Nothing on this map yet" but the header counts devices | `/api/maps/{id}` is 500ing - almost always **pending migrations on `mymate_demo`** (the endpoint touches newer tables like `map_notes`). Run the migrate step above; check `storage/logs/laravel-*.log` for `demo.ERROR`. |
+| Map shows "Nothing on this map yet" but the header counts devices | `/api/maps/{id}` is 500ing - almost always **pending migrations on `mymate_demo`** (the endpoint touches newer tables like `map_notes`). Run `deploy/demo/deploy.sh`; check `storage/logs/laravel-*.log` for `demo.ERROR`. |
 | Status pill shows **offline** | The browser WebSocket is being refused. Check `REVERB_ALLOWED_ORIGINS` in `.env.demo` includes the sales domain (`mymate.network,www.mymate.network`) - Reverb accepts the handshake then rejects a bad origin with pusher error **4009**. Also check `mymate-demo-reverb` is running. |
-| Charts frozen / stop at some past date | The sim daemon outlived its partition window (fixed - inserts now self-heal) or is down. `sudo supervisorctl status`, then restart `mymate-demo-sim`; check `storage/logs/demo-sim.log`. |
+| Charts frozen / stop at some past date | The sim daemon outlived its partition window (fixed - inserts now self-heal) or is down. `sudo supervisorctl status`, then restart `mymate-demo-sim`; check `storage/logs/demo-sim.log`. A sim stuck in `BACKOFF` is failing to start (often the pre-start migrate - the log says why) and will keep retrying on its own. |
 | Inspector says "No history yet" | Re-run `APP_ENV=demo php artisan mymate:demo --seed` to backfill 24h of history. |
 | Demo auto-login broken | `MYMATE_DEMO=true` missing, or the viewer account is gone - re-run `--seed`. |
