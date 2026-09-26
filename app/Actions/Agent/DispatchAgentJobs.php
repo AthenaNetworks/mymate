@@ -82,7 +82,13 @@ class DispatchAgentJobs
         $snmp = [];
         $routeros = [];
         foreach ($devices as $d) {
-            $ping[] = ['device_id' => $d->id, 'ip' => $d->mgmt_ip];
+            // Per-device ping source (#11): the agent binds its ICMP socket to it. Only sent when
+            // set - the central MYMATE_PING_SOURCE is an address on this server, meaningless on
+            // the agent's box, so it's never used as the agent's default.
+            $ping[] = array_filter(
+                ['device_id' => $d->id, 'ip' => $d->mgmt_ip, 'source' => $d->ping_source],
+                static fn ($v) => $v !== null && $v !== '',
+            );
 
             if ($d->poll_method === PollMethod::Snmp && $d->credential?->type === 'snmp') {
                 $snmp[] = [

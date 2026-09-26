@@ -32,6 +32,14 @@ of commit subjects.
   side, clearly labelled, in the node menu and the inspector. Delete is admin-only and always confirms
   first - the dialog names the device and counts what goes with it (links, map placements, interfaces and
   history), and warns you when it has child devices, which survive with no parent.
+- **Ping source address per device (GitHub #11).** v1.4.0 only had the global `MYMATE_PING_SOURCE`, which
+  applied to every device - the "per-device" wording there was wrong. Now you can set a ping source
+  address on any device in its edit dialog, so eg a customer-facing router is pinged from its customer
+  interface to prove that path reaches out. The global env var is still the default for devices that
+  dont set one. The central sweep runs one fping per distinct source (still a single fping when nobody
+  sets one). Agent-polled devices honour it too, the agent binds its ICMP socket to that address, so
+  agents need updating for it to take effect (an older agent just ignores it and pings from its default
+  route). A source that isnt a local address on the server/agent makes the ping fail, so it shows down.
 
 ### Fixed
 - **A device found by an agent's discovery sweep is now polled by that agent.** Discovery candidates

@@ -24,6 +24,8 @@ class UpdateDeviceRequest extends FormRequest
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
             'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', new ManageableIp],
+            // Ping FROM this local address (fping -S / the agent's bound socket). Null = global default.
+            'ping_source' => ['sometimes', 'nullable', 'string', 'max:45', 'ip'],
             'poll_method' => ['sometimes', 'required', Rule::enum(PollMethod::class)],
             // Enable/disable monitoring - false pauses throughput + metrics polling.
             'monitored' => ['sometimes', 'boolean'],

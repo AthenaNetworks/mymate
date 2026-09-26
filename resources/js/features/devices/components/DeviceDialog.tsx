@@ -65,6 +65,8 @@ export function DeviceDialog({
     const [agentId, setAgentId] = useState<string>(device?.agent_id != null ? String(device.agent_id) : '');
     const [credentialId, setCredentialId] = useState<string>(device?.credential_id != null ? String(device.credential_id) : '');
     const [monitored, setMonitored] = useState<boolean>(device?.monitored ?? true);
+    // Ping FROM this local address (#11). Empty = the global default source.
+    const [pingSource, setPingSource] = useState<string>(device?.ping_source ?? '');
     const [icon, setIcon] = useState<string | null>(device?.icon ?? null);
     const [iconColor, setIconColor] = useState<string | null>(device?.icon_color ?? null);
     // Latency quality thresholds (internet/upstream card). Empty string = use the card default.
@@ -119,6 +121,7 @@ export function DeviceDialog({
                 {
                     id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                     credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor,
+                    ping_source: pingSource.trim() === '' ? null : pingSource.trim(),
                     latency_good_ms: latGood, latency_bad_ms: latBad,
                     latitude: lat.trim() === '' ? null : Number(lat),
                     longitude: lng.trim() === '' ? null : Number(lng),
@@ -225,6 +228,22 @@ export function DeviceDialog({
                             <span className="text-sm text-white/75">Monitoring {monitored ? 'on' : 'paused'}</span>
                             <Toggle checked={monitored} onChange={setMonitored} label="Monitoring" />
                         </div>
+                    )}
+
+                    {mode === 'edit' && (
+                        <label className="block space-y-1">
+                            <span className={fieldLabel}>Ping source address</span>
+                            <input
+                                value={pingSource}
+                                onChange={(e) => setPingSource(e.target.value)}
+                                placeholder="Default"
+                                className={field}
+                            />
+                            <span className="block px-1 text-[11px] leading-snug text-white/35">
+                                Send the up/down ping from this local address, eg a customer-facing interface to check that
+                                path reaches the internet. Must be an address on the {agentId === '' ? 'server' : 'agent'}. Blank uses the default.
+                            </span>
+                        </label>
                     )}
 
                     {/* Geographic position for the geo overlay. */}

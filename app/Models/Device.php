@@ -31,7 +31,7 @@ class Device extends Model
     }
 
     protected $fillable = [
-        'name', 'mgmt_ip', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',
+        'name', 'mgmt_ip', 'ping_source', 'poll_method', 'credential_id', 'ssh_credential_id', 'routeros_credential_id', 'agent_id',
         'status', 'monitored', 'last_change', 'fail_streak', 'map_x', 'map_y', 'latitude', 'longitude', 'geo_source',
         'site_id', 'site_source',
         'device_type', 'icon', 'icon_color', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',

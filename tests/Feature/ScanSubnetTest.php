@@ -39,7 +39,7 @@ class ScanSubnetTest extends TestCase
                 return array_values(array_intersect($ips, $this->reachable));
             }
 
-            public function measure(array $ips): array
+            public function measure(array $ips, ?string $source = null): array
             {
                 return []; // ScanSubnet only uses reachable()
             }

@@ -63,6 +63,9 @@ type ProbeTarget struct {
 type PingTarget struct {
 	DeviceID int    `json:"device_id"`
 	IP       string `json:"ip"`
+	// Source is a local address to ping FROM (per-device ping source, #11). Empty = let the OS
+	// pick by route, same as before. Older servers never send it.
+	Source string `json:"source,omitempty"`
 }
 
 type SNMPTarget struct {

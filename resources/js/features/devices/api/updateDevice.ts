@@ -10,6 +10,7 @@ type UpdateDeviceInput = {
     icon_color?: string | null;
     name?: string;
     mgmt_ip?: string;
+    ping_source?: string | null;
     monitored?: boolean;
     parent_device_id?: number | null;
     poll_method?: PollMethod;

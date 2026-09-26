@@ -23,6 +23,7 @@ class StoreDeviceRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
             'mgmt_ip' => ['required', 'string', 'max:45', 'ip', new ManageableIp],
+            'ping_source' => ['nullable', 'string', 'max:45', 'ip'],
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],

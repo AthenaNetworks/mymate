@@ -44,8 +44,7 @@ class PingFleet
             return 0;
         }
 
-        /** @var array<string, PingSample> $samples */
-        $samples = $this->pinger->measure($devices->pluck('mgmt_ip')->all());
+        $samples = $this->measureBySource($devices);
 
         // Flap dampening: a device only flips to `down` after `fail_threshold` consecutive
         // missed sweeps, so a single dropped reply (transient loss, a busy sweep) doesn't alarm.
@@ -97,6 +96,26 @@ class PingFleet
         ]);
 
         return $changed;
+    }
+
+    /**
+     * Ping the swept devices, one fping per distinct source address (GitHub #11). fping's -S is
+     * per process, so devices that ping FROM different local addresses can't share a sweep. The
+     * common case (nobody set a per-device source) is still exactly one fping using the global
+     * default. Central mgmt IPs are unique, so merging the groups' samples by IP is safe.
+     *
+     * @param  Collection<int, Device>  $devices
+     * @return array<string, PingSample>
+     */
+    private function measureBySource(Collection $devices): array
+    {
+        $samples = [];
+        foreach ($devices->groupBy(fn (Device $d): string => (string) $d->ping_source) as $source => $group) {
+            $ips = $group->pluck('mgmt_ip')->all();
+            $samples += $this->pinger->measure($ips, $source === '' ? null : (string) $source);
+        }
+
+        return $samples;
     }
 
     /**

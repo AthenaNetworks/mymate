@@ -82,7 +82,7 @@ func (p *Poller) runPings(ctx context.Context, targets []proto.PingTarget) []pro
 		go func(i int, t proto.PingTarget) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			up, rtt, loss, jitter := pingStats(t.IP, pingTimeout, pingProbes)
+			up, rtt, loss, jitter := pingStats(t.IP, t.Source, pingTimeout, pingProbes)
 			res := proto.PingResult{DeviceID: t.DeviceID, Up: up, LossPct: &loss}
 			if up {
 				res.RttMs = &rtt

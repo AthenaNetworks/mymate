@@ -39,6 +39,7 @@ export interface Device {
     id: number;
     name: string;
     mgmt_ip: string;
+    ping_source: string | null; // local address the up/down ping is sent FROM; null = global default
     poll_method: PollMethod;
     monitored: boolean; // false = polling paused (no throughput/metrics collected)
     status: DeviceStatus;

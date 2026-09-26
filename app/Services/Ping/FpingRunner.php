@@ -36,13 +36,13 @@ class FpingRunner implements Pinger
         return self::parseReachable($this->run($ips), $ips);
     }
 
-    public function measure(array $ips): array
+    public function measure(array $ips, ?string $source = null): array
     {
         if ($ips === []) {
             return [];
         }
 
-        return self::parseSamples($this->run($ips), $ips);
+        return self::parseSamples($this->run($ips, $source), $ips);
     }
 
     /**
@@ -72,10 +72,15 @@ class FpingRunner implements Pinger
      * fping. --json emits JSON Lines (NDJSON); it requires a count/loop mode, so -c N sends N
      * pings per host. -p spaces multi-probe sweeps out so they stay snappy.
      *
+     * `$source` overrides the configured default for one sweep (a per-device ping source). Null
+     * or empty keeps the default.
+     *
      * @return list<string>
      */
-    private function commandArgs(): array
+    private function commandArgs(?string $source = null): array
     {
+        $source = ($source !== null && $source !== '') ? $source : $this->source;
+
         $args = [self::binary(), '--json', '-c', (string) max(1, $this->count)];
         if ($this->count > 1) {
             $args[] = '-p';
@@ -89,18 +94,18 @@ class FpingRunner implements Pinger
         }
         // -S sets the source address to ping FROM (e.g. a WAN/VRF interface, to test that a
         // customer path can reach the target). Only added when configured.
-        if ($this->source !== null && $this->source !== '') {
+        if ($source !== null && $source !== '') {
             $args[] = '-S';
-            $args[] = $this->source;
+            $args[] = $source;
         }
 
         return array_merge($args, ['-f', '-']);
     }
 
     /** Run one fping sweep over the given IPs and return its raw JSON-Lines stdout. */
-    private function run(array $ips): string
+    private function run(array $ips, ?string $source = null): string
     {
-        $process = new Process($this->commandArgs(), input: implode("\n", $ips)."\n");
+        $process = new Process($this->commandArgs($source), input: implode("\n", $ips)."\n");
         $process->setTimeout($this->processTimeout);
         $process->run();
 
