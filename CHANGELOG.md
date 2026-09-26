@@ -14,6 +14,10 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **OSPF costs and link toggles on the geo map (GitHub #22).** A map in geographic mode now shows the same
+  per-end OSPF cost badges as the logical map, using your S/M/L size and colour choice (the OSPF button
+  appears on the geo map too). New Links, Bandwidth and OSPF cost toggles in the top right let you strip
+  the view back for planning, eg just the costs with no load labels. They're remembered per browser.
 - **"Use SNMP location" for a hand-placed device (GitHub #22).** Once a device is dragged on the geo map
   or has coordinates typed in, it's a manual pin and its SNMP / RouterOS location stops moving it. Admins
   now get a "Use SNMP location" action in the device inspector and in both device editors that hands it
