@@ -52,7 +52,8 @@ export const maxNum = (vals: Array<number | null | undefined>): number | null =>
 //  - util (colour): the busier of the two directions' utilisation = directional raw bps /
 //    the link's effective speed for that direction; null when no direction has a known
 //    speed, so the edge stays NEUTRAL (never ramped/green) per spec.
-//  - mbps (label): the busiest directional throughput (shown always, even with no speed).
+//  - mbps: the busiest directional throughput (shown always, even with no speed).
+//  - abMbps / baMbps: each direction on its own, so the label can show tx and rx (GitHub #22).
 export function computeData(meta: EdgeMeta, util: UtilMap, statusById: Record<number, DeviceStatus>): UtilEdgeData & EdgeMeta {
     const a = meta.aIf !== null ? util[meta.aIf] : undefined;
     const b = meta.bIf !== null ? util[meta.bIf] : undefined;
@@ -71,5 +72,8 @@ export function computeData(meta: EdgeMeta, util: UtilMap, statusById: Record<nu
 
     const down = statusById[meta.aDev] === 'down' || statusById[meta.bDev] === 'down';
 
-    return { ...meta, util: max, mbps, down };
+    const abMbps = abBps != null ? abBps / 1_000_000 : null;
+    const baMbps = baBps != null ? baBps / 1_000_000 : null;
+
+    return { ...meta, util: max, mbps, abMbps, baMbps, down };
 }

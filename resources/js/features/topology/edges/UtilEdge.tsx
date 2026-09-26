@@ -6,7 +6,7 @@ import {
     useInternalNode,
     type EdgeProps,
 } from '@xyflow/react';
-import { X } from '@phosphor-icons/react';
+import { ArrowRight, X } from '@phosphor-icons/react';
 import { linkColor, linkWidth } from '../lib/linkColor';
 import { getFloatingParams } from '../lib/floatingEdge';
 import { mediaDash } from '../lib/mediaType';
@@ -17,6 +17,8 @@ import type { LinkMediaType } from '../../../types';
 export type UtilEdgeData = {
     util: number | null; // higher of in/out across both bound interfaces
     mbps: number | null; // derived load on the busier end (util% x speed)
+    abMbps?: number | null; // source -> target throughput (Mbps)
+    baMbps?: number | null; // target -> source
     down: boolean; // either endpoint device is down
     effAb?: number | null; // link effective speed (Mbps) - shown as the port/link capacity
     aCost?: number | null; // OSPF cost out of each end (directional); shown near that end
@@ -34,16 +36,31 @@ function speedLabel(mbps: number | null | undefined): string | null {
     return mbps >= 1000 ? `${+(mbps / 1000).toFixed(mbps % 1000 === 0 ? 0 : 1)}G` : `${mbps}M`;
 }
 
-function label(d: UtilEdgeData): string {
-    if (d.down) return 'down';
+/** Capacity + utilisation tail of the label ("/1G 42%"), or the whole thing when there's no rate. */
+function capLabel(d: UtilEdgeData, withRate: boolean): string {
     const rate = formatMbps(d.mbps, { compact: true }); // "6.1G", "730M", "12k"
     // Percentage only when a speed is known (util computable); otherwise show the rate
     // alone - never a % or load colour for a speedless link (spec).
     const pct = d.util !== null ? `${d.util.toFixed(d.util < 10 ? 1 : 0)}%` : null;
-    // Show the link capacity next to the load ("730M/1G 42%") so the port speed is visible.
     const cap = speedLabel(d.effAb);
+    if (!withRate) return [cap ? `/${cap}` : null, pct].filter(Boolean).join(' ');
+    // Show the link capacity next to the load ("730M/1G 42%") so the port speed is visible.
     const load = cap && rate ? `${rate}/${cap}` : rate || (cap ? `-/${cap}` : null);
     return [load, pct].filter(Boolean).join(' ') || '-';
+}
+
+/**
+ * One direction's rate with a little arrow pointing the way that traffic travels along the wire.
+ * The arrow is rotated to the link's on-screen angle, so "this way 730M, that way 120M" reads right
+ * whichever way round the two cards are laid out (GitHub #22: show tx and rx, not just the busier).
+ */
+function DirRate({ mbps, angle }: { mbps: number | null | undefined; angle: number }) {
+    return (
+        <span className="flex items-center gap-0.5">
+            <ArrowRight weight="bold" className="h-2.5 w-2.5 text-white/50" style={{ transform: `rotate(${angle}deg)` }} />
+            {formatMbps(mbps ?? null, { compact: true }) || '-'}
+        </span>
+    );
 }
 
 export function UtilEdge({
@@ -100,6 +117,8 @@ export function UtilEdge({
             : getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sPos, targetPosition: tPos });
 
     const color = linkColor(d.util, d.down);
+    // On-screen direction of source -> target, for the tx/rx arrows in the label.
+    const angle = (Math.atan2(ty - sy, tx - sx) * 180) / Math.PI;
     const width = (d.down ? 3 : linkWidth(d.util)) + (selected || d.emphasized ? 1.5 : 0);
     // Flow speed: the shimmer travels faster as utilisation climbs (idle ~ 1.4s, saturated ~ 0.4s).
     const flowDur = Math.max(0.4, 1.4 - (d.util ?? 0) / 100);
@@ -157,7 +176,17 @@ export function UtilEdge({
                     }}
                     className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
                 >
-                    <span>{label(d)}</span>
+                    {d.down ? (
+                        <span>down</span>
+                    ) : d.abMbps != null || d.baMbps != null ? (
+                        <>
+                            <DirRate mbps={d.abMbps} angle={angle} />
+                            <DirRate mbps={d.baMbps} angle={angle + 180} />
+                            {capLabel(d, false) ? <span className="text-white/55">{capLabel(d, false)}</span> : null}
+                        </>
+                    ) : (
+                        <span>{capLabel(d, true)}</span>
+                    )}
                     {/* Hover the label -> a ✕ to remove the link (confirm dialog in MapCanvas). */}
                     {d.onRemove && (
                         <button

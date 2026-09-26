@@ -127,6 +127,10 @@ of commit subjects.
   the agent updated to report optical power; older agents keep working, they just don't send it.
 
 ### Changed
+- **Map links show traffic both ways (GitHub #22).** The label on a link used to show only the busier
+  direction. It now shows each direction's rate with a small arrow pointing the way that traffic is
+  going along the wire (so you can read tx and rx at a glance whichever way the cards are laid out),
+  followed by the link speed and utilisation. Same on the geo map and the wallboard.
 - **"Sustained for" is on every alert condition it applies to (GitHub #22).** The delay was only in the
   form for device down, high utilisation and high metric, though the engine already honoured it for
   everything. It's now there for interface down, low throughput, service probes and remote agents too.
