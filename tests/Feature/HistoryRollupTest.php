@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\History\GetDeviceSamples;
 use App\Actions\History\GetInterfaceSamples;
+use App\Actions\History\HistoryFamilies;
 use App\Actions\History\HistoryGrid;
 use App\Actions\History\HistoryTiers;
 use App\Actions\History\ManageHistoryPartitions;
@@ -331,6 +332,7 @@ class HistoryRollupTest extends TestCase
     {
         $this->artisan('mymate:history:rollup --backfill')->assertSuccessful();
         // every family has a 5m and 1h watermark once it has run, data or not
-        $this->assertSame(10, DB::table('history_rollup_state')->count());
+        $expected = count(HistoryFamilies::FAMILIES) * count(HistoryTiers::ROLLUPS);
+        $this->assertSame($expected, DB::table('history_rollup_state')->count());
     }
 }

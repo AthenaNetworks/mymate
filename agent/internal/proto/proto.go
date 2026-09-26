@@ -79,6 +79,10 @@ type SNMPTarget struct {
 	// Optical is the vendor's SFP optical-power table to walk this cycle (#11); nil when the
 	// vendor has none or it isn't due. Older servers never send it.
 	Optical *OpticalTarget `json:"optical,omitempty"`
+	// PortStats: read the per-port error / discard / packet counters this cycle, and which OIDs
+	// make up each. Sent on the server's port_stats_interval; nil the rest of the time (and
+	// from older servers).
+	PortStats *PortStatsTarget `json:"port_stats,omitempty"`
 	// Discover: also walk the ifTable (to find interfaces) and the standard facts OIDs
 	// (sysDescr/sysLocation/ENTITY-MIB/uptime/memory) this cycle. Set on the discovery cadence,
 	// so the agent-polled device is (re)discovered from the agent, not the central server (#33).
@@ -88,8 +92,8 @@ type SNMPTarget struct {
 // SNMPAuth carries the version + v3 USM parameters. Empty/"2c" version means a plain community
 // GET (Community on the enclosing target). Mirrors the server's SnmpCredential value object.
 type SNMPAuth struct {
-	Version        string `json:"version,omitempty"`  // "1" | "2c" | "3"
-	SecName        string `json:"sec_name,omitempty"` // v3 USM user
+	Version        string `json:"version,omitempty"`   // "1" | "2c" | "3"
+	SecName        string `json:"sec_name,omitempty"`  // v3 USM user
 	SecLevel       string `json:"sec_level,omitempty"` // noAuthNoPriv | authNoPriv | authPriv
 	AuthProtocol   string `json:"auth_protocol,omitempty"`
 	AuthPassphrase string `json:"auth_passphrase,omitempty"`
@@ -97,13 +101,21 @@ type SNMPAuth struct {
 	PrivPassphrase string `json:"priv_passphrase,omitempty"`
 }
 
+// PortStatsTarget lists, per rate name (pkts_in, errors_out, ...), the table column OIDs whose
+// values add up to that counter; the first column has to answer or the counter is skipped
+// (packets = unicast + multicast + broadcast, unicast first). Counter32 names can wrap.
+type PortStatsTarget struct {
+	Columns   map[string][]string `json:"columns"`
+	Counter32 []string            `json:"counter32,omitempty"`
+}
+
 // MetricsTarget describes how to read cpu/mem/temp for one device, driven by the server's
 // per-vendor OID profile so vendor differences stay in one place (the server config). The agent
 // executes these generically - it holds no vendor knowledge of its own.
 type MetricsTarget struct {
-	CPUWalk     string   `json:"cpu_walk,omitempty"`  // walk, average numeric values (hrProcessorLoad)
-	CPUOids     []string `json:"cpu_oids,omitempty"`  // else GET each, take the first numeric
-	Mem         string   `json:"mem,omitempty"`       // "hrstorage" | "cisco" | ""
+	CPUWalk     string   `json:"cpu_walk,omitempty"`      // walk, average numeric values (hrProcessorLoad)
+	CPUOids     []string `json:"cpu_oids,omitempty"`      // else GET each, take the first numeric
+	Mem         string   `json:"mem,omitempty"`           // "hrstorage" | "cisco" | ""
 	MemUsedWalk string   `json:"mem_used_walk,omitempty"` // cisco pools
 	MemFreeWalk string   `json:"mem_free_walk,omitempty"`
 	HrDescr     string   `json:"hr_descr,omitempty"` // hrStorage table columns
@@ -112,6 +124,10 @@ type MetricsTarget struct {
 	TempWalk    string   `json:"temp_walk,omitempty"`
 	TempOids    []string `json:"temp_oids,omitempty"`
 	TempDivisor int      `json:"temp_divisor,omitempty"`
+	// HrEntry is the whole hrStorageEntry, walked once for the storage list (and memory, when
+	// Mem is "hrstorage"). UptimeOids are GET together, first one that answers wins.
+	HrEntry    string   `json:"hr_entry,omitempty"`
+	UptimeOids []string `json:"uptime_oids,omitempty"`
 }
 
 // OpticalTarget describes an SNMP optical table from the server's vendor profile: Rx/Tx power
@@ -301,11 +317,37 @@ type DeviceFacts struct {
 
 // MetricsResult is one device's cpu/mem/temp reading. Each field is a pointer so an
 // unread metric marshals as null (not 0) and the server stores it as "not reported".
+//
+// The device page extras: UptimeS, the load per processor, and the storage entries. Storage is
+// deliberately not omitempty: nil (null) means it wasn't read, an empty slice ([]) means it was
+// read and the device has none, which lets the server drop entries that went away.
 type MetricsResult struct {
-	DeviceID   int      `json:"device_id"`
-	CPUPct     *float64 `json:"cpu_pct"`
-	MemUsedPct *float64 `json:"mem_used_pct"`
-	TempC      *float64 `json:"temp_c"`
+	DeviceID   int            `json:"device_id"`
+	CPUPct     *float64       `json:"cpu_pct"`
+	MemUsedPct *float64       `json:"mem_used_pct"`
+	TempC      *float64       `json:"temp_c"`
+	UptimeS    *uint64        `json:"uptime_s,omitempty"`
+	CPUs       []CPULoad      `json:"cpus,omitempty"`
+	Storage    []StorageEntry `json:"storage"`
+}
+
+// CPULoad is one processor's load: the hrProcessorLoad row index over SNMP, the core number
+// over the RouterOS API.
+type CPULoad struct {
+	Index   int     `json:"index"`
+	LoadPct float64 `json:"load_pct"`
+}
+
+// StorageEntry is one raw hrStorageTable row (or a RouterOS memory / disk figure). Kept raw like
+// the facts: Type is the hrStorageType OID (or already a type name, "ram"/"flash", from RouterOS),
+// Size and Used are in allocation units of Units bytes. The server filters and converts.
+type StorageEntry struct {
+	Key   string `json:"key"`
+	Descr string `json:"descr"`
+	Type  string `json:"type,omitempty"`
+	Units int64  `json:"units"`
+	Size  int64  `json:"size"`
+	Used  int64  `json:"used"`
 }
 
 type PingResult struct {
@@ -316,8 +358,36 @@ type PingResult struct {
 	JitterMs *float64 `json:"jitter_ms,omitempty"` // mean absolute rtt change between replies
 }
 
+// FlowResult is one interface's throughput. OperUp and the port rates (per second, from the
+// agent's own counter deltas) are optional: the rates are only there on a cycle that read the
+// port counters, and an older agent sends none of them.
 type FlowResult struct {
-	InterfaceID int     `json:"interface_id"`
-	InBps       float64 `json:"in_bps"`
-	OutBps      float64 `json:"out_bps"`
+	InterfaceID int      `json:"interface_id"`
+	InBps       float64  `json:"in_bps"`
+	OutBps      float64  `json:"out_bps"`
+	OperUp      *bool    `json:"oper_up,omitempty"`
+	PktsIn      *float64 `json:"pkts_in,omitempty"`
+	PktsOut     *float64 `json:"pkts_out,omitempty"`
+	ErrorsIn    *float64 `json:"errors_in,omitempty"`
+	ErrorsOut   *float64 `json:"errors_out,omitempty"`
+	DiscardsIn  *float64 `json:"discards_in,omitempty"`
+	DiscardsOut *float64 `json:"discards_out,omitempty"`
+}
+
+// SetPortRate fills the rate field for a PortStats name (pkts_in, errors_out, ...).
+func (f *FlowResult) SetPortRate(name string, v *float64) {
+	switch name {
+	case "pkts_in":
+		f.PktsIn = v
+	case "pkts_out":
+		f.PktsOut = v
+	case "errors_in":
+		f.ErrorsIn = v
+	case "errors_out":
+		f.ErrorsOut = v
+	case "discards_in":
+		f.DiscardsIn = v
+	case "discards_out":
+		f.DiscardsOut = v
+	}
 }

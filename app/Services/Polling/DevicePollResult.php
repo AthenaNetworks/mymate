@@ -13,12 +13,16 @@ final readonly class DevicePollResult
     /**
      * @param  list<array<string, mixed>>  $upsertRows  interface rows for a bulk upsert
      * @param  list<array<string, mixed>>  $frames  per-interface broadcast frames
+     * @param  array<int, array<string, mixed>>  $history  interface_id => extra history columns for
+     *                                                     this tick (port rates, oper_up). Kept out of
+     *                                                     the frames so the live broadcast stays small.
      */
     public function __construct(
         public int $deviceId,
         public string $status,
         public array $upsertRows,
         public array $frames,
+        public array $history = [],
     ) {}
 
     /** The per-device broadcast payload (one entry in a coalesced util event). */

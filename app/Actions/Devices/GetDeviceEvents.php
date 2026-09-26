@@ -10,6 +10,7 @@ use App\Services\Backup\RustedClient;
 use App\Support\BackupSettings;
 use App\Support\EngineLog;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * One timeline of what happened to a device (the device page's Events tab, GitHub #28), merged
@@ -20,9 +21,10 @@ use Illuminate\Support\Carbon;
  *  - config backups: each stored version from Rusted (skipped for restricted operators, the
  *    backup endpoints are off limits to them)
  *  - firmware upgrades: the last upgrade outcome recorded on the device
- *  - reboots: the last boot, worked out from the uptime the poller last read
+ *  - reboots: every one the metrics poller caught (device_reboots, uptime went backwards), plus
+ *    the current boot worked out from the last uptime reading
  *
- * There's no history table for upgrades or reboots yet, so those are the latest one only.
+ * There's no history table for upgrades yet, so that's the latest one only.
  * Each source is capped (newest first) before merging, which keeps a noisy device's page cheap.
  */
 class GetDeviceEvents
@@ -88,9 +90,24 @@ class GetDeviceEvents
             $events[] = self::event('upgrade-'.$device->upgrade_at->timestamp, 'upgrade', $status, $device->upgrade_at, 'Firmware upgrade: '.str_replace('_', ' ', $status), $device->upgrade_message);
         }
 
-        if ($want('reboot') && $device->uptime_seconds !== null && $device->uptime_at !== null) {
-            $booted = $device->uptime_at->copy()->subSeconds($device->uptime_seconds);
-            $events[] = self::event('reboot-'.$booted->timestamp, 'reboot', 'booted', $booted, 'Last boot', $device->os_version ? "Running {$device->os_version}" : null);
+        if ($want('reboot')) {
+            // Every reboot the metrics poller caught (uptime went backwards), newest first.
+            $seen = [];
+            foreach (DB::table('device_reboots')->where('device_id', $device->id)->orderByDesc('booted_at')->limit(self::CAP)->get() as $r) {
+                $booted = Carbon::parse($r->booted_at);
+                $seen[] = $booted;
+                $events[] = self::event("reboot-{$r->id}", 'reboot', 'rebooted', $booted, 'Rebooted',
+                    $r->previous_uptime_s !== null ? 'Had been up '.self::duration((int) $r->previous_uptime_s) : null);
+            }
+            // The current boot from the last uptime reading, unless that's one of the reboots
+            // above (same boot, give or take the poll interval).
+            if ($device->uptime_seconds !== null && $device->uptime_at !== null) {
+                $booted = $device->uptime_at->copy()->subSeconds($device->uptime_seconds);
+                $known = array_filter($seen, fn (Carbon $b) => abs($b->diffInSeconds($booted, false)) <= 300);
+                if ($known === []) {
+                    $events[] = self::event('reboot-'.$booted->timestamp, 'reboot', 'booted', $booted, 'Last boot', $device->os_version ? "Running {$device->os_version}" : null);
+                }
+            }
         }
 
         usort($events, fn ($a, $b) => strcmp($b['at'], $a['at']) ?: strcmp($a['id'], $b['id']));

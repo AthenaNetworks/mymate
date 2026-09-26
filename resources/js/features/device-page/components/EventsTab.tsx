@@ -111,7 +111,7 @@ export function EventsTab({ device }: { device: Device }) {
                     </div>
                 </div>
             )}
-            <p className="text-[11px] text-white/30">Upgrades and reboots show the latest one recorded on the device; there's no longer history for those yet.</p>
+            <p className="text-[11px] text-white/30">Upgrades show the latest one recorded on the device. Reboots go back as far as the poller has been reading uptime.</p>
         </div>
     );
 }

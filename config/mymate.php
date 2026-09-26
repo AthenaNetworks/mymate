@@ -92,6 +92,11 @@ return [
         'interval' => (int) env('MYMATE_POLL_INTERVAL', 12),
         // How often the loop re-runs interface discovery (names/capacity change rarely).
         'discover_interval' => (int) env('MYMATE_DISCOVER_INTERVAL', 600),
+        // How often SNMP devices get their port packet / error / discard counters read (s).
+        // It's ten more OIDs per port so it runs slower than the octets. The RouterOS API
+        // hands the same counters over with every tick at no extra cost, so this doesn't
+        // apply there. Remote agents follow the same cadence.
+        'port_stats_interval' => (int) env('MYMATE_PORT_STATS_INTERVAL', 60),
 
         // Scale-out: throughput work is sharded into N batch jobs by
         // crc32(device_id) % shards, each guarded by a per-shard overlap lock.
@@ -132,6 +137,9 @@ return [
     'snmp' => [
         'timeout_us' => (int) env('MYMATE_SNMP_TIMEOUT_US', 1_000_000), // 1s
         'retries' => (int) env('MYMATE_SNMP_RETRIES', 1),
+        // Most OIDs in one GET PDU for the per-port counter reads, keeps a reply comfortably
+        // under a 1500 byte packet.
+        'get_chunk' => (int) env('MYMATE_SNMP_GET_CHUNK', 40),
         // Numeric OIDs (no MIBs needed). ifXTable = 64-bit HC counters + ifHighSpeed (Mbps).
         'oids' => [
             'if_descr' => '.1.3.6.1.2.1.2.2.1.2',
@@ -141,6 +149,21 @@ return [
             'if_hc_in_octets' => '.1.3.6.1.2.1.31.1.1.1.6',
             'if_hc_out_octets' => '.1.3.6.1.2.1.31.1.1.1.10',
             'if_oper_status' => '.1.3.6.1.2.1.2.2.1.8', // ifOperStatus (1=up) - per-port up/down
+            // Port counters for errors/discards/packets, read by GET per known ifIndex on the
+            // slower port_stats_interval. Errors and discards only exist as Counter32.
+            'if_in_discards' => '.1.3.6.1.2.1.2.2.1.13',
+            'if_in_errors' => '.1.3.6.1.2.1.2.2.1.14',
+            'if_out_discards' => '.1.3.6.1.2.1.2.2.1.19',
+            'if_out_errors' => '.1.3.6.1.2.1.2.2.1.20',
+            'if_hc_in_ucast_pkts' => '.1.3.6.1.2.1.31.1.1.1.7',
+            'if_hc_in_mcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.8',
+            'if_hc_in_bcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.9',
+            'if_hc_out_ucast_pkts' => '.1.3.6.1.2.1.31.1.1.1.11',
+            'if_hc_out_mcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.12',
+            'if_hc_out_bcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.13',
+            // Uptime for the metrics tick: hrSystemUptime (the host) is preferred over
+            // sysUpTime (the SNMP agent, which also resets when snmpd restarts).
+            'hr_system_uptime' => '.1.3.6.1.2.1.25.1.1.0',
 
             // system group - used by discovery to identify a responder and
             // by CaptureDeviceFacts for vendor/uptime/type.
@@ -323,6 +346,12 @@ return [
         // host-MIB storage columns for the 'hrstorage' memory strategy - walk descr to
         // find the physical-RAM row, then used/size. Swap/virtual/cached rows are skipped.
         'hrstorage' => [
+            // hrStorageEntry: the whole row walked in one go (type, descr, units, size, used),
+            // which feeds both the memory % and the per-entry storage list. The column OIDs
+            // below are the fallback for an agent that won't walk the entry.
+            'entry' => '.1.3.6.1.2.1.25.2.3.1',
+            'type' => '.1.3.6.1.2.1.25.2.3.1.2',   // hrStorageType
+            'units' => '.1.3.6.1.2.1.25.2.3.1.4',  // hrStorageAllocationUnits (bytes)
             'descr' => '.1.3.6.1.2.1.25.2.3.1.3',  // hrStorageDescr
             'size' => '.1.3.6.1.2.1.25.2.3.1.5',   // hrStorageSize (in alloc units)
             'used' => '.1.3.6.1.2.1.25.2.3.1.6',   // hrStorageUsed

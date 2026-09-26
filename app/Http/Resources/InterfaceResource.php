@@ -28,6 +28,13 @@ class InterfaceResource extends JsonResource
             'optical_rx_dbm' => $this->optical_rx_dbm,
             'optical_tx_dbm' => $this->optical_tx_dbm,
             'optical_at' => $this->optical_at,
+            // Port rates per second from the last counter read, null until two reads have landed.
+            'pkts_in' => $this->pkts_in,
+            'pkts_out' => $this->pkts_out,
+            'errors_in' => $this->errors_in,
+            'errors_out' => $this->errors_out,
+            'discards_in' => $this->discards_in,
+            'discards_out' => $this->discards_out,
         ];
     }
 }

@@ -3,10 +3,15 @@
 namespace App\Actions\Polling;
 
 use App\Models\Device;
+use App\Models\NetworkInterface;
 use App\Services\Polling\DevicePollResult;
+use App\Services\Polling\PortStats;
+use App\Services\Polling\PortStatsDriver;
 use App\Services\Polling\RateCalculator;
 use App\Services\Polling\ThroughputDriverFactory;
+use App\Support\EngineLog;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
  * Compute one device's throughput tick (pure-ish: SNMP read + math, no persistence
@@ -26,7 +31,8 @@ class PollDeviceInterfaces
 
     public function __invoke(Device $device): ?DevicePollResult
     {
-        $readings = $this->drivers->for($device)->sample($device);
+        $driver = $this->drivers->for($device);
+        $readings = $driver->sample($device);
         if ($readings === []) {
             return null;
         }
@@ -35,12 +41,35 @@ class PollDeviceInterfaces
         $now = now()->format('Y-m-d H:i:s');
         $rows = [];
         $frames = [];
+        $history = [];
+
+        // Port counters (errors / discards / packets). RouterOS brings them on every sample; an
+        // SNMP driver reads them separately on the slower port-stats cadence.
+        $portCounters = [];
+        $portRead = false;
+        $portTs = microtime(true);
+        if ($driver instanceof PortStatsDriver && $this->portStatsDue($interfaces)) {
+            $known = array_values(array_filter(array_keys($readings), static fn ($i) => $interfaces->has($i)));
+            // Counts as a read even when it fails or the box has none of these OIDs, so a device
+            // that can't answer is asked again next interval, not on every tick.
+            $portRead = true;
+            try {
+                $portCounters = $driver->portCounters($device, $known);
+                $portTs = microtime(true);
+            } catch (\Throwable $e) {
+                // the octets are already read, a failed counter read only costs the port stats
+                EngineLog::debug('poll: port counter read failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+            }
+        }
 
         foreach ($readings as $ifIndex => $sample) {
             $iface = $interfaces->get($ifIndex);
             if ($iface === null) {
                 continue;
             }
+
+            $counters = $sample->counters ?? ($portRead ? ($portCounters[$ifIndex] ?? []) : null);
+            [$port, $portState, $portFresh] = $this->portRates($iface, $counters, $sample->counters !== null, $portTs);
 
             if ($sample->isDirectRate()) {
                 // RouterOS monitor-traffic: bps straight from the device - no counter
@@ -87,8 +116,16 @@ class PollDeviceInterfaces
                 'bps_out' => $bpsOut === null ? null : (int) round($bpsOut),
                 // Per-port up/down from ifOperStatus; null when the driver didn't report it.
                 'oper_status' => $sample->operUp === null ? null : ($sample->operUp ? 'up' : 'down'),
+                // Latest port rates (per second). Carried over unchanged on a tick that didn't
+                // read counters, so the upsert never blanks them between port-stats reads.
+                ...$port,
+                'port_counters' => $portState === null ? null : json_encode($portState),
                 'updated_at' => $now,
             ];
+
+            // History: this tick's port rates only when they were read now (a carried-over value
+            // would be counted again in every sample), plus the oper status every tick.
+            $history[$iface->id] = [...($portFresh ? $port : PortStats::none()), 'oper_up' => $sample->operUp];
 
             $frames[] = [
                 'interface_id' => $iface->id,
@@ -111,6 +148,55 @@ class PollDeviceInterfaces
             status: $device->status->value,
             upsertRows: $rows,
             frames: $frames,
+            history: $history,
         );
+    }
+
+    /**
+     * Port rates for one interface this tick.
+     *
+     * @param  array<string, int>|null  $counters  raw counters read now ([] = read but nothing came
+     *                                             back), or null when there was no read this tick
+     * @return array{0: array<string, ?float>, 1: ?array<string, mixed>, 2: bool} [rates, state to store, read now?]
+     */
+    private function portRates(NetworkInterface $iface, ?array $counters, bool $wide, float $ts): array
+    {
+        if ($counters === null) {
+            $carried = [];
+            foreach (PortStats::RATES as $name) {
+                $carried[$name] = $iface->{$name};
+            }
+
+            return [$carried, $iface->port_counters, false];
+        }
+        if ($counters === []) {
+            return [PortStats::none(), ['ts' => $ts, 'c' => []], true];
+        }
+
+        $next = PortStats::advance($this->rates, $iface->port_counters, $counters, $ts, $wide ? [] : PortStats::SNMP_COUNTER32);
+
+        return [$next['rates'], $next['state'], true];
+    }
+
+    /**
+     * Whether an SNMP device's port counters are due: never read, or the newest read is at least
+     * `poll.port_stats_interval` old. Kept on the interface rows so it needs no scheduler of its
+     * own and survives restarts. A couple of seconds of slack so tick jitter doesn't push every
+     * read out by a whole extra tick.
+     *
+     * @param  Collection<int, NetworkInterface>  $interfaces
+     */
+    private function portStatsDue(Collection $interfaces): bool
+    {
+        $interval = max(1, (int) config('mymate.poll.port_stats_interval', 60));
+        $newest = null;
+        foreach ($interfaces as $iface) {
+            $ts = $iface->port_counters['ts'] ?? null;
+            if (is_numeric($ts) && ($newest === null || $ts > $newest)) {
+                $newest = (float) $ts;
+            }
+        }
+
+        return $newest === null || microtime(true) - $newest >= $interval - 2;
     }
 }

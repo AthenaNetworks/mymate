@@ -15,7 +15,9 @@ use App\Support\EngineLog;
  * discover(): `/interface/print` (name + a stable index from `.id`) + capacity
  *             from `/interface/ethernet print` where available.
  * sample():   `/interface/monitor-traffic once` -> rx/tx **bits per second directly**
- *             (InterfaceSample::rates) - no counter state, no delta, no reset guard.
+ *             (InterfaceSample::rates) - no counter state, no delta, no reset guard. The
+ *             packet / error / drop counters from `/interface/print` ride along on each
+ *             sample (withCounters), PollDeviceInterfaces turns those into rates.
  *
  * A filtered/black-holing API port fails fast via RouterOsClientException (the
  * orchestrator isolates it per device).
@@ -65,11 +67,13 @@ class RouterOsThroughputDriver implements ThroughputDriver
             // alert (GitHub #22) never sees a RouterOS-polled port go down.
             $ifIndexByName = [];
             $operByName = [];
+            $countersByName = [];
             foreach ($conn->query('/interface/print') as $row) {
                 $ifIndex = $this->ifIndex($row);
                 if ($ifIndex !== null && ($row['name'] ?? '') !== '') {
                     $ifIndexByName[$row['name']] = $ifIndex;
                     $operByName[$row['name']] = $this->boolFlag($row['running'] ?? null);
+                    $countersByName[$row['name']] = self::portCounters($row);
                 }
             }
             if ($ifIndexByName === []) {
@@ -115,10 +119,43 @@ class RouterOsThroughputDriver implements ThroughputDriver
                 ]);
             }
 
+            // The same print carries the packet / error / drop counters, attach them so the
+            // port stats come along with every tick without another query.
+            foreach ($ifIndexByName as $name => $ifIndex) {
+                if (isset($samples[$ifIndex]) && $countersByName[$name] !== []) {
+                    $samples[$ifIndex] = $samples[$ifIndex]->withCounters($countersByName[$name]);
+                }
+            }
+
             return $samples;
         } finally {
             $conn->close();
         }
+    }
+
+    /**
+     * The port counters out of one `/interface/print` row (rx-packet, rx-error, rx-drop and the
+     * tx side), under the PortStats names. They're 64-bit on RouterOS. A field the row lacks
+     * (some virtual interfaces) is just left out.
+     *
+     * @param  array<string, string>  $row
+     * @return array<string, int>
+     */
+    public static function portCounters(array $row): array
+    {
+        $map = [
+            'pkts_in' => 'rx-packet', 'pkts_out' => 'tx-packet',
+            'errors_in' => 'rx-error', 'errors_out' => 'tx-error',
+            'discards_in' => 'rx-drop', 'discards_out' => 'tx-drop',
+        ];
+        $out = [];
+        foreach ($map as $name => $field) {
+            if (isset($row[$field]) && is_numeric($row[$field])) {
+                $out[$name] = (int) $row[$field];
+            }
+        }
+
+        return $out;
     }
 
     /** Parse a RouterOS API boolean field ("true"/"false", older "yes"/"no") to a tri-state. */

@@ -19,6 +19,7 @@ class NetworkInterface extends Model
         'device_id', 'if_index', 'name', 'description', 'speed_mbps', 'oper_status',
         'last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out',
         'optical_rx_dbm', 'optical_tx_dbm', 'optical_at',
+        'pkts_in', 'pkts_out', 'errors_in', 'errors_out', 'discards_in', 'discards_out', 'port_counters',
     ];
 
     protected $casts = [
@@ -34,6 +35,15 @@ class NetworkInterface extends Model
         'optical_rx_dbm' => 'float',
         'optical_tx_dbm' => 'float',
         'optical_at' => 'datetime',
+        // latest port rates, per second (see App\Services\Polling\PortStats)
+        'pkts_in' => 'float',
+        'pkts_out' => 'float',
+        'errors_in' => 'float',
+        'errors_out' => 'float',
+        'discards_in' => 'float',
+        'discards_out' => 'float',
+        // raw counters from the last read, {"ts": unix, "c": {name: value}}
+        'port_counters' => 'array',
     ];
 
     public function device(): BelongsTo

@@ -6,6 +6,7 @@ use App\Events\InterfaceUtilUpdated;
 use App\Models\Device;
 use App\Models\Link;
 use App\Models\NetworkInterface;
+use App\Services\Polling\PortStats;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
 use Illuminate\Support\Facades\DB;
@@ -71,8 +72,13 @@ class PollInterfaces
             // data. Throughput (bps) is a valid reading even with no known speed (util
             // null) - so record on any non-null util OR bps, and skip only fully-empty
             // baseline/counter-reset ticks (all four null) so graphs don't show fake zeroes.
+            // Port rates and oper status ride on the same row (see DevicePollResult::$history);
+            // a row with only port rates is still worth keeping, eg the first octet read after a
+            // counter reset.
             foreach ($result->frames as $f) {
-                if ($f['util_in'] === null && $f['util_out'] === null && $f['bps_in'] === null && $f['bps_out'] === null) {
+                $extra = $result->history[$f['interface_id']] ?? [];
+                $port = array_filter(array_intersect_key($extra, array_flip(PortStats::RATES)), static fn ($v) => $v !== null);
+                if ($f['util_in'] === null && $f['util_out'] === null && $f['bps_in'] === null && $f['bps_out'] === null && $port === []) {
                     continue;
                 }
                 $sampleRows[] = [
@@ -82,6 +88,9 @@ class PollInterfaces
                     'bps_out' => $f['bps_out'],
                     'util_in' => $f['util_in'],
                     'util_out' => $f['util_out'],
+                    ...PortStats::none(),
+                    ...array_intersect_key($extra, array_flip(PortStats::RATES)),
+                    'oper_up' => $extra['oper_up'] ?? null,
                 ];
             }
         }
@@ -90,7 +99,7 @@ class PollInterfaces
             NetworkInterface::upsert(
                 $rows,
                 ['device_id', 'if_index'],
-                ['last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out', 'oper_status', 'updated_at'],
+                ['last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out', 'oper_status', ...PortStats::RATES, 'port_counters', 'updated_at'],
             );
         }
 

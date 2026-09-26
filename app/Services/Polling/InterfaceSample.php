@@ -22,6 +22,9 @@ final readonly class InterfaceSample
         public ?float $inBps,
         public ?float $outBps,
         public ?bool $operUp = null, // ifOperStatus: true=up, false=down, null=not reported
+        // Raw 64-bit port counters that came along with this read (PortStats::RATES names).
+        // Only the RouterOS path fills it, its /interface/print carries them for free.
+        public ?array $counters = null,
     ) {}
 
     public static function counters(int $inOctets, int $outOctets, float $ts, ?bool $operUp = null): self
@@ -32,6 +35,12 @@ final readonly class InterfaceSample
     public static function rates(float $inBps, float $outBps, ?bool $operUp = null): self
     {
         return new self(null, null, null, $inBps, $outBps, $operUp);
+    }
+
+    /** @param array<string, int> $counters */
+    public function withCounters(array $counters): self
+    {
+        return new self($this->inOctets, $this->outOctets, $this->ts, $this->inBps, $this->outBps, $this->operUp, $counters === [] ? null : $counters);
     }
 
     public function isDirectRate(): bool

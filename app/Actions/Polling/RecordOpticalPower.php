@@ -3,6 +3,7 @@
 namespace App\Actions\Polling;
 
 use App\Services\Polling\OpticalReading;
+use App\Support\EngineLog;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\DB;
  * This is only called after a SUCCESSFUL read, so any port on the device that still has optical
  * values but wasn't in this read has lost its module (or light reading) and is cleared - a pulled
  * SFP shouldn't keep showing, or alerting on, its last level forever.
+ *
+ * Each matched reading also goes into optical_samples (the `optical` history family).
  *
  * Returns the number of interfaces updated.
  */
@@ -32,6 +35,7 @@ class RecordOpticalPower
 
         $now = now();
         $seen = [];
+        $samples = [];
         foreach ($readings as $r) {
             $id = ($r->name !== null ? ($byName[$r->name] ?? null) : null)
                 ?? ($r->ifIndex !== null ? ($byIndex[$r->ifIndex] ?? null) : null);
@@ -45,6 +49,17 @@ class RecordOpticalPower
                 'optical_tx_dbm' => $r->txDbm,
                 'optical_at' => $now,
             ]);
+            $samples[] = ['interface_id' => $id, 'ts' => $now->format('Y-m-d H:i:s'), 'rx_dbm' => $r->rxDbm, 'tx_dbm' => $r->txDbm];
+        }
+
+        // History for the `optical` family, best-effort like every other sample write.
+        if ($samples !== [] && config('mymate.history.enabled', true)) {
+            try {
+                // own transaction, so a failed insert inside an outer one can't poison it
+                DB::transaction(fn () => DB::table('optical_samples')->insert($samples));
+            } catch (\Throwable $e) {
+                EngineLog::warning('history: optical sample write failed', ['device_id' => $deviceId, 'error' => $e->getMessage()]);
+            }
         }
 
         DB::table('interfaces')
