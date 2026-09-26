@@ -3,39 +3,25 @@
 namespace App\Actions\History;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Bucketed/downsampled history for one interface over [from, to). The
  * bucket width is chosen so the series is ~`history.max_points` points regardless of
- * the window, and each bucket averages util/bps via Postgres `date_bin` (PG14+).
+ * the window, and each bucket averages util/bps. Short windows read raw samples, long
+ * ones the 5m/1h rollups (GitHub #28), see HistoryQuery.
  * Keeps the payload chart-sized no matter how dense the raw samples are.
  */
 class GetInterfaceSamples
 {
+    public function __construct(private readonly HistoryQuery $history) {}
+
     /** @return list<array{ts:string, util_in:?float, util_out:?float, bps_in:?float, bps_out:?float}> */
     public function __invoke(int $interfaceId, Carbon $from, Carbon $to): array
     {
-        $maxPoints = max(1, (int) config('mymate.history.max_points', 240));
-        $span = max(1, $from->diffInSeconds($to)); // seconds, always positive
-        $bucketSeconds = max(10, (int) ceil($span / $maxPoints));
-
-        $fromStr = $from->format('Y-m-d H:i:s');
-        $toStr = $to->format('Y-m-d H:i:s');
-
-        $rows = DB::select(
-            <<<'SQL'
-                SELECT date_bin(?::interval, ts, ?::timestamp) AS bucket,
-                       avg(util_in)  AS util_in,
-                       avg(util_out) AS util_out,
-                       avg(bps_in)   AS bps_in,
-                       avg(bps_out)  AS bps_out
-                FROM interface_samples
-                WHERE interface_id = ? AND ts >= ?::timestamp AND ts < ?::timestamp
-                GROUP BY bucket
-                ORDER BY bucket
-            SQL,
-            ["{$bucketSeconds} seconds", $fromStr, $interfaceId, $fromStr, $toStr],
+        $rows = $this->history->rows(
+            'interface', HistoryGrid::build($from, $to), $to,
+            ['util_in' => ['avg'], 'util_out' => ['avg'], 'bps_in' => ['avg'], 'bps_out' => ['avg']],
+            'interface_id = ?', [$interfaceId],
         );
 
         return array_map(static fn ($r): array => [

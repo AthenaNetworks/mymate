@@ -3,59 +3,37 @@
 namespace App\Actions\History;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Bucketed/downsampled cpu/mem/temp history for one device over [from, to). Mirrors
  * GetInterfaceSamples: the bucket width targets ~`history.max_points` points regardless
- * of window, each bucket averaged via Postgres `date_bin` (PG14+).
+ * of window, each bucket averaged, from raw samples or the rollups (see HistoryQuery).
  */
 class GetDeviceMetricSamples
 {
+    private const METRICS = [
+        'cpu_pct' => 2, 'mem_used_pct' => 2, 'temp_c' => 1, 'signal_dbm' => 1,
+        'snr_db' => 1, 'ccq_pct' => 1, 'wireless_clients' => 0, 'ospf_neighbors' => 0,
+    ];
+
+    public function __construct(private readonly HistoryQuery $history) {}
+
     /** @return list<array<string, string|float|null>> */
     public function __invoke(int $deviceId, Carbon $from, Carbon $to): array
     {
-        $maxPoints = max(1, (int) config('mymate.history.max_points', 240));
-        $span = max(1, $from->diffInSeconds($to));
-        $bucketSeconds = max(10, (int) ceil($span / $maxPoints));
-
-        $fromStr = $from->format('Y-m-d H:i:s');
-        $toStr = $to->format('Y-m-d H:i:s');
-
-        $rows = DB::select(
-            <<<'SQL'
-                SELECT date_bin(?::interval, ts, ?::timestamp) AS bucket,
-                       avg(cpu_pct)          AS cpu_pct,
-                       avg(mem_used_pct)     AS mem_used_pct,
-                       avg(temp_c)           AS temp_c,
-                       avg(signal_dbm)       AS signal_dbm,
-                       avg(snr_db)           AS snr_db,
-                       avg(ccq_pct)          AS ccq_pct,
-                       avg(wireless_clients) AS wireless_clients,
-                       avg(ospf_neighbors)   AS ospf_neighbors
-                FROM device_metric_samples
-                WHERE device_id = ? AND ts >= ?::timestamp AND ts < ?::timestamp
-                GROUP BY bucket
-                ORDER BY bucket
-            SQL,
-            ["{$bucketSeconds} seconds", $fromStr, $deviceId, $fromStr, $toStr],
+        $rows = $this->history->rows(
+            'device_metric', HistoryGrid::build($from, $to), $to,
+            array_map(static fn () => ['avg'], self::METRICS),
+            'device_id = ?', [$deviceId],
         );
 
-        return array_map(static fn ($r): array => [
-            'ts' => $r->bucket,
-            'cpu_pct' => self::num($r->cpu_pct, 2),
-            'mem_used_pct' => self::num($r->mem_used_pct, 2),
-            'temp_c' => self::num($r->temp_c, 1),
-            'signal_dbm' => self::num($r->signal_dbm, 1),
-            'snr_db' => self::num($r->snr_db, 1),
-            'ccq_pct' => self::num($r->ccq_pct, 1),
-            'wireless_clients' => self::num($r->wireless_clients, 0),
-            'ospf_neighbors' => self::num($r->ospf_neighbors, 0),
-        ], $rows);
-    }
+        return array_map(static function ($r): array {
+            $out = ['ts' => $r->bucket];
+            foreach (self::METRICS as $metric => $precision) {
+                $out[$metric] = $r->{$metric} === null ? null : round((float) $r->{$metric}, $precision);
+            }
 
-    private static function num(mixed $value, int $precision): ?float
-    {
-        return $value === null ? null : round((float) $value, $precision);
+            return $out;
+        }, $rows);
     }
 }
