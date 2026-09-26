@@ -17,7 +17,7 @@ class NetworkInterface extends Model
 
     protected $fillable = [
         'device_id', 'if_index', 'name', 'description', 'speed_mbps', 'oper_status',
-        'last_in', 'last_out', 'last_ts', 'util_in', 'util_out', 'bps_in', 'bps_out',
+        'last_in', 'last_out', 'last_ts', 'last_counter32', 'util_in', 'util_out', 'bps_in', 'bps_out',
         'optical_rx_dbm', 'optical_tx_dbm', 'optical_at',
         'pkts_in', 'pkts_out', 'errors_in', 'errors_out', 'discards_in', 'discards_out', 'port_counters',
     ];
@@ -28,6 +28,7 @@ class NetworkInterface extends Model
         'last_in' => 'integer',
         'last_out' => 'integer',
         'last_ts' => 'datetime',
+        'last_counter32' => 'boolean',
         'util_in' => 'float',
         'util_out' => 'float',
         'bps_in' => 'integer',

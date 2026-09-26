@@ -39,6 +39,24 @@ class MapDetail
         // Saved portal positions for this map's inter-map links (operator-dragged).
         $portalPos = MapLinkPosition::where('map_id', $map->id)->get()->keyBy('link_id');
 
+        // Far ends of the links that leave this map, looked up in one go rather than two queries
+        // per link: their lowest other map (so the portal target is stable when a device sits on
+        // several), that map's name and the device's name. Names go through the visibility
+        // scopes, so a restricted operator gets null for a device or map they can't see.
+        $remoteIds = [];
+        foreach ($links as $link) {
+            $aIn = isset($memberSet[$link->a_device_id]);
+            if ($aIn !== isset($memberSet[$link->b_device_id])) {
+                $remoteIds[$aIn ? $link->b_device_id : $link->a_device_id] = true;
+            }
+        }
+        $remoteIds = array_keys($remoteIds);
+        $remoteMap = DeviceMapPosition::whereIn('device_id', $remoteIds)->where('map_id', '!=', $map->id)
+            ->selectRaw('device_id, MIN(map_id) AS map_id')->groupBy('device_id')
+            ->pluck('map_id', 'device_id')->all();
+        $mapNames = Map::whereIn('id', array_unique(array_values($remoteMap)))->pluck('name', 'id')->all();
+        $deviceNames = Device::whereIn('id', $remoteIds)->pluck('name', 'id')->all();
+
         $interMap = [];
         foreach ($links as $link) {
             $aIn = isset($memberSet[$link->a_device_id]);
@@ -47,10 +65,8 @@ class MapDetail
                 continue; // both ends on this map (intra - the canvas draws it) or neither
             }
             $remoteId = $aIn ? $link->b_device_id : $link->a_device_id;
-            // Lowest map id when the remote sits on several maps, so the portal target is stable.
-            $remote = DeviceMapPosition::where('device_id', $remoteId)
-                ->where('map_id', '!=', $map->id)->orderBy('map_id')->with('map:id,name')->first();
-            if ($remote === null) {
+            $remoteMapId = $remoteMap[$remoteId] ?? null;
+            if ($remoteMapId === null) {
                 continue; // far end is on no map at all - nothing to portal to (see class doc)
             }
             $pos = $portalPos->get($link->id);
@@ -76,9 +92,9 @@ class MapDetail
                 'id' => $link->id,
                 'local_device_id' => $aIn ? $link->a_device_id : $link->b_device_id,
                 'remote_device_id' => $remoteId,
-                'remote_device_name' => Device::find($remoteId)?->name,
-                'remote_map_id' => $remote->map_id,
-                'remote_map_name' => $remote->map?->name,
+                'remote_device_name' => $deviceNames[$remoteId] ?? null,
+                'remote_map_id' => (int) $remoteMapId,
+                'remote_map_name' => $mapNames[$remoteMapId] ?? null,
                 'bps' => $bpsList === [] ? null : max($bpsList),
                 'util' => $utilList === [] ? null : round(max($utilList), 1),
                 'portal_x' => $pos?->x,

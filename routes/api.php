@@ -76,6 +76,7 @@ Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAre
         Route::get('map', [PublicWallController::class, 'map'])->name('public.wall.map');
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
         Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
+        Route::get('device-icons', [PublicWallController::class, 'iconByModel'])->name('public.wall.icon-by-model');
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
         Route::get('map-config', [PublicWallController::class, 'mapConfig'])->name('public.wall.map-config');
         Route::get('background', [PublicWallController::class, 'background'])->name('public.wall.background');
@@ -249,6 +250,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         Route::delete('runs/{runId}', 'stop')->name('tools.stop');
     });
     // Device model icon (MikroTik product photo, fetched + cached on first sighting).
+    // Same photo keyed by model, so a map full of one model shares one cached URL (GitHub #22).
+    Route::get('device-icons', [DeviceIconController::class, 'byModel'])->name('devices.icon-by-model');
     Route::get('devices/{device}/icon', [DeviceIconController::class, 'show'])
         ->name('devices.icon');
     // Device page: current storage entries and per-processor load (history is the storage / cpu

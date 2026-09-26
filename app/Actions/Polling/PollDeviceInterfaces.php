@@ -77,20 +77,24 @@ class PollDeviceInterfaces
                 // state, no delta, no reset guard. Leave last_* null (unused here).
                 $bpsIn = $sample->inBps;
                 $bpsOut = $sample->outBps;
-                $lastIn = $lastOut = $lastTs = null;
+                $lastIn = $lastOut = $lastTs = $last32 = null;
             } else {
                 // SNMP: rate = delta octetsx8/delta t (RateCalculator owns the reset guard).
                 $dt = $iface->last_ts !== null
                     ? (float) $sample->ts - (float) $iface->last_ts->getTimestamp()
                     : 0.0;
                 $bits = $sample->counter32 ? 32 : 64;
-                $bpsIn = $this->rates->bps($iface->last_in, $sample->inOctets, $dt, $bits);
-                $bpsOut = $this->rates->bps($iface->last_out, $sample->outOctets, $dt, $bits);
+                // The stored counters are from the other width (HC walk dropped out or came
+                // back): the delta means nothing, so no rate this tick and start over from here.
+                $widthChanged = $iface->last_counter32 !== null && $iface->last_counter32 !== $sample->counter32;
+                $bpsIn = $widthChanged ? null : $this->rates->bps($iface->last_in, $sample->inOctets, $dt, $bits);
+                $bpsOut = $widthChanged ? null : $this->rates->bps($iface->last_out, $sample->outOctets, $dt, $bits);
                 // Always store the new raw counters + ts (even on a reset tick) so the
                 // next delta is computed from current reality.
                 $lastIn = $sample->inOctets;
                 $lastOut = $sample->outOctets;
                 $lastTs = Carbon::createFromTimestamp((int) $sample->ts)->format('Y-m-d H:i:s');
+                $last32 = $sample->counter32;
             }
 
             // Per-PORT utilisation vs the physical interface speed (shown in the device
@@ -108,6 +112,7 @@ class PollDeviceInterfaces
                 'last_in' => $lastIn,
                 'last_out' => $lastOut,
                 'last_ts' => $lastTs,
+                'last_counter32' => $last32,
                 'util_in' => $utilIn,
                 'util_out' => $utilOut,
                 // `interfaces.bps_*` are bigint - the SNMP path's RateCalculator returns a

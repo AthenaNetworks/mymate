@@ -156,6 +156,30 @@ class SnmpFallbackAndAgentWirelessTest extends TestCase
         $this->assertFalse((new SnmpThroughputDriver($snmp))->sample($this->snmpDevice())[4]->counter32);
     }
 
+    public function test_octets_coming_back_to_64_bit_give_no_spike(): void
+    {
+        // last tick the HC walk was missing so we stored a 32-bit reading; now it's back
+        $snmp = new FakeSnmpClient;
+        $snmp->walks['.1.3.6.1.2.1.31.1.1.1.6'] = [1 => '50000000000'];
+        $snmp->walks['.1.3.6.1.2.1.31.1.1.1.10'] = [1 => '60000000000'];
+        $this->app->instance(SnmpClient::class, $snmp);
+
+        $device = $this->snmpDevice();
+        NetworkInterface::factory()->for($device)->create([
+            'if_index' => 1, 'speed_mbps' => 1000,
+            'last_in' => 100_000_000, 'last_out' => 200_000_000, 'last_ts' => now()->subSeconds(10),
+            'last_counter32' => true,
+        ]);
+
+        $row = app(PollDeviceInterfaces::class)($device)->upsertRows[0];
+
+        // a straight delta would be ~40 Gbps on a 1G port
+        $this->assertNull($row['bps_in']);
+        $this->assertNull($row['bps_out']);
+        $this->assertFalse($row['last_counter32']);
+        $this->assertSame(50_000_000_000, $row['last_in']); // and the next tick rates from here
+    }
+
     public function test_32_bit_wrap_and_width_changes(): void
     {
         $calc = new RateCalculator;

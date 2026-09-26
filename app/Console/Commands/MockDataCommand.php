@@ -171,7 +171,7 @@ class MockDataCommand extends Command
             ]],
             ['key' => 'distb', 'lat' => -27.503, 'lng' => 153.102, 'name' => 'DIST-B', 'octet' => 11, 'type' => 'switch', 'parent' => 'core2', 'status' => 'up', 'poll' => 'routeros', 'x' => 600, 'y' => 310, 'vendor' => 'MikroTik', 'model' => 'CRS328-24P-4S+', 'os' => '7.14', 'updays' => 45, 'ifaces' => [
                 ['n' => 'sfp1', 'i' => 1, 'sp' => 1000, 'ui' => 9, 'uo' => 6],
-                ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 16, 'uo' => 12],
+                ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 2, 'uo' => 8], // to CPE-RAD: 80M down, 20M back up the 50M side
             ]],
             ['key' => 'ap', 'lat' => -27.3858, 'lng' => 153.031, 'name' => 'AP-NORTH', 'octet' => 20, 'type' => 'ap', 'parent' => 'dista', 'status' => 'down', 'poll' => 'routeros', 'x' => 10, 'y' => 470, 'vendor' => 'MikroTik', 'model' => 'cAP ax', 'os' => '7.13', 'ifaces' => [
                 ['n' => 'ether1', 'i' => 1, 'sp' => 1000, 'ui' => null, 'uo' => null],

@@ -6,6 +6,7 @@ use App\Actions\Devices\FetchMikrotikIcon;
 use App\Http\Controllers\Controller;
 use App\Jobs\FetchDeviceIconJob;
 use App\Models\Device;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -43,5 +44,22 @@ class DeviceIconController extends Controller
             'Content-Type' => 'image/webp',
             'Cache-Control' => 'public, max-age=604800, immutable',
         ]);
+    }
+
+    /**
+     * The same photo keyed by model rather than device, so every node of one model on a map shares
+     * one URL and one browser-cached image instead of a request per device (500 CRS326s used to
+     * mean 500 requests). Only a model some visible MikroTik actually has is served or fetched, so
+     * this can't be used to queue lookups for made-up models.
+     */
+    public function byModel(Request $request, FetchMikrotikIcon $icons): BinaryFileResponse|Response
+    {
+        $model = (string) $request->query('model', '');
+        abort_if($model === '' || mb_strlen($model) > 100, 404);
+
+        $device = Device::where('model', $model)->where('vendor', 'ilike', '%mikrotik%')->first(['id', 'vendor', 'model']);
+        abort_if($device === null, 404);
+
+        return $this->show($device, $icons);
     }
 }

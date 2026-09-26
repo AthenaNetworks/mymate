@@ -4,13 +4,12 @@ import type { DeviceType } from '../../../types';
 import { deviceIcon } from '../../../components/deviceIcons';
 import { isWall, wallToken } from '../../../lib/wall';
 
-// Product photos come from the authenticated device endpoint normally, or the token-gated public
-// one when running as a shared wallboard (GitHub #15) - so photos still render with no session.
-function iconSrc(deviceId: number, attempt: number): string {
-    const q = attempt > 0 ? `?r=${attempt}` : '';
-    return isWall()
-        ? `/api/public/wall/${wallToken()}/devices/${deviceId}/icon${q}`
-        : `/api/devices/${deviceId}/icon${q}`;
+// Product photos come from the authenticated endpoint normally, or the token-gated public one when
+// running as a shared wallboard (GitHub #15) - so photos still render with no session. Keyed by
+// model, not device, so every node of one model shares a single cached image (GitHub #22).
+function iconSrc(model: string, attempt: number): string {
+    const q = `model=${encodeURIComponent(model)}${attempt > 0 ? `&r=${attempt}` : ''}`;
+    return isWall() ? `/api/public/wall/${wallToken()}/device-icons?${q}` : `/api/device-icons?${q}`;
 }
 
 /**
@@ -137,7 +136,7 @@ export function DeviceGlyph({
         <>
             {useImage && (
                 <img
-                    src={iconSrc(deviceId, attempt)}
+                    src={iconSrc(model!, attempt)}
                     alt=""
                     onLoad={() => setLoaded(true)}
                     onError={() => setErrored(true)}

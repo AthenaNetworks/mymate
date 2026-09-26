@@ -5,6 +5,9 @@ namespace Tests\Feature;
 use App\Actions\Devices\FetchMikrotikIcon;
 use App\Jobs\FetchDeviceIconJob;
 use App\Models\Device;
+use App\Models\DeviceMapPosition;
+use App\Models\Map;
+use App\Models\MapShare;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -78,5 +81,45 @@ class DeviceIconTest extends TestCase
         $this->get("/api/devices/{$device->id}/icon")->assertNotFound();
 
         Queue::assertNothingPushed();
+    }
+
+    public function test_icon_by_model_serves_one_shared_url(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('device-icons/mikrotik/hap_ac2.webp', 'IMG');
+        $this->actingAsUser();
+        Device::factory()->count(3)->create(['vendor' => 'MikroTik', 'model' => 'hAP ac²']);
+
+        $res = $this->get('/api/device-icons?model='.urlencode('hAP ac²'));
+
+        $res->assertOk();
+        $this->assertStringContainsString('max-age', (string) $res->headers->get('cache-control'));
+    }
+
+    public function test_icon_by_model_wont_fetch_a_model_nobody_has(): void
+    {
+        Queue::fake();
+        $this->actingAsUser();
+
+        $this->get('/api/device-icons?model=made-up-thing')->assertNotFound();
+        $this->get('/api/device-icons')->assertNotFound();
+
+        Queue::assertNothingPushed();
+    }
+
+    public function test_wallboard_icon_by_model_only_covers_the_shared_map(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('device-icons/mikrotik/rb5009.webp', 'IMG');
+        Storage::disk('local')->put('device-icons/mikrotik/ccr2004.webp', 'IMG');
+        $map = Map::create(['name' => 'NOC']);
+        $on = Device::factory()->create(['vendor' => 'MikroTik', 'model' => 'RB5009']);
+        DeviceMapPosition::create(['map_id' => $map->id, 'device_id' => $on->id, 'x' => 0, 'y' => 0]);
+        Device::factory()->create(['vendor' => 'MikroTik', 'model' => 'CCR2004']); // on no shared map
+        $token = MapShare::create(['map_id' => $map->id, 'token' => MapShare::newToken(), 'enabled' => true])->token;
+
+        $this->get("/api/public/wall/{$token}/device-icons?model=RB5009")->assertOk();
+        $this->get("/api/public/wall/{$token}/device-icons?model=CCR2004")->assertNotFound();
+        $this->get('/api/public/wall/deadbeefdeadbeef/device-icons?model=RB5009')->assertNotFound();
     }
 }

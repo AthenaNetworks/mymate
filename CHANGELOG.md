@@ -246,6 +246,13 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **No traffic spike when a switch's 64-bit counters drop out for a poll.** A v2c device that briefly
+  stopped answering the 64-bit octet counters fell back to the 32-bit ones, and the tick they came back
+  compared a 32-bit reading against a 64-bit one and drew a spike of tens of Gbps. The poller now
+  remembers which width it read last and skips the rate for that one tick.
+- **Large maps load device photos once per model, not once per device.** A map with 500 of the same
+  MikroTik made 500 separate photo requests; they now share one cached image per model (the wallboard
+  too). Opening a map with many cross-map links also no longer runs two database queries per link.
 - **Large fleets: maps no longer download every link, and the geo map loads fast (GitHub #22).** The
   map, geo map and device panel used to fetch every link in the install with its interface data, which
   at 25k devices is the next payload that falls over after the device list. They now ask only for the

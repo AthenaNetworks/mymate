@@ -12,6 +12,7 @@ use App\Support\DeviceGeo;
 use App\Support\MapDetail;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * Public, unauthenticated wallboard endpoints (GitHub #15). Every action is gated only by the
@@ -127,6 +128,21 @@ class PublicWallController extends Controller
     {
         $share = $this->share($token);
         abort_unless($share->map->positions()->where('device_id', $device->id)->exists(), 404);
+
+        return app(DeviceIconController::class)->show($device, $icons);
+    }
+
+    /** A model's photo for this wallboard: only for a model some device on the shared map has. */
+    public function iconByModel(Request $request, string $token, FetchMikrotikIcon $icons)
+    {
+        $share = $this->share($token);
+        $model = (string) $request->query('model', '');
+        abort_if($model === '' || mb_strlen($model) > 100, 404);
+
+        $device = Device::whereIn('id', $share->map->positions()->select('device_id'))
+            ->where('model', $model)->where('vendor', 'ilike', '%mikrotik%')
+            ->first(['id', 'vendor', 'model']);
+        abort_if($device === null, 404);
 
         return app(DeviceIconController::class)->show($device, $icons);
     }
