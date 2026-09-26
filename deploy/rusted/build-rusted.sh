@@ -11,8 +11,10 @@
 set -euo pipefail
 
 REPO="${RUSTED_REPO:-https://github.com/JoshFinlayAU/rusted.git}"
-REF="${RUSTED_REF:-main}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Pinned rusted release (deploy/rusted/VERSION), shared with the Dockerfile so the .deb, LXC
+# and Docker image all bundle the same engine. Override with RUSTED_REF to test a branch.
+REF="${RUSTED_REF:-$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION")}"
 OUT="${OUT:-$SCRIPT_DIR/vendor/rusted}"
 
 say() { printf '\033[36m==>\033[0m %s\n' "$*"; }
@@ -23,8 +25,8 @@ command -v git >/dev/null 2>&1 || { echo "error: git not found." >&2; exit 1; }
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 
 say "Cloning rusted ($REF)"
-git clone --depth 1 --branch "$REF" "$REPO" "$WORK/rusted" 2>/dev/null \
-    || git clone --depth 1 "$REPO" "$WORK/rusted"
+# No fallback to main: a bad pin should fail the build, not silently ship a different engine.
+git clone --depth 1 --branch "$REF" "$REPO" "$WORK/rusted"
 
 say "Building (Go auto-fetches the toolchain if needed)"
 ( cd "$WORK/rusted" && CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o "$WORK/rusted-bin" ./cmd/rusted )

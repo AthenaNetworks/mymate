@@ -29,8 +29,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # --- 2b. rusted backup engine (Go; the 1.26 toolchain is auto-fetched) --------
 FROM golang:1.24-bookworm AS rusted
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && git clone --depth 1 https://github.com/JoshFinlayAU/rusted.git /src
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+# Clone the pinned rusted release (deploy/rusted/VERSION, shared with build-rusted.sh). COPYing
+# the pin first makes it part of the layer cache key: a bumped version rebuilds, an unchanged one
+# reuses correctly. Cloning a moving `main` here let the build cache silently ship a stale engine
+# in every 1.7.x image - the MikroTik empty-config fix never made it into them (GitHub #41).
+COPY deploy/rusted/VERSION /rusted-version
+RUN git clone --depth 1 --branch "$(tr -d '[:space:]' < /rusted-version)" https://github.com/JoshFinlayAU/rusted.git /src
 WORKDIR /src
 RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
 

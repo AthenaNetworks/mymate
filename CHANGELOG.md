@@ -27,6 +27,12 @@ of commit subjects.
   history), and warns you when it has child devices, which survive with no parent.
 
 ### Fixed
+- **Docker images now bundle the intended backup engine (GitHub #41).** The image cloned rusted's moving
+  `main` in a cached build layer, so every 1.7.x Docker image silently shipped an old engine without
+  the MikroTik exec-channel fix, and MikroTik backups kept failing with "captured empty configuration"
+  on Docker even though the .deb/LXC were fine. The Docker build and `build-rusted.sh` now clone one
+  pinned rusted release (`deploy/rusted/VERSION`), so all three packages bundle the same engine and
+  bumping the pin always rebuilds it. (1.8.0's image happened to pick up a fresh clone and is unaffected.)
 - **Site markers on the geo map no longer time out on a large fleet (GitHub #47).** `devices.site_id`
   was a constrained foreign key with no index, and Postgres does not index those for you, so the
   per-site device and down counts behind `GET /api/sites` scanned the whole devices table once per
