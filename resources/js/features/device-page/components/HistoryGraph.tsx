@@ -7,7 +7,9 @@ import { downloadGraphCsv, downloadGraphPng } from '../../graphs/lib/exportGraph
 import { useHistory, type HistoryParams, type HistoryResult } from '../api/devicePage';
 import { isMirrored, type GraphSpec } from '../lib/specs';
 import type { GraphRange } from '../lib/range';
-import { ChartLegend, TimeChart, type ChartLine, type ChartRefLine } from './TimeChart';
+import { fmtStamp } from '../lib/format';
+import { pushToast } from '../../../lib/toast';
+import { ChartLegend, chartLegendRows, TimeChart, type ChartLine, type ChartRefLine } from './TimeChart';
 import type { GraphData } from '../../../types';
 
 const NO_REFS: ChartRefLine[] = [];
@@ -139,6 +141,17 @@ export function HistoryGraph({
         downloadGraphCsv(gd, name);
     }
 
+    // title, chart and the stats legend all in the one image, the svg alone is just the lines
+    function exportPng() {
+        if (!svgRef.current) return;
+        const subtitle = [fileBase, `${fmtStamp(range.from * 1000)} to ${fmtStamp(range.to * 1000)}`].filter(Boolean).join(', ');
+        void downloadGraphPng(svgRef.current, name, 2, {
+            title: spec.title,
+            subtitle,
+            legend: lines.length > 0 ? chartLegendRows(lines, unit) : null,
+        }).catch(() => pushToast({ title: "Couldn't export the image", tone: 'down' }));
+    }
+
     const body = compact ? (
         <TimeChart times={times} stepMs={(data?.step ?? 60) * 1000} lines={lines} unit={unit} domain={[range.from * 1000, range.to * 1000]} height={height ?? 56} compact loading={main.isLoading && inView} />
     ) : (
@@ -177,7 +190,7 @@ export function HistoryGraph({
                 </button>
                 <button
                     type="button"
-                    onClick={() => svgRef.current && void downloadGraphPng(svgRef.current, name)}
+                    onClick={exportPng}
                     disabled={!data}
                     title="Download PNG"
                     className="rounded-md p-1 text-white/35 transition-colors hover:bg-white/5 hover:text-white/80 disabled:opacity-30"
