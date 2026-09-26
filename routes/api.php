@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\LibreNmsImportController;
 use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
+use App\Http\Controllers\Api\MapBackgroundController;
 use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
@@ -44,10 +45,12 @@ use App\Http\Controllers\Api\TraceController;
 use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserGroupController;
+use App\Http\Controllers\Api\WallEmbedSettingController;
 use App\Http\Middleware\EnsurePasskeyVerified;
 use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 // --- Public ---------------------------------------------------------------
 // Ops health probe (DB + Redis) - 200 healthy / 503 degraded. Stays
@@ -61,13 +64,18 @@ Route::post('contact', [ContactController::class, 'store'])->middleware('throttl
 // Public wallboard (GitHub #15): an unguessable per-map share token grants a read-only,
 // no-login view of one map. Token-gated, read-only, and rate-limited. The payload is a
 // whitelist - no addresses or credentials cross this boundary (see PublicWallController).
-Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
+// No Sanctum stateful layer here: these never need a session, and inside a third-party iframe the
+// browser won't send the (SameSite=lax) session cookie anyway, so each 5s poll would otherwise
+// mint a fresh throwaway session in Redis.
+Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAreStateful::class)
+    ->prefix('public/wall/{token}')
     ->where(['token' => '[A-Za-z0-9]+'])->group(function (): void {
         Route::get('map', [PublicWallController::class, 'map'])->name('public.wall.map');
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
         Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
         Route::get('map-config', [PublicWallController::class, 'mapConfig'])->name('public.wall.map-config');
+        Route::get('background', [PublicWallController::class, 'background'])->name('public.wall.background');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
@@ -94,6 +102,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::middleware('admin')->group(function (): void {
         Route::get('settings/security', [SecuritySettingController::class, 'show'])->name('settings.security.show');
         Route::put('settings/security', [SecuritySettingController::class, 'update'])->name('settings.security.update');
+        // Origins allowed to embed the public wallboard in an iframe (GitHub #15).
+        Route::get('settings/wall-embed', [WallEmbedSettingController::class, 'show'])->name('settings.wall-embed.show');
+        Route::put('settings/wall-embed', [WallEmbedSettingController::class, 'update'])->name('settings.wall-embed.update');
     });
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).
@@ -295,6 +306,16 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::post('maps/{map}/shares', [MapShareController::class, 'store'])->name('maps.shares.store');
     Route::patch('maps/{map}/shares/{share}', [MapShareController::class, 'update'])->name('maps.shares.update');
     Route::delete('maps/{map}/shares/{share}', [MapShareController::class, 'destroy'])->name('maps.shares.destroy');
+    // Custom background image per map (GitHub #37). Viewing follows map visibility ({map} binding
+    // runs through the Map global scope, so an out-of-scope map 404s); changing it is admin-only.
+    Route::get('maps/{map}/background', [MapBackgroundController::class, 'show'])->name('maps.background.show');
+    Route::get('maps/{map}/background/image', [MapBackgroundController::class, 'image'])->name('maps.background.image');
+    Route::middleware('admin')->group(function (): void {
+        Route::post('maps/{map}/background', [MapBackgroundController::class, 'store'])
+            ->middleware('throttle:20,1')->name('maps.background.store');
+        Route::patch('maps/{map}/background', [MapBackgroundController::class, 'update'])->name('maps.background.update');
+        Route::delete('maps/{map}/background', [MapBackgroundController::class, 'destroy'])->name('maps.background.destroy');
+    });
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');

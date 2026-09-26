@@ -7,6 +7,7 @@ import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
 import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
 import { SensorsSection } from './SensorsSection';
+import { WallEmbedSection } from './WallEmbedSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
@@ -1932,7 +1933,7 @@ interface Tab {
 // keep just their account, the rosters and the API keys.
 const TABS: Tab[] = [
     { id: 'account', label: 'Account', icon: LockKey, render: () => <TwoCol><AccountSection /><PasskeysSection /><ApiKeysSection /></TwoCol> },
-    { id: 'security', label: 'Security', icon: ShieldCheck, adminOnly: true, render: () => <SecuritySection /> },
+    { id: 'security', label: 'Security', icon: ShieldCheck, adminOnly: true, render: () => <TwoCol><SecuritySection /><WallEmbedSection /></TwoCol> },
     { id: 'engine', label: 'Engine', icon: GearSix, adminOnly: true, render: () => <EngineSettings /> },
     { id: 'mail', label: 'Mail', icon: Envelope, adminOnly: true, render: () => <MailServerSection /> },
     { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },

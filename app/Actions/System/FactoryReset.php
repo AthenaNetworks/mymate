@@ -2,10 +2,12 @@
 
 namespace App\Actions\System;
 
+use App\Http\Controllers\Api\MapBackgroundController;
 use App\Models\Map;
 use App\Models\User;
 use App\Support\EngineLog;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * Wipe every scrap of monitoring data - devices, interfaces, links, maps, credentials,
@@ -62,6 +64,9 @@ class FactoryReset
             // reset must leave a usable blank default rather than zero maps.
             Map::create(['name' => 'Main', 'is_default' => true, 'position' => 0]);
         });
+
+        // Map background images (GitHub #37) live on disk, not in the tables above.
+        Storage::disk('local')->deleteDirectory(MapBackgroundController::DIR);
 
         EngineLog::warning('factory reset: all monitoring data cleared, admin accounts retained');
     }

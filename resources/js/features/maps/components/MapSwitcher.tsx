@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretDown, DownloadSimple, GlobeHemisphereWest, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
+import { CaretDown, DownloadSimple, GlobeHemisphereWest, ImageSquare, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import { PromptDialog, ConfirmDialog } from '../../../components/Dialog';
 import { ShareWallboardDialog } from './ShareWallboardDialog';
+import { setBackgroundEditorOpen } from '../api/background';
 import type { NetworkMap } from '../../../types';
 
 type MapDialog = { mode: 'create' } | { mode: 'rename'; id: number; current: string } | { mode: 'delete'; id: number; name: string };
@@ -178,6 +179,13 @@ export function MapSwitcher() {
                                         className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
                                     >
                                         <ShareNetwork weight="bold" className="h-3.5 w-3.5 text-emerald-300" /> Share wallboard
+                                    </button>
+                                    <button
+                                        disabled={!active}
+                                        onClick={() => { setBackgroundEditorOpen(true); setOpen(false); }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                    >
+                                        <ImageSquare weight="bold" className="h-3.5 w-3.5" /> Background image
                                     </button>
                                     <button
                                         disabled={!active || exportMap.isPending}

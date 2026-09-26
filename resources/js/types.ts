@@ -374,6 +374,21 @@ export interface MapDetail {
     child_device_links: ChildDeviceLink[];
     map_links: MapLink[];
     map_notes: MapNote[];
+    // Only on the public wallboard payload (GitHub #37). The logged-in canvas reads the background
+    // from its own endpoint instead, so editing it never touches this object.
+    background?: MapBackground | null;
+}
+
+/** A map's custom background image and where it sits on the canvas, in flow coordinates (GitHub #37). */
+export interface MapBackground {
+    version: string; // changes on every upload; part of the image URL
+    mime: string;
+    width: number; // natural size, px
+    height: number;
+    x: number;
+    y: number;
+    scale: number;
+    opacity: number; // 0..1
 }
 
 // Alerting.

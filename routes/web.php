@@ -1,7 +1,12 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\RouterosPackageDownloadController;
+use App\Models\MapShare;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 // Auth - on the web group so the session + CSRF are always
 // present (the SPA fetches /sanctum/csrf-cookie first). Login is rate-limited.
@@ -11,7 +16,7 @@ Route::post('logout', [AuthController::class, 'logout'])->name('logout');
 // RouterOS package download for routers (/tool/fetch). Unauthenticated by necessity - a
 // router carries no session - but gated by the package's unguessable token. Must be declared
 // before the SPA catch-all below.
-Route::get('/rospkg/{token}', \App\Http\Controllers\RouterosPackageDownloadController::class)
+Route::get('/rospkg/{token}', RouterosPackageDownloadController::class)
     ->where('token', '[A-Za-z0-9]+')->name('routeros.package.download');
 
 // The SPA shell must NOT be cached: it references hashed build assets + injects the
@@ -26,12 +31,16 @@ Route::get('/', $shell);
 // loading a broken app; the map id + token are handed to the shell via meta tags. Declared
 // before the SPA catch-all. The data still comes from the token-gated /api/public/wall endpoints.
 Route::get('/wall/{token}', function (string $token) {
-    $share = \App\Models\MapShare::where('token', $token)->where('enabled', true)->with('map')->first();
+    $share = MapShare::where('token', $token)->where('enabled', true)->with('map')->first();
     abort_if($share === null || $share->map === null, 404);
 
     return response(view('app', ['wallToken' => $token, 'wallMapId' => $share->map->id]))
         ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
-})->where('token', '[A-Za-z0-9]+')->name('wall.show');
+})->where('token', '[A-Za-z0-9]+')->name('wall.show')
+    // Anonymous and read-only: no session, no CSRF cookie. It can be embedded in a third-party
+    // iframe (SecurityHeaders), where the browser won't store a SameSite=lax cookie anyway, so
+    // starting one would only leave a dead session behind on every load.
+    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class]);
 
 // Public API reference (Scalar). Surfaced only on the sales/demo instance - a real monitoring
 // instance 404s both the page and the spec. The spec lives outside public/ and is streamed here
