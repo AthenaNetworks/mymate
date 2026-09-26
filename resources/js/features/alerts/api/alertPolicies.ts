@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
-import type { AlertConditionType, AlertPolicy, AlertScope } from '../../../types';
+import type { AlertConditionType, AlertPolicy, AlertPolicyParams, AlertScope } from '../../../types';
 
 const policiesKey = ['alert-policies'] as const;
 
@@ -18,12 +18,7 @@ export interface AlertPolicyInput {
     id?: number;
     name: string;
     condition: AlertConditionType;
-    params?: {
-        threshold?: number;
-        duration_minutes?: number;
-        suppress_dependent?: boolean;
-        metric?: 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
-    };
+    params?: AlertPolicyParams;
     scope?: AlertScope;
     enabled?: boolean;
     transport_ids?: number[];

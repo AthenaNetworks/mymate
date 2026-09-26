@@ -6,7 +6,7 @@ export function deviceInterfaceKeys(deviceId: number) {
     return ['devices', deviceId, 'interfaces'] as const;
 }
 
-async function fetchDeviceInterfaces(deviceId: number): Promise<NetworkInterface[]> {
+export async function fetchDeviceInterfaces(deviceId: number): Promise<NetworkInterface[]> {
     const { data } = await apiClient.get<{ data: NetworkInterface[] }>(`/devices/${deviceId}/interfaces`);
     return data.data;
 }
