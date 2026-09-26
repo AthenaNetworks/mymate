@@ -75,6 +75,66 @@ class AlertApiTest extends TestCase
         $this->assertSame(75, (int) $res->json('data.params.threshold'));
     }
 
+    public function test_interface_down_policy_persists_its_interface_filter(): void
+    {
+        $this->actingAsUser();
+
+        $res = $this->postJson('/api/alert-policies', [
+            'name' => 'Uplinks only', 'condition' => 'interface_down',
+            'params' => ['duration_minutes' => 2, 'interfaces' => ['mode' => 'match', 'match' => 'sfp*, ether1']],
+        ])->assertCreated()
+            ->assertJsonPath('data.params.interfaces.mode', 'match')
+            ->assertJsonPath('data.params.interfaces.match', 'sfp*, ether1')
+            ->assertJsonPath('data.params.duration_minutes', 2);
+
+        $iface = \App\Models\NetworkInterface::factory()->create();
+        $this->putJson('/api/alert-policies/'.$res->json('data.id'), [
+            'params' => ['interfaces' => ['mode' => 'selected', 'interface_ids' => [$iface->id]]],
+        ])->assertOk()->assertJsonPath('data.params.interfaces.interface_ids', [$iface->id]);
+    }
+
+    public function test_interface_filter_needs_a_pattern_or_a_pick_for_those_modes(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Bad', 'condition' => 'interface_down', 'params' => ['interfaces' => ['mode' => 'match']],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.interfaces.match');
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Bad', 'condition' => 'interface_down', 'params' => ['interfaces' => ['mode' => 'selected']],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.interfaces.interface_ids');
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Bad', 'condition' => 'interface_down', 'params' => ['interfaces' => ['mode' => 'selected', 'interface_ids' => [999999]]],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.interfaces.interface_ids.0');
+    }
+
+    public function test_per_interface_low_throughput_refuses_to_watch_every_port(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Every port', 'condition' => 'low_throughput',
+            'params' => ['threshold' => 1, 'target' => 'interfaces'],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.interfaces.mode');
+
+        $res = $this->postJson('/api/alert-policies', [
+            'name' => 'VLANs', 'condition' => 'low_throughput',
+            'params' => ['threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'match', 'match' => 'vlan*']],
+        ])->assertCreated()->assertJsonPath('data.params.target', 'interfaces');
+
+        // Same guard on update, where the condition comes from the stored policy.
+        $this->putJson('/api/alert-policies/'.$res->json('data.id'), [
+            'params' => ['threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'all']],
+        ])->assertStatus(422)->assertJsonValidationErrors('params.interfaces.mode');
+
+        // The link target (the original behaviour) doesn't need a filter at all.
+        $this->postJson('/api/alert-policies', [
+            'name' => 'Links', 'condition' => 'low_throughput', 'params' => ['threshold' => 1],
+        ])->assertCreated();
+    }
+
     public function test_backup_failed_policy_is_accepted(): void
     {
         $this->actingAsUser();

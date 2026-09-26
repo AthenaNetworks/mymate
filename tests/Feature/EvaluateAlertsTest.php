@@ -747,4 +747,270 @@ class EvaluateAlertsTest extends TestCase
         // The off-map device is not covered by any scoped policy, so the fleet-wide one still fires.
         $this->assertDatabaseHas('alert_events', ['alert_policy_id' => $global->id, 'dedupe_key' => "device:{$offMap->id}", 'status' => 'firing']);
     }
+
+    /** An up device with a few down ports, one of them the end of a map link. */
+    private function deviceWithDownPorts(): array
+    {
+        $device = Device::factory()->create(['status' => DeviceStatus::Up]);
+        $uplink = NetworkInterface::factory()->for($device)->create(['name' => 'sfp-sfpplus1', 'oper_status' => 'down']);
+        $access = NetworkInterface::factory()->for($device)->create(['name' => 'ether7', 'oper_status' => 'down']);
+        $commented = NetworkInterface::factory()->for($device)->create(['name' => 'ether8', 'description' => 'Customer UPLINK', 'oper_status' => 'down']);
+
+        $far = Device::factory()->create();
+        Link::create([
+            'a_device_id' => $device->id, 'a_interface_id' => $uplink->id,
+            'b_device_id' => $far->id, 'b_interface_id' => NetworkInterface::factory()->for($far)->create()->id,
+        ]);
+
+        return [$device, $uplink, $access, $commented];
+    }
+
+    /** @return list<string> */
+    private function firingKeys(): array
+    {
+        return AlertEvent::where('status', 'firing')->orderBy('dedupe_key')->pluck('dedupe_key')->all();
+    }
+
+    public function test_interface_down_with_no_filter_still_watches_every_port(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::InterfaceDown, ['interfaces' => ['mode' => 'all']]);
+        $this->deviceWithDownPorts();
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertCount(3, $this->firingKeys());
+    }
+
+    public function test_interface_down_can_be_limited_to_linked_interfaces(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::InterfaceDown, ['interfaces' => ['mode' => 'linked']]);
+        [$device, $uplink] = $this->deviceWithDownPorts();
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(["device:{$device->id}:iface:{$uplink->id}"], $this->firingKeys());
+    }
+
+    public function test_interface_down_can_match_names_and_descriptions_by_glob(): void
+    {
+        Http::fake();
+        // "SFP*" matches the uplink by name (case-insensitive), "*uplink*" the commented port.
+        $this->policyWithSlack(AlertCondition::InterfaceDown, ['interfaces' => ['mode' => 'match', 'match' => 'SFP*, *uplink*']]);
+        [$device, $uplink, , $commented] = $this->deviceWithDownPorts();
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertEqualsCanonicalizing([
+            "device:{$device->id}:iface:{$uplink->id}",
+            "device:{$device->id}:iface:{$commented->id}",
+        ], $this->firingKeys());
+    }
+
+    public function test_an_interface_glob_is_literal_apart_from_its_wildcards(): void
+    {
+        Http::fake();
+        // "." must not act as a regex wildcard, and a blank pattern matches nothing.
+        $this->policyWithSlack(AlertCondition::InterfaceDown, ['interfaces' => ['mode' => 'match', 'match' => 'ether.']]);
+        $this->policyWithSlack(AlertCondition::InterfaceDown, ['interfaces' => ['mode' => 'match', 'match' => ' , ']]);
+        $this->deviceWithDownPorts();
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame([], $this->firingKeys());
+    }
+
+    public function test_interface_down_can_watch_hand_picked_interfaces(): void
+    {
+        Http::fake();
+        $device = Device::factory()->create(['status' => DeviceStatus::Up]);
+        $picked = NetworkInterface::factory()->for($device)->create(['oper_status' => 'down']);
+        NetworkInterface::factory()->for($device)->create(['oper_status' => 'down']);
+        $this->policyWithSlack(
+            AlertCondition::InterfaceDown,
+            ['interfaces' => ['mode' => 'selected', 'interface_ids' => [$picked->id]]],
+            ['type' => 'devices', 'device_ids' => [$device->id]],
+        );
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(["device:{$device->id}:iface:{$picked->id}"], $this->firingKeys());
+    }
+
+    public function test_a_scoped_uplinks_only_policy_owns_its_devices_over_the_fleet_wide_one(): void
+    {
+        Http::fake();
+        [$device, $uplink] = $this->deviceWithDownPorts();
+        $global = $this->policyWithSlack(AlertCondition::InterfaceDown);
+        $scoped = $this->policyWithSlack(
+            AlertCondition::InterfaceDown,
+            ['interfaces' => ['mode' => 'linked']],
+            ['type' => 'devices', 'device_ids' => [$device->id]],
+        );
+
+        app(EvaluateAlerts::class)();
+
+        // For this device the narrower policy decides, so only its uplink alerts.
+        $this->assertSame(1, AlertEvent::where('alert_policy_id', $scoped->id)->count());
+        $this->assertDatabaseHas('alert_events', ['alert_policy_id' => $scoped->id, 'dedupe_key' => "device:{$device->id}:iface:{$uplink->id}"]);
+        $this->assertSame(0, AlertEvent::where('alert_policy_id', $global->id)->count());
+    }
+
+    public function test_low_throughput_can_watch_a_vlan_interface_that_is_not_on_a_link(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::LowThroughput, [
+            'threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'match', 'match' => 'vlan*'],
+        ]);
+        $device = Device::factory()->create(['name' => 'BNG1', 'status' => DeviceStatus::Up]);
+        $vlan = NetworkInterface::factory()->for($device)->create(['name' => 'vlan90', 'bps_in' => 300_000, 'bps_out' => 100_000]);
+        // Busy VLAN and an idle non-VLAN port - neither should fire.
+        NetworkInterface::factory()->for($device)->create(['name' => 'vlan91', 'bps_in' => 50_000_000, 'bps_out' => 0]);
+        NetworkInterface::factory()->for($device)->create(['name' => 'ether3', 'bps_in' => 0, 'bps_out' => 0]);
+        // No reading yet - can't be judged.
+        NetworkInterface::factory()->for($device)->create(['name' => 'vlan92', 'bps_in' => null, 'bps_out' => null]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(["device:{$device->id}:iface:{$vlan->id}:low"], $this->firingKeys());
+        $this->assertStringContainsString('vlan90', AlertEvent::firstOrFail()->message);
+        Http::assertSentCount(1);
+
+        $vlan->update(['bps_in' => 8_000_000]); // traffic's back
+        app(EvaluateAlerts::class)();
+        $this->assertSame([], $this->firingKeys());
+    }
+
+    public function test_per_interface_low_throughput_skips_a_down_device_and_never_watches_every_port(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::LowThroughput, [
+            'threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'match', 'match' => 'vlan*'],
+        ]);
+        // Bypasses validation on purpose - the evaluator must still refuse to page for every port.
+        $this->policyWithSlack(AlertCondition::LowThroughput, ['threshold' => 1, 'target' => 'interfaces']);
+        $down = Device::factory()->create(['status' => DeviceStatus::Down]);
+        NetworkInterface::factory()->for($down)->create(['name' => 'vlan90', 'bps_in' => 0, 'bps_out' => 0]);
+        $up = Device::factory()->create(['status' => DeviceStatus::Up]);
+        NetworkInterface::factory()->for($up)->create(['name' => 'ether1', 'bps_in' => 0, 'bps_out' => 0]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(0, AlertEvent::count());
+    }
+
+    public function test_a_scoped_link_low_throughput_policy_does_not_swallow_a_fleet_wide_vlan_one(): void
+    {
+        Http::fake();
+        $device = Device::factory()->create(['status' => DeviceStatus::Up]);
+        NetworkInterface::factory()->for($device)->create(['name' => 'vlan90', 'bps_in' => 0, 'bps_out' => 0]);
+        $vlanPolicy = $this->policyWithSlack(AlertCondition::LowThroughput, [
+            'threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'match', 'match' => 'vlan*'],
+        ]);
+        // Claims the same device, but for links - a different thing to watch.
+        $this->policyWithSlack(AlertCondition::LowThroughput, ['threshold' => 1], ['type' => 'devices', 'device_ids' => [$device->id]]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame(1, AlertEvent::where('alert_policy_id', $vlanPolicy->id)->where('status', 'firing')->count());
+    }
+
+    /**
+     * Every condition the UI offers "Sustained for" on must actually hold its breach as
+     * pending until the window passes (GitHub #22 - a flapping port shouldn't page).
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function sustainableConditions(): array
+    {
+        return [
+            'interface_down' => ['interface_down'],
+            'low_throughput link' => ['low_throughput'],
+            'low_throughput interface' => ['low_throughput_iface'],
+            'high_util' => ['high_util'],
+            'high_metric' => ['high_metric'],
+            'probe_down' => ['probe_down'],
+            'probe_slow' => ['probe_slow'],
+            'agent_down' => ['agent_down'],
+            'device_down' => ['device_down'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('sustainableConditions')]
+    public function test_sustained_for_holds_every_condition_until_the_window_passes(string $case): void
+    {
+        Http::fake();
+        [$condition, $params] = match ($case) {
+            'low_throughput' => [AlertCondition::LowThroughput, ['threshold' => 1]],
+            'low_throughput_iface' => [AlertCondition::LowThroughput, ['threshold' => 1, 'target' => 'interfaces', 'interfaces' => ['mode' => 'match', 'match' => 'vlan*']]],
+            'high_util' => [AlertCondition::HighUtil, ['threshold' => 90]],
+            'high_metric' => [AlertCondition::HighMetric, ['metric' => 'cpu', 'threshold' => 90]],
+            'probe_slow' => [AlertCondition::ProbeSlow, ['threshold' => 1000]],
+            default => [AlertCondition::from($case), []],
+        };
+        $this->policyWithSlack($condition, $params + ['duration_minutes' => 5]);
+
+        // A blip that clears inside the window never notifies.
+        $clear = $this->breachFor($case);
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::where('status', 'pending')->count(), 'breach should start pending');
+        $clear();
+        app(EvaluateAlerts::class)();
+        $this->assertSame(0, AlertEvent::count());
+        Http::assertNothingSent();
+
+        // One that holds past the window fires, once.
+        $this->breachFor($case);
+        app(EvaluateAlerts::class)();
+        $this->assertSame(0, AlertEvent::where('status', 'firing')->count());
+        AlertEvent::query()->update(['breach_started_at' => now()->subMinutes(6)]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::where('status', 'firing')->count());
+        Http::assertSentCount(1);
+    }
+
+    /** Set up a fresh breach for one of the sustainableConditions() cases; returns a closure that clears it. */
+    private function breachFor(string $case): \Closure
+    {
+        switch ($case) {
+            case 'interface_down':
+                $d = Device::factory()->create(['status' => DeviceStatus::Up]);
+                $p = NetworkInterface::factory()->for($d)->create(['oper_status' => 'down']);
+
+                return fn () => $p->update(['oper_status' => 'up']);
+            case 'low_throughput':
+                $l = $this->linkAtBps(100_000);
+
+                return fn () => $l->aInterface->update(['bps_out' => 50_000_000]);
+            case 'low_throughput_iface':
+                $d = Device::factory()->create(['status' => DeviceStatus::Up]);
+                $v = NetworkInterface::factory()->for($d)->create(['name' => 'vlan5', 'bps_in' => 0, 'bps_out' => 0]);
+
+                return fn () => $v->update(['bps_in' => 50_000_000]);
+            case 'high_util':
+                $l = $this->linkAtBps(950_000_000);
+
+                return fn () => $l->aInterface->update(['bps_out' => 1_000]);
+            case 'high_metric':
+                $d = Device::factory()->create(['cpu_pct' => 99, 'metrics_at' => now()]);
+
+                return fn () => $d->update(['cpu_pct' => 5]);
+            case 'probe_down':
+            case 'probe_slow':
+                $pr = \App\Models\Probe::factory()->create($case === 'probe_down'
+                    ? ['status' => DeviceStatus::Down]
+                    : ['status' => DeviceStatus::Up, 'latency_ms' => 5000]);
+
+                return fn () => $pr->forceFill(['status' => DeviceStatus::Up, 'latency_ms' => 5])->save();
+            case 'agent_down':
+                $a = Agent::factory()->create(['status' => AgentStatus::Offline, 'last_seen_at' => now()->subMinutes(5)]);
+
+                return fn () => $a->forceFill(['status' => AgentStatus::Online, 'last_seen_at' => now()])->save();
+            default: // device_down
+                $d = Device::factory()->create(['status' => DeviceStatus::Down]);
+
+                return fn () => $d->update(['status' => DeviceStatus::Up]);
+        }
+    }
 }

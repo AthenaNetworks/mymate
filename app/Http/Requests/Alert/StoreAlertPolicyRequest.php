@@ -9,6 +9,8 @@ use Illuminate\Validation\Rule;
 
 class StoreAlertPolicyRequest extends FormRequest
 {
+    use ValidatesInterfaceTargeting;
+
     public function authorize(): bool
     {
         return $this->user() !== null; // authenticated operators only
@@ -26,10 +28,12 @@ class StoreAlertPolicyRequest extends FormRequest
             'params.threshold' => ['nullable', 'numeric', 'min:0', 'max:10000'],
             // Which device metric high_metric watches.
             'params.metric' => ['nullable', Rule::in(['cpu', 'mem', 'temp', 'latency', 'loss'])],
-            // Sustained-duration gate (high_util / high_metric / device_down), in minutes. 0 = instant.
+            // Sustained-duration gate, honoured by every condition, in minutes. 0 = instant.
             'params.duration_minutes' => ['nullable', 'integer', 'min:0', 'max:1440'],
             // Dependency-aware suppression for device_down. Default true.
             'params.suppress_dependent' => ['nullable', 'boolean'],
+            // Which interfaces interface_down / per-interface low_throughput watch.
+            ...$this->interfaceTargetingRules(),
             // Targeting - limit the policy to a device subset. null/all = fleet-wide.
             'scope' => ['nullable', 'array'],
             'scope.type' => ['nullable', Rule::in(['all', 'device_type', 'map', 'devices'])],
