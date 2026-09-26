@@ -67,6 +67,7 @@ Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
         Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
+        Route::get('map-config', [PublicWallController::class, 'mapConfig'])->name('public.wall.map-config');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.

@@ -13,7 +13,14 @@ use Illuminate\Support\Str;
  */
 class MapShare extends Model
 {
-    protected $fillable = ['map_id', 'token', 'label', 'enabled', 'last_viewed_at'];
+    /** What a share can show (GitHub #37): the logical diagram, the geo map, or both with a switcher. */
+    public const VIEWS = ['logical', 'geo', 'both'];
+
+    protected $fillable = ['map_id', 'token', 'label', 'view', 'enabled', 'last_viewed_at'];
+
+    protected $attributes = [
+        'view' => 'logical',
+    ];
 
     protected $casts = [
         'enabled' => 'boolean',
@@ -23,6 +30,15 @@ class MapShare extends Model
     public function map(): BelongsTo
     {
         return $this->belongsTo(Map::class);
+    }
+
+    /**
+     * Whether this share may show the geo map. Coordinates only ever leave through a share that
+     * says so - a logical-only link hands out exactly what it did before geo sharing existed.
+     */
+    public function showsGeo(): bool
+    {
+        return in_array($this->view, ['geo', 'both'], true);
     }
 
     /** A fresh URL-safe token (256 bits of entropy, ~43 chars). */

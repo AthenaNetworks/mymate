@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { wallToken } from '../../../lib/wall';
 import type { Device, Link, MapDetail } from '../../../types';
+import type { MapConfig } from '../../geo/api/geo';
 
 // Dedicated client for the public wallboard (GitHub #15). Unlike the authenticated apiClient it
 // sends NO credentials and NO CSRF token - the share token in the path is the only capability,
@@ -25,16 +26,48 @@ export const wallKeys = {
     map: ['wall', 'map'] as const,
     devices: ['wall', 'devices'] as const,
     links: ['wall', 'links'] as const,
+    mapConfig: ['wall', 'map-config'] as const,
 };
 
-export function useWallMap() {
+/** What a share shows (GitHub #37): the logical diagram, the geo map, or both with a switcher. */
+export type WallView = 'logical' | 'geo' | 'both';
+
+type WallMapResponse = { map: MapDetail; view: WallView };
+
+// One poll feeds both hooks below (same key), each picking its half with `select`.
+function useWallMapQuery<T>(select: (r: WallMapResponse) => T) {
     return useQuery({
         queryKey: wallKeys.map,
-        queryFn: async (): Promise<MapDetail> => {
-            const { data } = await wallClient.get<{ data: MapDetail }>(`${base()}/map`);
-            return data.data;
+        queryFn: async (): Promise<WallMapResponse> => {
+            const { data } = await wallClient.get<{ data: MapDetail; share?: { view?: WallView } }>(`${base()}/map`);
+            return { map: data.data, view: data.share?.view ?? 'logical' };
         },
         refetchInterval: POLL_MS,
+        select,
+    });
+}
+
+const pickMap = (r: WallMapResponse) => r.map;
+const pickView = (r: WallMapResponse) => r.view;
+
+export function useWallMap() {
+    return useWallMapQuery(pickMap);
+}
+
+export function useWallView() {
+    return useWallMapQuery(pickView);
+}
+
+/** Basemap tiles for a geo share. The server 404s it for a logical-only link, so only ask when geo. */
+export function useWallMapConfig(enabled: boolean) {
+    return useQuery({
+        queryKey: wallKeys.mapConfig,
+        queryFn: async (): Promise<MapConfig> => {
+            const { data } = await wallClient.get<{ data: MapConfig }>(`${base()}/map-config`);
+            return data.data;
+        },
+        enabled,
+        staleTime: Infinity,
     });
 }
 

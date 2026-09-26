@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Share the geo map on a public wallboard link (GitHub #37).** A wallboard link can now show the map's
+  geographic view as well as (or instead of) the logical one - pick Map, Geo or Both when you create the
+  link in Share wallboard, and change it later per link. A Both link gets a Map / Geo switcher in the page
+  header (and remembers it as #geo / #map in the URL, so a TV reloads onto the same one). It's still no
+  login and read only. A geo link hands out each device's drawn position on top of what the wallboard
+  already showed, and only for that map's devices; no addresses, credentials or anything else. Existing
+  links stay logical-only and show exactly what they did before.
 - **OSPF costs and link toggles on the geo map (GitHub #22).** A map in geographic mode now shows the same
   per-end OSPF cost badges as the logical map, using your S/M/L size and colour choice (the OSPF button
   appears on the geo map too). New Links, Bandwidth and OSPF cost toggles in the top right let you strip

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, ShareNetwork, Copy, Check, Trash, Plus, LinkSimple } from '@phosphor-icons/react';
-import { useMapShares, useCreateMapShare, useUpdateMapShare, useDeleteMapShare, type MapShareLink } from '../api/shares';
+import { useMapShares, useCreateMapShare, useUpdateMapShare, useDeleteMapShare, type MapShareLink, type MapShareView } from '../api/shares';
 import { pushToast } from '../../../lib/toast';
 
 /**
@@ -8,12 +8,20 @@ import { pushToast } from '../../../lib/toast';
  * turn it on/off, or revoke it. Admin-only (the caller only renders it for admins; the API also
  * enforces it). Anyone with a live link can view this map read-only, so it's framed as such.
  */
-export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: number; mapName: string; onClose: () => void }) {
+const VIEWS: { key: MapShareView; label: string; title: string }[] = [
+    { key: 'logical', label: 'Map', title: 'The logical map' },
+    { key: 'geo', label: 'Geo', title: 'The geographic map - shares where each device is' },
+    { key: 'both', label: 'Both', title: 'Both, with a switcher on the page' },
+];
+
+export function ShareWallboardDialog({ mapId, mapName, geoMode = false, onClose }: { mapId: number; mapName: string; geoMode?: boolean; onClose: () => void }) {
     const { data: shares, isLoading } = useMapShares(mapId);
     const create = useCreateMapShare();
     const update = useUpdateMapShare();
     const del = useDeleteMapShare();
     const [copiedId, setCopiedId] = useState<number | null>(null);
+    // What a new link shows (GitHub #37). A map in geo mode most likely wants its geo view shared.
+    const [newView, setNewView] = useState<MapShareView>(geoMode ? 'geo' : 'logical');
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -52,7 +60,8 @@ export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: numbe
 
                 <p className="mb-3 rounded-lg bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/70 ring-1 ring-amber-400/10">
                     Anyone with a live link can view this map's live status without logging in. It never allows any
-                    changes and never shows management addresses. Turn a link off or remove it to cut access.
+                    changes and never shows management addresses. A Geo or Both link also shows where each device on
+                    this map is. Turn a link off or remove it to cut access.
                 </p>
 
                 <div className="max-h-64 space-y-1.5 overflow-y-auto">
@@ -70,6 +79,16 @@ export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: numbe
                                     {s.last_viewed_at ? ` - last viewed ${new Date(s.last_viewed_at).toLocaleDateString()}` : ' - not viewed yet'}
                                 </p>
                             </div>
+                            <select
+                                value={s.view}
+                                onChange={(e) => update.mutate({ mapId, id: s.id, view: e.target.value as MapShareView })}
+                                title="What this link shows"
+                                className="shrink-0 rounded-lg bg-white/5 px-1.5 py-1 text-[10px] text-white/70 ring-1 ring-white/10 outline-none"
+                            >
+                                {VIEWS.map((v) => (
+                                    <option key={v.key} value={v.key}>{v.label}</option>
+                                ))}
+                            </select>
                             <button
                                 onClick={() => copy(s)}
                                 title="Copy link"
@@ -97,10 +116,30 @@ export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: numbe
                     ))}
                 </div>
 
+                <div className="mt-3 flex items-center justify-between gap-3 px-1">
+                    <span className="text-[11px] text-white/45">New link shows</span>
+                    <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10">
+                        {VIEWS.map((v) => (
+                            <button
+                                key={v.key}
+                                type="button"
+                                title={v.title}
+                                onClick={() => setNewView(v.key)}
+                                aria-pressed={newView === v.key}
+                                className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                                    newView === v.key ? 'bg-white/10 text-emerald-300' : 'text-white/50 hover:text-white/80'
+                                }`}
+                            >
+                                {v.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
                 <button
                     disabled={create.isPending}
-                    onClick={() => create.mutate({ mapId })}
-                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-200 ring-1 ring-emerald-400/25 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
+                    onClick={() => create.mutate({ mapId, view: newView })}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-200 ring-1 ring-emerald-400/25 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
                 >
                     <Plus weight="bold" className="h-4 w-4" /> Create a link
                 </button>

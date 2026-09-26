@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 import { ReactFlowProvider } from '@xyflow/react';
 import { WallCanvas } from './WallCanvas';
-import { useWallDevices, useWallMap } from '../api/wall';
+import { WallGeoCanvas } from './WallGeoCanvas';
+import { useWallDevices, useWallMap, useWallView } from '../api/wall';
 import { BrandedLoader } from '../../../components/BrandedLoader';
 
 // Live wall clock (updates each minute - a wallboard doesn't need a ticking seconds hand).
@@ -15,6 +16,16 @@ function useClock(): string {
     return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+type Shown = 'logical' | 'geo';
+
+// On a "both" share the page remembers which view it's on in the URL hash (#geo / #map), so a TV
+// reloads into the same one and an admin can hand out a link that opens on the view they want.
+function hashView(): Shown | null {
+    if (typeof window === 'undefined') return null;
+    const h = window.location.hash.replace('#', '');
+    return h === 'geo' ? 'geo' : h === 'map' ? 'logical' : null;
+}
+
 /**
  * The public, read-only wallboard (GitHub #15). Rendered instead of the whole app when the page
  * was opened via a /wall/{token} share link - no login, no navigation, no edit controls. Just a
@@ -23,7 +34,22 @@ function useClock(): string {
 export function PublicWallboard() {
     const { data: map, isLoading, isError } = useWallMap();
     const { data: devices } = useWallDevices();
+    const { data: view } = useWallView();
     const clock = useClock();
+    const [picked, setPicked] = useState<Shown | null>(hashView);
+
+    // A logical or geo share shows just that. A "both" share opens on the hash if there is one,
+    // else on whatever the map itself is set to (geo mode on -> geo), and gets a switcher.
+    const shown: Shown =
+        view === 'geo' ? 'geo' : view === 'both' ? (picked ?? (map?.leaflet_enabled ? 'geo' : 'logical')) : 'logical';
+    const pick = (v: Shown) => {
+        setPicked(v);
+        try {
+            window.history.replaceState(null, '', v === 'geo' ? '#geo' : '#map');
+        } catch {
+            /* no history (sandboxed frame) - the switch still works for this session */
+        }
+    };
 
     if (isLoading) {
         return <BrandedLoader />;
@@ -56,6 +82,22 @@ export function PublicWallboard() {
                     <h1 className="text-sm font-semibold tracking-tight text-white/90">{map.name}</h1>
                 </div>
                 <div className="flex items-center gap-4 font-mono text-[11px] tabular-nums">
+                    {view === 'both' && (
+                        <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 font-sans ring-1 ring-white/10">
+                            {(['logical', 'geo'] as const).map((v) => (
+                                <button
+                                    key={v}
+                                    onClick={() => pick(v)}
+                                    aria-pressed={shown === v}
+                                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                                        shown === v ? 'bg-white/10 text-emerald-300' : 'text-white/50 hover:text-white/80'
+                                    }`}
+                                >
+                                    {v === 'geo' ? 'Geo' : 'Map'}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <span className="flex items-center gap-1.5 text-emerald-300">
                         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                         {up} up
@@ -70,8 +112,9 @@ export function PublicWallboard() {
                 </div>
             </header>
             <div className="relative min-h-0 flex-1">
-                <ReactFlowProvider>
-                    <WallCanvas />
+                {/* Keyed so switching views mounts a fresh canvas that frames itself. */}
+                <ReactFlowProvider key={shown}>
+                    {shown === 'geo' ? <WallGeoCanvas /> : <WallCanvas />}
                 </ReactFlowProvider>
             </div>
         </div>

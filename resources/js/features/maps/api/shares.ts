@@ -3,9 +3,13 @@ import { apiClient } from '../../../lib/apiClient';
 
 // Public wallboard share links for a map (GitHub #15). Admin-only writes (the API enforces it);
 // listing is allowed for any operator.
+/** What a link shows (GitHub #37): the logical diagram, the geo map, or both with a switcher. */
+export type MapShareView = 'logical' | 'geo' | 'both';
+
 export interface MapShareLink {
     id: number;
     label: string | null;
+    view: MapShareView;
     enabled: boolean;
     url: string;
     last_viewed_at: string | null;
@@ -30,8 +34,8 @@ export function useMapShares(mapId: number | null) {
 export function useCreateMapShare() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, label }: { mapId: number; label?: string }): Promise<MapShareLink> => {
-            const { data } = await apiClient.post<{ data: MapShareLink }>(`/maps/${mapId}/shares`, { label });
+        mutationFn: async ({ mapId, label, view }: { mapId: number; label?: string; view?: MapShareView }): Promise<MapShareLink> => {
+            const { data } = await apiClient.post<{ data: MapShareLink }>(`/maps/${mapId}/shares`, { label, view });
             return data.data;
         },
         onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: shareKeys.list(mapId) }),
@@ -41,7 +45,7 @@ export function useCreateMapShare() {
 export function useUpdateMapShare() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, id, ...body }: { mapId: number; id: number; label?: string | null; enabled?: boolean }): Promise<MapShareLink> => {
+        mutationFn: async ({ mapId, id, ...body }: { mapId: number; id: number; label?: string | null; enabled?: boolean; view?: MapShareView }): Promise<MapShareLink> => {
             const { data } = await apiClient.patch<{ data: MapShareLink }>(`/maps/${mapId}/shares/${id}`, body);
             return data.data;
         },
