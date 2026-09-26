@@ -81,6 +81,16 @@ const CONDITIONS: { value: AlertConditionType; label: string }[] = [
     { value: 'new_discovery', label: 'New device discovered' },
 ];
 
+// Threshold means something different per condition (% util, Mbps floor, ms, metric value), so
+// a new policy - or a switch of condition - starts from that condition's own sensible default. A
+// flat 90 used to leak across, giving a new low-throughput policy a 90 Mbps floor.
+const DEFAULT_THRESHOLD: Partial<Record<AlertConditionType, number>> = {
+    high_util: 90,
+    low_throughput: 1,
+    probe_slow: 1000,
+    high_metric: 90,
+};
+
 function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; transports: AlertTransport[]; onDone: () => void }) {
     const save = useSaveAlertPolicy();
     const [form, setForm] = useState<AlertPolicyInput>({
@@ -88,7 +98,7 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
         name: initial?.name ?? '',
         condition: initial?.condition ?? 'device_down',
         params: {
-            threshold: initial?.params?.threshold ?? 90,
+            threshold: initial?.params?.threshold ?? DEFAULT_THRESHOLD[initial?.condition ?? 'device_down'] ?? 90,
             duration_minutes: initial?.params?.duration_minutes ?? 0,
             suppress_dependent: initial?.params?.suppress_dependent ?? true,
             metric: initial?.params?.metric ?? 'cpu',
@@ -116,7 +126,14 @@ function PolicyForm({ initial, transports, onDone }: { initial?: AlertPolicy; tr
     return (
         <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
             <input className={field} placeholder="Policy name" value={form.name} onChange={(e) => set('name', e.target.value)} />
-            <select className={field} value={form.condition} onChange={(e) => set('condition', e.target.value as AlertConditionType)}>
+            <select
+                className={field}
+                value={form.condition}
+                onChange={(e) => {
+                    const condition = e.target.value as AlertConditionType;
+                    setForm((f) => ({ ...f, condition, params: { ...f.params, threshold: DEFAULT_THRESHOLD[condition] ?? f.params?.threshold } }));
+                }}
+            >
                 {CONDITIONS.map((c) => (
                     <option key={c.value} value={c.value}>
                         {c.label}
