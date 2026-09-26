@@ -38,6 +38,39 @@ class RateCalculatorTest extends TestCase
         $this->assertNull($this->rates->bps(0, 1_000, -5.0));
     }
 
+    public function test_counter_rate_is_a_plain_per_second_delta(): void
+    {
+        // 600 packets in 60s
+        $this->assertEqualsWithDelta(10.0, $this->rates->counterRate(1_000, 1_600, 60.0), 0.0001);
+        $this->assertSame(0.0, $this->rates->counterRate(5, 5, 60.0));
+    }
+
+    public function test_counter_rate_needs_a_previous_read_and_elapsed_time(): void
+    {
+        $this->assertNull($this->rates->counterRate(null, 1_000, 60.0)); // first poll
+        $this->assertNull($this->rates->counterRate(0, 1_000, 0.0));
+    }
+
+    public function test_a_64_bit_counter_going_backwards_is_a_reset_not_a_wrap(): void
+    {
+        $this->assertNull($this->rates->counterRate(3_000_000_000, 10, 60.0));
+        $this->assertNull($this->rates->counterRate(3_000_000_000, 10, 60.0, 64));
+    }
+
+    public function test_a_counter32_wraps_through_zero(): void
+    {
+        // 4294967000 -> 500 is 295 + 1 + 500 = 796 more, over 4s
+        $this->assertEqualsWithDelta(199.0, $this->rates->counterRate(4_294_967_000, 500, 4.0, 32), 0.0001);
+    }
+
+    public function test_a_counter32_dropping_to_near_zero_after_a_reboot_is_not_a_wrap(): void
+    {
+        // taken as a wrap this would be ~4.29 billion errors in a minute
+        $this->assertNull($this->rates->counterRate(1_000, 0, 60.0, 32));
+        // and a value that can't be 32 bit at all is a reset whatever we were told
+        $this->assertNull($this->rates->counterRate(5_000_000_000, 10, 60.0, 32));
+    }
+
     public function test_util_percent_of_capacity(): void
     {
         // 100 Mbps on a 1000 Mbps link = 10%.

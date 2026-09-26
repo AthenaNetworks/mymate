@@ -37,7 +37,7 @@ class Device extends Model
         'device_type', 'icon', 'icon_color', 'parent_device_id', 'vendor', 'model', 'serial', 'cpu', 'ram_bytes', 'arch', 'uptime_seconds', 'uptime_at',
         'os_version', 'latest_version', 'upgrade_status', 'upgrade_message', 'upgrade_at',
         'discovery_error', 'discovered_at',
-        'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at',
+        'cpu_pct', 'mem_used_pct', 'temp_c', 'metrics_at', 'cpu_loads',
         'signal_dbm', 'snr_db', 'ccq_pct', 'wireless_clients', 'ospf_neighbors',
         'rtt_ms', 'loss_pct', 'ping_at', 'latency_good_ms', 'latency_bad_ms',
         'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
@@ -63,6 +63,8 @@ class Device extends Model
         'mem_used_pct' => 'float',
         'temp_c' => 'float',
         'metrics_at' => 'datetime',
+        // [{"index": 196608, "load_pct": 12.0}, ...] latest per-processor load
+        'cpu_loads' => 'array',
         'signal_dbm' => 'float',
         'snr_db' => 'float',
         'ccq_pct' => 'float',
@@ -199,6 +201,12 @@ class Device extends Model
     public function interfaces(): HasMany
     {
         return $this->hasMany(NetworkInterface::class);
+    }
+
+    /** Disks / memory entries as of the last metrics poll (device page). */
+    public function storages(): HasMany
+    {
+        return $this->hasMany(DeviceStorage::class);
     }
 
     /** Service probes (HTTP/TCP) attached to this device (GitHub #19). */

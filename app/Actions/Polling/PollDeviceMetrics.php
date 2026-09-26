@@ -26,6 +26,7 @@ class PollDeviceMetrics
         private ReadOspf $ospf,
         private OpticalPowerReader $optical,
         private RecordOpticalPower $recordOptical,
+        private RecordDeviceResources $recordResources,
     ) {}
 
     /** @param  list<int>  $deviceIds */
@@ -41,6 +42,7 @@ class PollDeviceMetrics
 
         $frames = [];      // for the live broadcast
         $sampleRows = [];  // for history
+        $resources = [];   // per-CPU / storage, written for the whole batch at the end
         $failed = 0;
 
         foreach ($devices as $device) {
@@ -99,7 +101,10 @@ class PollDeviceMetrics
                 'wireless_clients' => $metrics->wirelessClients,
                 'ospf_neighbors' => $ospf,
                 'metrics_at' => now(),
+                // per-CPU loads + uptime (and the reboot check), for the device page
+                ...RecordDeviceResources::deviceAttributes($device, $metrics, now()),
             ])->save();
+            $resources[] = [$device, $metrics];
 
             $frames[] = [
                 'device_id' => $device->id,
@@ -123,10 +128,12 @@ class PollDeviceMetrics
                 'ccq_pct' => $metrics->ccqPct,
                 'wireless_clients' => $metrics->wirelessClients,
                 'ospf_neighbors' => $ospf,
+                'uptime_s' => $metrics->uptimeSeconds,
             ];
         }
 
         $this->recordHistory($sampleRows);
+        ($this->recordResources)($resources, now());
         $this->broadcast($frames);
 
         EngineLog::debug('metrics: batch complete', [

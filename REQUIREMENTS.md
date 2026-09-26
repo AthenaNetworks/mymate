@@ -20,6 +20,11 @@ to the operator who shared them in #16).
   1.6 GB per 1000 interfaces for 400 days of hourly ones. Device metrics plus ping come to
   roughly twice that per 1000 devices (more columns per row). Shorten either tier in Settings if
   that's too much.
+  The port packet / error / discard rates and port up % roughly double the width of an interface
+  rollup row, so budget about twice the interface figures above. Raw interface samples barely grow
+  (over SNMP the counters are only filled in once a minute, the rest of the row stays null). Per-CPU,
+  storage and optical history are small next to that: a row per core, per disk or memory entry and
+  per SFP, on the metrics cadence.
 - **Redis** is a transient broker (queues, cache, live broadcasting). It holds no durable data -
   everything of record is in PostgreSQL - so it is provisioned with persistence off (see below).
 

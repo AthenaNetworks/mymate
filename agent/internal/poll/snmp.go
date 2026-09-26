@@ -13,6 +13,8 @@ import (
 const (
 	oidInOctets  = "1.3.6.1.2.1.31.1.1.1.6."  // ifHCInOctets.<ifIndex>
 	oidOutOctets = "1.3.6.1.2.1.31.1.1.1.10." // ifHCOutOctets.<ifIndex>
+	// ifOperStatus.<ifIndex>, 1 = up. Read every tick like the central SNMP driver does.
+	oidOperStatus = "1.3.6.1.2.1.2.2.1.8."
 )
 
 // dialSNMP builds and connects a gosnmp handle for a host, honouring v1/v2c (community) or
@@ -99,6 +101,10 @@ func privProto(name string) gosnmp.SnmpV3PrivProtocol {
 // pollSNMP reads each interface's HC octet counters over SNMP (v1/v2c/v3) and turns consecutive
 // samples into bits/sec. Interfaces with no prior sample (or a counter reset) yield no rate
 // this tick - exactly like the central path's first poll.
+//
+// ifOperStatus rides along in the same GETs every tick. When the server asks for port stats
+// (t.PortStats, on its slower cadence) the error / discard / packet columns are read as well, in
+// their own GETs so an OID the box doesn't have can't cost us the octets, and turned into rates.
 func (p *Poller) pollSNMP(t proto.SNMPTarget) []proto.FlowResult {
 	if len(t.Interfaces) == 0 {
 		return nil
@@ -110,27 +116,39 @@ func (p *Poller) pollSNMP(t proto.SNMPTarget) []proto.FlowResult {
 	}
 	defer g.Conn.Close()
 
-	oids := make([]string, 0, len(t.Interfaces)*2)
+	oids := make([]string, 0, len(t.Interfaces)*3)
 	for _, i := range t.Interfaces {
 		idx := strconv.Itoa(i.IfIndex)
-		oids = append(oids, oidInOctets+idx, oidOutOctets+idx)
+		oids = append(oids, oidInOctets+idx, oidOutOctets+idx, oidOperStatus+idx)
+	}
+	counters := getValues(g.Get, oids, 60)
+
+	var portVals map[string]uint64
+	counter32 := map[string]bool{}
+	if t.PortStats != nil {
+		portVals = getValues(g.Get, portStatOids(t.PortStats, t.Interfaces, g.Version == gosnmp.Version1), 60)
+		for _, n := range t.PortStats.Counter32 {
+			counter32[n] = true
+		}
 	}
 
-	counters := map[string]uint64{}
-	for _, chunk := range chunk(oids, 60) {
-		res, err := g.Get(chunk)
-		if err != nil {
-			continue // a black-holing device shouldn't sink the whole batch
-		}
-		for _, v := range res.Variables {
-			counters[normalise(v.Name)] = gosnmp.ToBigInt(v.Value).Uint64()
-		}
-	}
+	return p.snmpFlows(t, counters, portVals, counter32, time.Now())
+}
 
-	now := time.Now()
+// snmpFlows turns one tick's GET results into flows (split out so it can be tested without a
+// device).
+func (p *Poller) snmpFlows(t proto.SNMPTarget, counters, portVals map[string]uint64, counter32 map[string]bool, now time.Time) []proto.FlowResult {
 	flows := make([]proto.FlowResult, 0, len(t.Interfaces))
 	for _, i := range t.Interfaces {
 		idx := strconv.Itoa(i.IfIndex)
+		// port rates first: the counter state has to move on even on a tick with no bps yet
+		var rates map[string]*float64
+		if t.PortStats != nil {
+			if c := portCounters(t.PortStats.Columns, portVals, idx); len(c) > 0 {
+				rates = p.state.portRates(i.InterfaceID, c, counter32, now)
+			}
+		}
+
 		in, okIn := counters[oidInOctets+idx]
 		out, okOut := counters[oidOutOctets+idx]
 		if !okIn || !okOut {
@@ -140,9 +158,81 @@ func (p *Poller) pollSNMP(t proto.SNMPTarget) []proto.FlowResult {
 		if inBps == nil {
 			continue // first sample or reset - no rate yet
 		}
-		flows = append(flows, proto.FlowResult{InterfaceID: i.InterfaceID, InBps: *inBps, OutBps: *outBps})
+		f := proto.FlowResult{InterfaceID: i.InterfaceID, InBps: *inBps, OutBps: *outBps}
+		if st, ok := counters[oidOperStatus+idx]; ok {
+			up := st == 1 // 1=up, anything else (down/testing/dormant/...) is not up
+			f.OperUp = &up
+		}
+		for name, r := range rates {
+			f.SetPortRate(name, r)
+		}
+		flows = append(flows, f)
 	}
 	return flows
+}
+
+// getValues GETs oids in chunks of n and returns the numeric value of every varbind that came
+// back with one. An absent OID (noSuchObject/noSuchInstance, or a v1 noSuchName error on the
+// chunk) just isn't in the map, and a failed chunk doesn't stop the rest.
+func getValues(get func([]string) (*gosnmp.SnmpPacket, error), oids []string, n int) map[string]uint64 {
+	vals := map[string]uint64{}
+	for _, c := range chunk(oids, n) {
+		res, err := get(c)
+		if err != nil || res == nil {
+			continue // a black-holing device shouldn't sink the whole batch
+		}
+		if res.Error != gosnmp.NoError {
+			continue // v1 fails the whole PDU for one unknown OID
+		}
+		for _, v := range res.Variables {
+			switch v.Type {
+			case gosnmp.Null, gosnmp.NoSuchObject, gosnmp.NoSuchInstance, gosnmp.EndOfMibView:
+				continue
+			}
+			vals[normalise(v.Name)] = gosnmp.ToBigInt(v.Value).Uint64()
+		}
+	}
+	return vals
+}
+
+// portStatOids is every column OID for every interface. On v1 the ifXTable (Counter64) ones are
+// left out, v1 can't carry them and one would fail the whole PDU.
+func portStatOids(ps *proto.PortStatsTarget, ifaces []proto.IfaceTarget, v1 bool) []string {
+	var out []string
+	for _, i := range ifaces {
+		idx := strconv.Itoa(i.IfIndex)
+		for _, cols := range ps.Columns {
+			for _, col := range cols {
+				col = strings.TrimPrefix(col, ".")
+				if v1 && strings.HasPrefix(col, "1.3.6.1.2.1.31.") {
+					continue
+				}
+				out = append(out, col+"."+idx)
+			}
+		}
+	}
+	return out
+}
+
+// portCounters adds up each rate's columns for one ifIndex. The first column has to be there
+// (unicast for packets), otherwise that counter is left out rather than half counted.
+func portCounters(columns map[string][]string, vals map[string]uint64, idx string) map[string]uint64 {
+	out := map[string]uint64{}
+	for name, cols := range columns {
+		if len(cols) == 0 {
+			continue
+		}
+		first, ok := vals[strings.TrimPrefix(cols[0], ".")+"."+idx]
+		if !ok {
+			continue
+		}
+		sum := first
+		for _, col := range cols[1:] {
+			sum += vals[strings.TrimPrefix(col, ".")+"."+idx]
+		}
+		out[name] = sum
+	}
+	return out
 }
 
 // gosnmp returns OID names with a leading dot; our keys don't - strip it.

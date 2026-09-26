@@ -6,6 +6,8 @@ use App\Actions\Alerts\EvaluateAlerts;
 use App\Actions\History\ManageHistoryPartitions;
 use App\Actions\History\RollupHistory;
 use App\Actions\Outages\RecordOutage;
+use App\Actions\Polling\RecordDeviceResources;
+use App\Actions\Polling\RecordOpticalPower;
 use App\Enums\AlertCondition;
 use App\Enums\DeviceStatus;
 use App\Events\DeviceMetricsUpdated;
@@ -15,8 +17,13 @@ use App\Models\AlertPolicy;
 use App\Models\Device;
 use App\Models\Link;
 use App\Models\Map;
+use App\Models\NetworkInterface;
 use App\Models\Outage;
 use App\Models\User;
+use App\Services\Polling\DeviceMetrics;
+use App\Services\Polling\OpticalReading;
+use App\Services\Polling\PortStats;
+use App\Services\Polling\StorageReading;
 use App\Support\LiveBroadcast;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -130,8 +137,8 @@ class DemoCommand extends Command
     }
 
     /**
-     * Seed ~24h of per-minute history for every mock device - throughput, cpu/mem/temp
-     * and ping - so the inspector charts are populated the moment the demo opens instead
+     * Seed ~24h of per-minute history for every mock device - throughput (with port packets /
+     * errors / discards), cpu/mem/temp, per-CPU load, storage, uptime, RF, optical and ping - so the inspector charts are populated the moment the demo opens instead
      * of accruing from zero ("No history yet"). Uses the same synth generators as the
      * live tick (both are keyed on epoch seconds), so the simulator's live samples
      * continue the backfilled series seamlessly. Replaces the window on re-run.
@@ -153,10 +160,27 @@ class DemoCommand extends Command
         DB::table('interface_samples')->whereIn('interface_id', $ifaceIds)->where('ts', '<', $to)->delete();
         DB::table('device_metric_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
         DB::table('ping_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
+        DB::table('cpu_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
+        DB::table('storage_samples')->whereIn('device_id', $deviceIds)->where('ts', '<', $to)->delete();
+        DB::table('optical_samples')->whereIn('interface_id', $ifaceIds)->where('ts', '<', $to)->delete();
+
+        // The storage rows have to exist before their history can point at them: write the
+        // current state once through the real recorder, then map (device, key) to the row id.
+        $t0 = (float) $to->timestamp;
+        app(RecordDeviceResources::class)($devices->map(fn (Device $d) => [
+            $d, new DeviceMetrics(storages: $this->synthStorages($d, $this->synthMetrics($d->id, $t0)[1], $t0)),
+        ])->all(), $to);
+        $storageIds = [];
+        foreach (DB::table('device_storages')->whereIn('device_id', $deviceIds)->get(['id', 'device_id', 'storage_key']) as $r) {
+            $storageIds[$r->device_id][$r->storage_key] = $r->id;
+        }
 
         $iface = [];
         $metric = [];
         $ping = [];
+        $cpuRows = [];
+        $storageRows = [];
+        $opticalRows = [];
         for ($ts = $from->copy(); $ts <= $to; $ts->addSeconds($step)) {
             $t = (float) $ts->timestamp;
             $stamp = $ts->toDateTimeString();
@@ -164,37 +188,52 @@ class DemoCommand extends Command
                 [$cpu, $mem, $temp] = $this->synthMetrics($device->id, $t);
                 $metric[] = [
                     'device_id' => $device->id, 'ts' => $stamp, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
-                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                    ...$this->synthRf($device, $t),
+                    'uptime_s' => $this->synthUptime($device->id, $t),
                 ];
                 [$rtt, $jitter] = $this->synthPing($device->id, $t);
                 $ping[] = ['device_id' => $device->id, 'ts' => $stamp, 'rtt_ms' => $rtt, 'loss_pct' => 0.0, 'jitter_ms' => $jitter];
+                foreach ($this->synthCpus($device->id, $cpu, $t) as $index => $load) {
+                    $cpuRows[] = ['device_id' => $device->id, 'cpu_index' => $index, 'ts' => $stamp, 'load_pct' => $load];
+                }
+                foreach ($this->synthStorages($device, $mem, $t) as $st) {
+                    if (isset($storageIds[$device->id][$st->key])) {
+                        $storageRows[] = [
+                            'storage_id' => $storageIds[$device->id][$st->key], 'device_id' => $device->id, 'ts' => $stamp,
+                            'used_pct' => $st->usedPct(), 'used_bytes' => $st->usedBytes, 'size_bytes' => $st->sizeBytes,
+                        ];
+                    }
+                }
 
                 foreach ($device->interfaces as $if) {
                     [$utilIn, $utilOut] = $this->synthUtil($if->id, $t);
                     $speedIn = (int) ($if->speed_mbps ?: 1000);
                     $speedOut = (int) ($capOut[$if->id] ?? ($if->speed_up_mbps ?: $if->speed_mbps ?: 1000));
+                    $bpsIn = (int) round($utilIn / 100 * $speedIn * 1_000_000);
+                    $bpsOut = (int) round($utilOut / 100 * $speedOut * 1_000_000);
                     $iface[] = [
                         'interface_id' => $if->id, 'ts' => $stamp,
-                        'bps_in' => (int) round($utilIn / 100 * $speedIn * 1_000_000),
-                        'bps_out' => (int) round($utilOut / 100 * $speedOut * 1_000_000),
+                        'bps_in' => $bpsIn, 'bps_out' => $bpsOut,
                         'util_in' => $utilIn, 'util_out' => $utilOut,
+                        ...$this->synthPort($if->id, $bpsIn, $bpsOut, max($utilIn, $utilOut)),
+                        'oper_up' => true,
                     ];
+                    if (($optical = $this->synthOptical($if, $t)) !== null) {
+                        $opticalRows[] = ['interface_id' => $if->id, 'ts' => $stamp, 'rx_dbm' => $optical[0], 'tx_dbm' => $optical[1]];
+                    }
                 }
             }
         }
 
-        foreach (array_chunk($iface, 1000) as $chunk) {
-            DB::table('interface_samples')->insert($chunk);
-        }
-        foreach (array_chunk($metric, 1000) as $chunk) {
-            DB::table('device_metric_samples')->insert($chunk);
-        }
-        foreach (array_chunk($ping, 1000) as $chunk) {
-            DB::table('ping_samples')->insert($chunk);
+        foreach (['interface_samples' => $iface, 'device_metric_samples' => $metric, 'ping_samples' => $ping,
+            'cpu_samples' => $cpuRows, 'storage_samples' => $storageRows, 'optical_samples' => $opticalRows] as $table => $rows) {
+            foreach (array_chunk($rows, 1000) as $chunk) {
+                DB::table($table)->insert($chunk);
+            }
         }
 
         // The window was rewritten under any rollups already made, recompute them from raw.
-        RollupHistory::rewind(['interface', 'device_metric', 'ping']);
+        RollupHistory::rewind(['interface', 'device_metric', 'ping', 'cpu', 'storage', 'optical']);
 
         $this->info('Backfilled 24h of demo history ('.count($iface).' throughput, '.count($metric).' metric, '.count($ping).' ping samples).');
     }
@@ -244,6 +283,7 @@ class DemoCommand extends Command
         $metricFrames = [];   // cpu/mem/temp broadcast
         $metricSamples = [];  // cpu/mem/temp history
         $pingSamples = [];    // latency/loss/jitter history
+        $resources = [];      // per-CPU / storage for RecordDeviceResources
 
         foreach ($devices as $device) {
             $down = $device->status === DeviceStatus::Down;
@@ -255,19 +295,39 @@ class DemoCommand extends Command
                 [$cpu, $mem, $temp] = $this->synthMetrics($device->id, $t);
                 [$rtt, $jitter] = $this->synthPing($device->id, $t);
                 $loss = mt_rand(0, 99) < 3 ? (float) mt_rand(1, 5) : 0.0; // the odd dropped packet
+                $rf = $this->synthRf($device, $t);
+                // per-CPU, storage and uptime go through the real recorder, same rows a poll writes
+                $extras = new DeviceMetrics(
+                    uptimeSeconds: $this->synthUptime($device->id, $t),
+                    cpuLoads: $this->synthCpus($device->id, $cpu, $t),
+                    storages: $this->synthStorages($device, $mem, $t),
+                );
                 $device->forceFill([
                     'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
                     'rtt_ms' => $rtt, 'loss_pct' => $loss, 'ping_at' => $now,
+                    ...$rf,
+                    ...RecordDeviceResources::deviceAttributes($device, $extras, $now),
                 ])->save();
+                $resources[] = [$device, $extras];
                 $pingSamples[] = ['device_id' => $device->id, 'ts' => $now, 'rtt_ms' => $rtt, 'loss_pct' => $loss, 'jitter_ms' => $jitter];
                 $metricFrames[] = [
-                    'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
-                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                    'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, ...$rf,
                 ];
                 $metricSamples[] = [
                     'device_id' => $device->id, 'ts' => $now, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
-                    'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                    ...$rf, 'uptime_s' => $extras->uptimeSeconds,
                 ];
+
+                // SFP light levels, through the same recorder as the real optical read
+                $optical = [];
+                foreach ($device->interfaces as $if) {
+                    if (($o = $this->synthOptical($if, $t)) !== null) {
+                        $optical[] = new OpticalReading(ifIndex: null, name: $if->name, rxDbm: $o[0], txDbm: $o[1]);
+                    }
+                }
+                if ($optical !== []) {
+                    app(RecordOpticalPower::class)($device->id, $optical);
+                }
             } else {
                 // Down device: pings time out - 100% loss, no RTT (mirrors the real ping loop).
                 $device->forceFill(['rtt_ms' => null, 'loss_pct' => 100.0, 'ping_at' => $now])->save();
@@ -279,7 +339,7 @@ class DemoCommand extends Command
                     // Down device: no traffic. Clear the live columns (so its links grey
                     // out and don't linger at a stale util or trip a capacity alert), and
                     // broadcast nulls.
-                    $ifaceUpdates[] = ['id' => $if->id, 'util_in' => null, 'util_out' => null, 'bps_in' => null, 'bps_out' => null];
+                    $ifaceUpdates[] = ['id' => $if->id, 'util_in' => null, 'util_out' => null, 'bps_in' => null, 'bps_out' => null, ...PortStats::none()];
                     $ifaceFrames[] = $this->frame($if->id, null, null, $if->speed_mbps, null, null, 'down');
 
                     continue;
@@ -293,15 +353,18 @@ class DemoCommand extends Command
                 $bpsIn = (int) round($utilIn / 100 * $speedIn * 1_000_000);
                 $bpsOut = (int) round($utilOut / 100 * $speedOut * 1_000_000);
 
+                $port = $this->synthPort($if->id, $bpsIn, $bpsOut, max($utilIn, $utilOut));
                 $ifaceUpdates[] = [
                     'id' => $if->id,
                     'util_in' => $utilIn, 'util_out' => $utilOut,
                     'bps_in' => $bpsIn, 'bps_out' => $bpsOut,
+                    ...$port,
                 ];
                 $sampleRows[] = [
                     'interface_id' => $if->id, 'ts' => $now,
                     'bps_in' => $bpsIn, 'bps_out' => $bpsOut,
                     'util_in' => $utilIn, 'util_out' => $utilOut,
+                    ...$port, 'oper_up' => true,
                 ];
                 $ifaceFrames[] = $this->frame($if->id, $utilIn, $utilOut, $if->speed_mbps, $bpsIn, $bpsOut, 'up');
             }
@@ -317,6 +380,7 @@ class DemoCommand extends Command
         $this->recordHistory($sampleRows);
         $this->recordMetricHistory($metricSamples);
         $this->insertSamples('ping_samples', $pingSamples);
+        app(RecordDeviceResources::class)($resources, $now);
 
         if ($frames !== []) {
             LiveBroadcast::send(new InterfaceUtilUpdated($frames));
@@ -406,6 +470,123 @@ class DemoCommand extends Command
         return [$wave(1, 4, 55), $wave(9, 35, 82), $wave(17, 34, 62)];
     }
 
+    /**
+     * Port packets / errors / discards per second to go with a synthetic bps. Packet size is a
+     * steady per-port mix, errors are the odd blip, and discards only show up once the port runs
+     * hot, which is what they look like on a real congested link.
+     *
+     * @return array<string, float>
+     */
+    private function synthPort(int $ifId, int $bpsIn, int $bpsOut, float $util): array
+    {
+        $avgBytes = 400 + (($ifId * 2654435761) % 700); // 400-1100 byte average packet
+        $pktsIn = round($bpsIn / 8 / $avgBytes, 1);
+        $pktsOut = round($bpsOut / 8 / $avgBytes, 1);
+        $blip = static fn (): float => mt_rand(0, 99) < 4 ? mt_rand(1, 30) / 10 : 0.0;
+        $hot = max(0.0, $util - 75) / 25; // 0 below 75% util, up to 1 at 100%
+
+        return [
+            'pkts_in' => $pktsIn,
+            'pkts_out' => $pktsOut,
+            'errors_in' => $ifId % 4 === 0 ? $blip() : 0.0, // a couple of ports with a dodgy cable
+            'errors_out' => 0.0,
+            'discards_in' => round($pktsIn * 0.002 * $hot, 2),
+            'discards_out' => round($pktsOut * 0.004 * $hot + $blip() / 10, 2),
+        ];
+    }
+
+    /**
+     * Uptime that climbs and now and then resets, so the device page has a reboot to show. Each
+     * device reboots on its own 1 to 22 week cycle, and CPE-RAD every couple of days.
+     */
+    private function synthUptime(int $devId, float $t): int
+    {
+        $period = (7 + (($devId * 37) % 150)) * 86400;
+        $offset = ($devId * 2654435761) % $period;
+
+        return 600 + (int) fmod($t + $offset, $period);
+    }
+
+    /**
+     * Load per core around the overall cpu figure, 1 to 4 cores depending on the device.
+     *
+     * @return array<int, float>
+     */
+    private function synthCpus(int $devId, float $cpu, float $t): array
+    {
+        $cores = [1, 2, 4, 4][$devId % 4];
+        $out = [];
+        for ($i = 0; $i < $cores; $i++) {
+            $swing = 8 * sin($t / (30 + $i * 7) + $devId + $i);
+            $out[$i] = round(max(0.0, min(100.0, $cpu + $swing + ($i === 0 ? 6 : 0))), 1);
+        }
+
+        return $out;
+    }
+
+    /**
+     * RAM plus a system disk (a flash chip on the MikroTiks, a real disk on the server), RAM used
+     * following the synthetic memory %, disk use creeping over the day.
+     *
+     * @return list<StorageReading>
+     */
+    private function synthStorages(Device $device, float $memPct, float $t): array
+    {
+        $server = $device->device_type?->value === 'server';
+        $ram = ($server ? 65536 : [256, 512, 1024, 2048][$device->id % 4]) * 1048576;
+        $disk = $server ? 960 * 1073741824 : 128 * 1048576;
+        $diskPct = 20 + ($device->id * 13) % 50 + 2 * sin($t / 43200);
+
+        $out = [
+            new StorageReading('memory', $server ? 'Physical memory' : 'main memory', 'ram', $ram, (int) ($ram * $memPct / 100)),
+            new StorageReading('system-disk', $server ? '/' : 'system disk', $server ? 'fixed_disk' : 'flash', $disk, (int) ($disk * $diskPct / 100)),
+        ];
+        if ($server) {
+            $out[] = new StorageReading('swap', 'Swap space', 'virtual_memory', 8 * 1073741824, (int) (8 * 1073741824 * 0.03));
+        }
+
+        return $out;
+    }
+
+    /**
+     * SFP light for the fibre ports (named sfp*), a steady level per port with a slow wobble.
+     *
+     * @return array{0: float, 1: float}|null [rx dBm, tx dBm]
+     */
+    private function synthOptical(NetworkInterface $if, float $t): ?array
+    {
+        if (! str_starts_with(strtolower((string) $if->name), 'sfp')) {
+            return null;
+        }
+        $rx = -3.0 - ($if->id % 7) - 0.4 * sin($t / 900 + $if->id);
+        $tx = -1.5 - ($if->id % 3) * 0.5 + 0.1 * sin($t / 1800);
+
+        return [round($rx, 2), round($tx, 2)];
+    }
+
+    /**
+     * Wireless RF for the radios in the lab: the AP sees a handful of clients, the CPE is a
+     * station with one link back to its AP. Everything else is wired, so all null.
+     *
+     * @return array{signal_dbm: ?float, snr_db: ?float, ccq_pct: ?float, wireless_clients: ?int}
+     */
+    private function synthRf(Device $device, float $t): array
+    {
+        $ap = $device->device_type?->value === 'ap';
+        $station = str_contains(strtoupper($device->name), 'CPE');
+        if (! $ap && ! $station) {
+            return ['signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null];
+        }
+        $wobble = sin($t / 300 + $device->id);
+
+        return [
+            'signal_dbm' => round(($ap ? -61 : -66) + 3 * $wobble, 1),
+            'snr_db' => round(($ap ? 34 : 29) + 3 * $wobble, 1),
+            'ccq_pct' => round(min(100, ($ap ? 92 : 86) + 5 * $wobble), 1),
+            'wireless_clients' => $ap ? 8 + (int) round(6 + 6 * sin($t / 1800)) : null,
+        ];
+    }
+
     /** @param list<array<string,mixed>> $rows */
     private function recordMetricHistory(array $rows): void
     {
@@ -444,7 +625,9 @@ class DemoCommand extends Command
             foreach ($chunk as $r) {
                 DB::table('interfaces')->where('id', $r['id'])->update([
                     'util_in' => $r['util_in'], 'util_out' => $r['util_out'],
-                    'bps_in' => $r['bps_in'], 'bps_out' => $r['bps_out'], 'updated_at' => now(),
+                    'bps_in' => $r['bps_in'], 'bps_out' => $r['bps_out'],
+                    ...array_intersect_key($r, array_flip(PortStats::RATES)),
+                    'updated_at' => now(),
                 ]);
             }
         }

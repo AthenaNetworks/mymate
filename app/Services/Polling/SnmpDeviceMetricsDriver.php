@@ -8,7 +8,8 @@ use App\Services\Snmp\SnmpClientException;
 use App\Services\Snmp\SnmpCredential;
 
 /**
- * CPU / memory / temperature over SNMP, driven by a per-vendor OID profile
+ * CPU / memory / temperature (plus per-CPU load, storage and uptime for the device page) over
+ * SNMP, driven by a per-vendor OID profile
  * (see DeviceMetricProfiles + config('mymate.device_metrics.profiles')). Each metric is
  * best-effort and independent: an OID the agent doesn't implement just leaves that metric
  * null rather than failing the whole read. A transport failure (timeout/filtered) throws
@@ -27,16 +28,106 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
         $profile = $this->profiles->for($device);
 
         $wl = $this->wireless($host, $community, $profile);
+        [$cpu, $cpuLoads] = $this->cpu($host, $community, $profile);
+        $hr = $this->hrStorage($host, $community, $profile);
 
         return new DeviceMetrics(
-            cpuPct: DeviceMetrics::clampPct($this->cpu($host, $community, $profile)),
-            memUsedPct: DeviceMetrics::clampPct($this->memory($host, $community, $profile)),
+            cpuPct: DeviceMetrics::clampPct($cpu),
+            memUsedPct: DeviceMetrics::clampPct(($profile['mem'] ?? null) === 'hrstorage' ? $hr['mem'] : $this->memory($host, $community, $profile)),
             tempC: $this->temperature($host, $community, $profile),
             signalDbm: $wl['signal'],
             snrDb: $wl['snr'],
             ccqPct: DeviceMetrics::clampPct($wl['ccq']),
             wirelessClients: $wl['clients'],
+            uptimeSeconds: $this->uptime($host, $community),
+            cpuLoads: $cpuLoads,
+            storages: $hr['storages'],
         );
+    }
+
+    /**
+     * Host uptime in seconds: hrSystemUptime, else sysUpTime, in one GET. hrSystemUptime is the
+     * machine, sysUpTime only the SNMP agent (it resets when snmpd restarts, which would look
+     * like a reboot), so the host one wins when a box has both.
+     */
+    private function uptime(string $host, SnmpCredential $community): ?int
+    {
+        $oids = config('mymate.snmp.oids', []);
+        $hrOid = (string) ($oids['hr_system_uptime'] ?? '');
+        $sysOid = (string) ($oids['sys_uptime'] ?? '');
+        $res = [];
+        foreach ($this->snmp->get($host, $community, array_values(array_filter([$hrOid, $sysOid]))) as $oid => $value) {
+            $res[ltrim((string) $oid, '.')] = $value;
+        }
+
+        foreach ([$hrOid, $sysOid] as $oid) {
+            $ticks = self::timeticks($res[ltrim($oid, '.')] ?? null);
+            if ($oid !== '' && $ticks !== null) {
+                return intdiv($ticks, 100);
+            }
+        }
+
+        return null;
+    }
+
+    /** TimeTicks as a plain number, or the "(12345) 0:02:03.45" form some builds hand back. */
+    public static function timeticks(mixed $value): ?int
+    {
+        if ($value === null) {
+            return null;
+        }
+        $v = trim((string) $value);
+        if (preg_match('/^\((\d+)\)/', $v, $m) === 1) {
+            return (int) $m[1];
+        }
+
+        return ctype_digit($v) ? (int) $v : null;
+    }
+
+    /**
+     * The hrStorageTable, walked once as a whole entry: that gives the per-entry storage list
+     * (disks, RAM, swap) and the memory % from the same rows. A profile can opt out with
+     * 'storage' => false. When the entry walk comes back empty and the profile reads memory from
+     * hrstorage, fall back to the old per-column walks, so an agent that's funny about walking
+     * the entry still gets its memory graph.
+     *
+     * @param  array<string, mixed>  $profile
+     * @return array{mem: ?float, storages: ?list<StorageReading>}
+     */
+    private function hrStorage(string $host, SnmpCredential $community, array $profile): array
+    {
+        $memFromHr = ($profile['mem'] ?? null) === 'hrstorage';
+        if (($profile['storage'] ?? true) === false) {
+            return ['mem' => $memFromHr ? $this->hrStorageMemory($host, $community) : null, 'storages' => null];
+        }
+
+        $oids = config('mymate.device_metrics.hrstorage', []);
+        $entry = ! empty($oids['entry']) ? $this->snmp->walk($host, $community, (string) $oids['entry']) : [];
+        if ($entry !== []) {
+            $cols = StorageReading::entryColumns($entry);
+
+            return [
+                'mem' => $memFromHr ? self::ramPercent($cols[3], $this->numericValues($cols[5]), $this->numericValues($cols[6])) : null,
+                'storages' => StorageReading::fromHrColumns($cols[3], $cols[2], $cols[4], $cols[5], $cols[6]),
+            ];
+        }
+        if (! $memFromHr) {
+            return ['mem' => null, 'storages' => []];
+        }
+
+        $descr = $this->snmp->walk($host, $community, (string) $oids['descr']);
+        $size = $this->snmp->walk($host, $community, (string) $oids['size']);
+        $used = $this->snmp->walk($host, $community, (string) $oids['used']);
+        if ($descr === []) {
+            return ['mem' => null, 'storages' => []];
+        }
+        $types = ! empty($oids['type']) ? $this->snmp->walk($host, $community, (string) $oids['type']) : [];
+        $units = ! empty($oids['units']) ? $this->snmp->walk($host, $community, (string) $oids['units']) : [];
+
+        return [
+            'mem' => self::ramPercent($descr, $this->numericValues($size), $this->numericValues($used)),
+            'storages' => StorageReading::fromHrColumns($descr, $types, $units, $size, $used),
+        ];
     }
 
     /**
@@ -66,7 +157,7 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
      * Average of every numeric value from the scalar GETs plus the table walks (an empty set
      * -> null). Averaging lets an AP report the mean across its associated stations.
      *
-     * @param  string|list<string>  $oids   scalar OIDs to GET
+     * @param  string|list<string>  $oids  scalar OIDs to GET
      * @param  string|list<string>  $walks  table column OIDs to walk
      */
     private function rfMeasure(string $host, SnmpCredential $community, string|array $oids, string|array $walks): ?float
@@ -122,31 +213,44 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
         return null;
     }
 
-    /** @param array<string, mixed> $profile */
-    private function cpu(string $host, SnmpCredential $community, array $profile): ?float
+    /**
+     * Overall cpu % plus the per-processor loads it came from. Only a walked profile (the
+     * hrProcessorLoad column) has per-processor values, a scalar cpu_oids reading has none.
+     *
+     * @param  array<string, mixed>  $profile
+     * @return array{0: ?float, 1: ?array<int, float>}
+     */
+    private function cpu(string $host, SnmpCredential $community, array $profile): array
     {
         if (! empty($profile['cpu_walk'])) {
             $loads = $this->numericValues($this->snmp->walk($host, $community, (string) $profile['cpu_walk']));
+            if ($loads === []) {
+                return [null, null];
+            }
+            $perCpu = [];
+            foreach ($loads as $index => $load) {
+                $perCpu[(int) $index] = max(0.0, min(100.0, $load));
+            }
+            ksort($perCpu);
 
-            return $loads === [] ? null : array_sum($loads) / count($loads); // average across cores
+            return [array_sum($loads) / count($loads), $perCpu]; // average across cores
         }
 
         foreach ((array) ($profile['cpu_oids'] ?? []) as $oid) {
             $res = $this->snmp->get($host, $community, [$oid]);
             $val = $this->firstNumeric($res);
             if ($val !== null) {
-                return $val;
+                return [$val, null];
             }
         }
 
-        return null;
+        return [null, null];
     }
 
     /** @param array<string, mixed> $profile */
     private function memory(string $host, SnmpCredential $community, array $profile): ?float
     {
         return match ($profile['mem'] ?? null) {
-            'hrstorage' => $this->hrStorageMemory($host, $community),
             'cisco' => $this->ciscoMemory($host, $community, $profile),
             default => null,
         };
@@ -163,6 +267,19 @@ class SnmpDeviceMetricsDriver implements DeviceMetricsDriver
         $size = $this->numericValues($this->snmp->walk($host, $community, (string) $oids['size']));
         $used = $this->numericValues($this->snmp->walk($host, $community, (string) $oids['used']));
 
+        return self::ramPercent($descr, $size, $used);
+    }
+
+    /**
+     * Pick the physical-RAM row (largest size among memory rows, skipping virtual/swap/cache)
+     * and give used/size %.
+     *
+     * @param  array<string, string>  $descr
+     * @param  array<string, float>  $size
+     * @param  array<string, float>  $used
+     */
+    private static function ramPercent(array $descr, array $size, array $used): ?float
+    {
         $bestIndex = null;
         $bestSize = 0.0;
         foreach ($descr as $index => $label) {

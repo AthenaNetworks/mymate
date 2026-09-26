@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\CredentialController;
 use App\Http\Controllers\Api\DeviceBackupController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DeviceHealthController;
 use App\Http\Controllers\Api\DeviceHistoryController;
 use App\Http\Controllers\Api\DeviceIconController;
 use App\Http\Controllers\Api\DiscoverDeviceController;
@@ -247,6 +248,12 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Device model icon (MikroTik product photo, fetched + cached on first sighting).
     Route::get('devices/{device}/icon', [DeviceIconController::class, 'show'])
         ->name('devices.icon');
+    // Device page: current storage entries and per-processor load (history is the storage / cpu
+    // families in App\Actions\History\HistoryFamilies).
+    Route::get('devices/{device}/storage', [DeviceHealthController::class, 'storage'])
+        ->name('devices.storage');
+    Route::get('devices/{device}/processors', [DeviceHealthController::class, 'processors'])
+        ->name('devices.processors');
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
     Route::get('devices/{device}/sensors', [SensorController::class, 'forDevice'])
         ->name('devices.sensors');

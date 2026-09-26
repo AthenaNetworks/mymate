@@ -5,6 +5,7 @@ namespace App\Actions\Agent;
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
+use App\Actions\Polling\RecordDeviceResources;
 use App\Actions\Polling\RecordOpticalPower;
 use App\Enums\DeviceStatus;
 use App\Events\DeviceLatencyUpdated;
@@ -15,11 +16,15 @@ use App\Models\Agent;
 use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Models\Probe;
+use App\Services\Polling\DeviceMetrics;
 use App\Services\Polling\OpticalReading;
+use App\Services\Polling\PortStats;
 use App\Services\Polling\RateCalculator;
+use App\Services\Polling\StorageReading;
 use App\Services\Probes\ProbeResult;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -37,7 +42,7 @@ use Illuminate\Support\Facades\DB;
  * (RateCalculator::utilPercent) so the util/colour authority stays central.
  *
  * @phpstan-type PingResult array{device_id:int, up:bool, rtt_ms?:float|null, loss_pct?:float|null, jitter_ms?:float|null}
- * @phpstan-type FlowResult array{interface_id:int, in_bps:float, out_bps:float}
+ * @phpstan-type FlowResult array{interface_id:int, in_bps:float, out_bps:float, oper_up?:bool|null, pkts_in?:float|null, errors_in?:float|null}
  */
 class IngestAgentResults
 {
@@ -47,6 +52,7 @@ class IngestAgentResults
         private CaptureDeviceFacts $facts,
         private PollProbes $probes,
         private RecordOpticalPower $recordOptical,
+        private RecordDeviceResources $recordResources,
     ) {}
 
     /** @param array<string,mixed> $payload */
@@ -123,7 +129,7 @@ class IngestAgentResults
             if ($probe === null) {
                 continue; // not this agent's probe - ignore
             }
-            $cert = isset($p['cert_expires']) ? \Carbon\CarbonImmutable::createFromTimestamp((int) $p['cert_expires']) : null;
+            $cert = isset($p['cert_expires']) ? CarbonImmutable::createFromTimestamp((int) $p['cert_expires']) : null;
             $result = new ProbeResult(
                 (bool) ($p['up'] ?? false),
                 self::num($p['latency_ms'] ?? null),
@@ -252,6 +258,7 @@ class IngestAgentResults
         $now = now();
         $frames = [];
         $sampleRows = [];
+        $resources = [];
 
         foreach ($metrics as $m) {
             $device = $devices->get($m['device_id'] ?? 0);
@@ -261,13 +268,17 @@ class IngestAgentResults
             $cpu = self::num($m['cpu_pct'] ?? null);
             $mem = self::num($m['mem_used_pct'] ?? null);
             $temp = self::num($m['temp_c'] ?? null);
-            if ($cpu === null && $mem === null && $temp === null) {
+            // Device page extras (per-CPU, storage, uptime). Older agents never send them.
+            $extras = self::resourceMetrics($m);
+            if ($cpu === null && $mem === null && $temp === null && $extras->isEmpty()) {
                 continue; // nothing readable - don't stamp metrics_at with an empty frame
             }
 
             $device->forceFill([
                 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
+                ...RecordDeviceResources::deviceAttributes($device, $extras, $now),
             ])->save();
+            $resources[] = [$device, $extras];
 
             $frames[] = [
                 'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
@@ -279,8 +290,11 @@ class IngestAgentResults
                 'device_id' => $device->id, 'ts' => $now,
                 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
                 'signal_dbm' => null, 'snr_db' => null, 'ccq_pct' => null, 'wireless_clients' => null,
+                'uptime_s' => $extras->uptimeSeconds,
             ];
         }
+
+        ($this->recordResources)($resources, $now);
 
         if ($sampleRows !== [] && config('mymate.history.enabled', true)) {
             try {
@@ -293,6 +307,53 @@ class IngestAgentResults
         if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
             LiveBroadcast::send(new DeviceMetricsUpdated($frames));
         }
+    }
+
+    /**
+     * The per-CPU / storage / uptime part of an agent metrics entry as a DeviceMetrics, so it goes
+     * through the same RecordDeviceResources as the central tick.
+     *
+     *   uptime_s  int seconds
+     *   cpus      [{index, load_pct}]
+     *   storage   [{key, descr, type, units, size, used}] raw hrStorage values (type is the
+     *             hrStorageType OID, or already one of our names from a RouterOS read; size/used
+     *             in allocation units). Absent or null = not read, [] = read and nothing there.
+     *
+     * @param  array<string, mixed>  $m
+     */
+    private static function resourceMetrics(array $m): DeviceMetrics
+    {
+        $cpus = null;
+        foreach ((array) ($m['cpus'] ?? []) as $c) {
+            if (is_array($c) && isset($c['index']) && is_numeric($c['load_pct'] ?? null)) {
+                $cpus[(int) $c['index']] = max(0.0, min(100.0, (float) $c['load_pct']));
+            }
+        }
+
+        $storages = null;
+        if (isset($m['storage']) && is_array($m['storage'])) {
+            $cols = ['descr' => [], 'type' => [], 'units' => [], 'size' => [], 'used' => []];
+            foreach ($m['storage'] as $e) {
+                $key = is_array($e) ? trim((string) ($e['key'] ?? '')) : '';
+                if ($key === '') {
+                    continue;
+                }
+                foreach (array_keys($cols) as $col) {
+                    if (isset($e[$col])) {
+                        $cols[$col][$key] = (string) $e[$col];
+                    }
+                }
+            }
+            $storages = StorageReading::fromHrColumns($cols['descr'], $cols['type'], $cols['units'], $cols['size'], $cols['used']);
+        }
+
+        $uptime = $m['uptime_s'] ?? null;
+
+        return new DeviceMetrics(
+            uptimeSeconds: is_numeric($uptime) && $uptime >= 0 ? (int) $uptime : null,
+            cpuLoads: $cpus,
+            storages: $storages,
+        );
     }
 
     /** Coerce an incoming metric to a float or null (an agent sends null for an unread metric). */
@@ -409,14 +470,27 @@ class IngestAgentResults
             $utilIn = $this->rates->utilPercent($inBps, $iface->speed_mbps);
             $utilOut = $this->rates->utilPercent($outBps, $iface->speed_mbps);
 
+            // Port rates (per second) the agent worked out from its own counter deltas, only on
+            // a cycle it read them, and the oper status. Older agents send neither.
+            $port = [];
+            foreach (PortStats::RATES as $name) {
+                $port[$name] = self::num($f[$name] ?? null);
+            }
+            $read = array_filter($port, static fn ($v) => $v !== null);
+            $operUp = isset($f['oper_up']) && is_bool($f['oper_up']) ? $f['oper_up'] : null;
+
             DB::table('interfaces')->where('id', $iface->id)->update([
                 'bps_in' => $inBps, 'bps_out' => $outBps,
                 'util_in' => $utilIn, 'util_out' => $utilOut,
                 'last_ts' => $now, 'updated_at' => $now,
+                ...$read,
+                ...($operUp === null ? [] : ['oper_status' => $operUp ? 'up' : 'down']),
             ]);
             $sampleRows[] = [
                 'interface_id' => $iface->id, 'ts' => $now,
                 'bps_in' => $inBps, 'bps_out' => $outBps, 'util_in' => $utilIn, 'util_out' => $utilOut,
+                ...$port,
+                'oper_up' => $operUp,
             ];
             $frames[$iface->device_id][] = [
                 'interface_id' => $iface->id, 'util_in' => $utilIn, 'util_out' => $utilOut,

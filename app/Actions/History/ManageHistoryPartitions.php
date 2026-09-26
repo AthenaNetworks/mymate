@@ -15,9 +15,6 @@ use Illuminate\Support\Facades\Schema;
  */
 class ManageHistoryPartitions
 {
-    /** Parent tables that are daily-partitioned; each partition is "{table}_YYYYMMDD". */
-    private const TABLES = ['interface_samples', 'device_metric_samples', 'ping_samples', 'sensor_samples', 'probe_samples'];
-
     /** @return array{created:int, dropped:int} */
     public function __invoke(): array
     {
@@ -29,7 +26,8 @@ class ManageHistoryPartitions
 
         $created = 0;
         $dropped = 0;
-        foreach (self::TABLES as $table) {
+        // every family's raw table is daily-partitioned, each partition is "{table}_YYYYMMDD"
+        foreach (HistoryFamilies::rawTables() as $table) {
             // Ensure [yesterday .. today+ahead] exist (yesterday covers writes that land
             // just after a UTC-midnight rollover).
             for ($i = -1; $i <= $ahead; $i++) {

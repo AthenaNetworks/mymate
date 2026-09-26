@@ -31,6 +31,25 @@ of commit subjects.
   start before the 5 minute rollups are kept fall back to hourly averages and say so, since that reads low.
 - **Device events timeline.** Outages, alerts firing and clearing, config changes from backups, the last
   upgrade and the last reboot, merged newest first on the device page's Events tab.
+- **Port errors, discards and packets are graphed now.** Every interface keeps in / out errors,
+  discards and packets per second as history, rolled up to a year like traffic, plus the port's up /
+  down state over time (as % up). Over SNMP the counters are read once a minute by default
+  (`MYMATE_PORT_STATS_INTERVAL`), only for the ports we already know, packed into a few GETs; over the
+  RouterOS API they come free with every poll. The Counter32 error counters are wrap safe, and a reboot
+  resetting them doesn't draw a spike. The latest rates are on each interface in the API too.
+- **Disk and memory usage per device.** The HOST-RESOURCES storage table (disks, RAM, swap, flash) is
+  read on the metrics cadence, kept as each device's current storage list
+  (`GET /api/devices/{device}/storage`) and graphed per entry. RouterOS boxes polled over the API report
+  their memory and system disk. Reading it walks the storage table once instead of three times, so memory
+  polling got a little cheaper.
+- **Load per CPU core.** Each processor's load is kept and graphed alongside the overall CPU figure,
+  with the current per-core values at `GET /api/devices/{device}/processors`.
+- **Uptime history.** Uptime is read on every metrics poll now (not only at discovery) and graphed, so a
+  reboot shows as the line dropping to zero. A reboot is also noted in the engine log.
+- **Optical power history.** SFP Rx / Tx light levels are kept as history per port, not just the latest
+  reading, so a slowly dying optic or a dirty patch is easy to spot.
+- Remote agents report all of the above for their devices too (update the agent to get it; older agents
+  keep working and just don't send the new fields). The demo shows plausible values for all of it.
 - **Port alerts show up on the map screen (GitHub #22).** When an alert starts firing or a firing one
   clears, the map now pops it up live the way it does a device outage, so a port going down on a core
   link gets noticed without anyone sitting on the Alerts page. Only port-level alerts toast (device

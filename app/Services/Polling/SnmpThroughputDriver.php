@@ -16,7 +16,7 @@ use App\Services\Snmp\SnmpCredential;
  *
  * Walk keys are the ifIndex (SnmpClient returns suffix-as-keys).
  */
-class SnmpThroughputDriver implements ThroughputDriver
+class SnmpThroughputDriver implements PortStatsDriver, ThroughputDriver
 {
     public function __construct(private SnmpClient $snmp) {}
 
@@ -80,6 +80,80 @@ class SnmpThroughputDriver implements ThroughputDriver
         }
 
         return $samples;
+    }
+
+    /**
+     * Errors, discards and packets per port, by GET on the ifIndexes we already know rather than
+     * ten column walks. A walk pays for every ifIndex the box has (VLANs, tunnels, the lot); a
+     * GET only asks about ports we store, packed `snmp.get_chunk` OIDs to a PDU. Packets are
+     * unicast + multicast + broadcast summed, from the 64-bit ifXTable counters.
+     *
+     * Absent OIDs (v1 has no Counter64, some boxes skip ifXTable packets) just come back missing
+     * and that counter stays null. Only a transport failure throws, and the caller treats that
+     * as "no port stats this time", the octets tick is already done by then.
+     */
+    public function portCounters(Device $device, array $ifIndexes): array
+    {
+        if ($ifIndexes === []) {
+            return [];
+        }
+        [$host, $community] = $this->target($device);
+        $oids = $this->oids();
+
+        // counter name => the columns that add up to it
+        $columns = [
+            'errors_in' => ['if_in_errors'],
+            'errors_out' => ['if_out_errors'],
+            'discards_in' => ['if_in_discards'],
+            'discards_out' => ['if_out_discards'],
+            'pkts_in' => ['if_hc_in_ucast_pkts', 'if_hc_in_mcast_pkts', 'if_hc_in_bcast_pkts'],
+            'pkts_out' => ['if_hc_out_ucast_pkts', 'if_hc_out_mcast_pkts', 'if_hc_out_bcast_pkts'],
+        ];
+
+        $wanted = [];
+        foreach ($ifIndexes as $ifIndex) {
+            foreach ($columns as $cols) {
+                foreach ($cols as $col) {
+                    if (isset($oids[$col])) {
+                        $wanted[] = ltrim($oids[$col], '.').'.'.(int) $ifIndex;
+                    }
+                }
+            }
+        }
+
+        $values = [];
+        $chunk = max(1, (int) config('mymate.snmp.get_chunk', 40));
+        foreach (array_chunk($wanted, $chunk) as $batch) {
+            foreach ($this->snmp->get($host, $community, array_map(static fn (string $o): string => '.'.$o, $batch)) as $oid => $value) {
+                if (is_numeric($value)) {
+                    $values[ltrim((string) $oid, '.')] = (int) $value;
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($ifIndexes as $ifIndex) {
+            $port = [];
+            foreach ($columns as $name => $cols) {
+                $parts = [];
+                foreach ($cols as $col) {
+                    $key = ltrim($oids[$col] ?? '', '.').'.'.(int) $ifIndex;
+                    if (isset($values[$key])) {
+                        $parts[$col] = $values[$key];
+                    }
+                }
+                // the first column has to be there (unicast for packets), a lone broadcast
+                // count isn't "packets" and would read as a drop when unicast comes back
+                if (isset($parts[$cols[0]])) {
+                    $port[$name] = array_sum($parts);
+                }
+            }
+            if ($port !== []) {
+                $out[(int) $ifIndex] = $port;
+            }
+        }
+
+        return $out;
     }
 
     /**
