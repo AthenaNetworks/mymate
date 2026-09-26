@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Events\Concerns\ScopableLiveEvent;
+
 /**
  * Fire a live-update broadcast inline (the events are ShouldBroadcastNow), tolerating a broker or
  * Reverb hiccup.
@@ -20,6 +22,29 @@ namespace App\Support;
 class LiveBroadcast
 {
     public static function send(object $event): void
+    {
+        self::dispatch($event);
+
+        // The shared channel is for unrestricted operators only. Everyone confined to some maps
+        // gets their own copy carrying just their devices (or nothing, if none are in it).
+        if ($event instanceof ScopableLiveEvent) {
+            try {
+                $audience = RestrictedAudience::members();
+            } catch (\Throwable $e) {
+                EngineLog::warning('broadcast: restricted audience unavailable', ['error' => $e->getMessage()]);
+
+                return;
+            }
+            foreach ($audience as $userId => $visible) {
+                $copy = $event->scopedTo($visible, RestrictedAudience::channelFor($userId));
+                if ($copy !== null) {
+                    self::dispatch($copy);
+                }
+            }
+        }
+    }
+
+    private static function dispatch(object $event): void
     {
         try {
             event($event);

@@ -2,8 +2,9 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\ScopableLiveEvent;
+use App\Events\Concerns\ScopesDeviceFrames;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -13,19 +14,15 @@ use Illuminate\Queue\SerializesModels;
  * one event carries many devices' latest readings so the map tiles update live without
  * a message per device. Mirrors InterfaceUtilUpdated but on the slower metrics cadence.
  */
-class DeviceMetricsUpdated implements ShouldBroadcastNow
+class DeviceMetricsUpdated implements ShouldBroadcastNow, ScopableLiveEvent
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets, SerializesModels, ScopesDeviceFrames;
 
     /**
      * @param  list<array{device_id:int, cpu_pct:?float, mem_used_pct:?float, temp_c:?float}>  $devices
      */
     public function __construct(public array $devices) {}
 
-    public function broadcastOn(): PrivateChannel
-    {
-        return new PrivateChannel('map');
-    }
 
     public function broadcastAs(): string
     {

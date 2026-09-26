@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
+import { useCurrentUser } from '../../auth/api/auth';
 import { deviceKeys } from '../../devices/api/getDevices';
 import { outageKeys } from '../../outages/api/getOutages';
 import { linkKeys } from '../api/getLinks';
@@ -26,9 +27,15 @@ export function useMapChannel(
     onStatus?: (e: { id: number; name: string; status: DeviceStatus }) => void,
 ) {
     const qc = useQueryClient();
+    // An unrestricted operator hears the whole fleet on the shared `map` channel. A restricted one
+    // (per-user or via a group) isn't allowed on it: the server sends them a copy filtered to their
+    // own devices on `map.user.{id}` instead, so nothing outside their maps reaches the socket.
+    const { data: me } = useCurrentUser();
+    const channelName = me ? (me.restricted ? `map.user.${me.id}` : 'map') : null;
 
     useEffect(() => {
-        const channel = echo.private('map');
+        if (channelName === null) return;
+        const channel = echo.private(channelName);
 
         // A real up<->down flip opens/closes an outage row, so the timeline is refreshed ahead
         // of its 15 s poll. Coalesced, not per-flip: on a large fleet hundreds of devices can
@@ -125,7 +132,7 @@ export function useMapChannel(
 
         return () => {
             if (outageTimer !== null) clearTimeout(outageTimer);
-            echo.leave('map');
+            echo.leave(channelName);
         };
-    }, [qc, onUtil, onStatus]);
+    }, [qc, onUtil, onStatus, channelName]);
 }

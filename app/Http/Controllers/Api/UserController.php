@@ -7,6 +7,7 @@ use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Models\User;
 use App\Support\EngineLog;
+use App\Support\RestrictedAudience;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -54,6 +55,8 @@ class UserController extends Controller
             'ip' => $request->ip(),
         ]);
 
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
+
         return response()->json($this->shape($user, true), 201);
     }
 
@@ -92,6 +95,8 @@ class UserController extends Controller
             'ip' => $request->ip(),
         ]);
 
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
+
         return response()->json($this->shape($user, true));
     }
 
@@ -112,6 +117,8 @@ class UserController extends Controller
             'user_id' => $user->id,
             'ip' => $request->ip(),
         ]);
+
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
 
         return response()->noContent();
     }

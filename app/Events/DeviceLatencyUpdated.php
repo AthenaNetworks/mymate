@@ -2,8 +2,9 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\ScopableLiveEvent;
+use App\Events\Concerns\ScopesDeviceFrames;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -13,19 +14,15 @@ use Illuminate\Queue\SerializesModels;
  * carries many devices' latest rtt/loss so the internet/upstream card updates live.
  * Mirrors DeviceMetricsUpdated but on the ping latency cadence (~once a minute).
  */
-class DeviceLatencyUpdated implements ShouldBroadcastNow
+class DeviceLatencyUpdated implements ShouldBroadcastNow, ScopableLiveEvent
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets, SerializesModels, ScopesDeviceFrames;
 
     /**
      * @param  list<array{device_id:int, rtt_ms:?float, loss_pct:?float}>  $devices
      */
     public function __construct(public array $devices) {}
 
-    public function broadcastOn(): PrivateChannel
-    {
-        return new PrivateChannel('map');
-    }
 
     public function broadcastAs(): string
     {

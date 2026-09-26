@@ -2,8 +2,9 @@
 
 namespace App\Events;
 
+use App\Events\Concerns\ScopableLiveEvent;
+use App\Events\Concerns\ScopesDeviceFrames;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -14,20 +15,15 @@ use Illuminate\Queue\SerializesModels;
  * mean thousands of WS messages. Broadcast every tick (unlike status, which is
  * change-only). The frontend colour ramp folds these frames onto edges.
  */
-class InterfaceUtilUpdated implements ShouldBroadcastNow
+class InterfaceUtilUpdated implements ShouldBroadcastNow, ScopableLiveEvent
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, InteractsWithSockets, SerializesModels, ScopesDeviceFrames;
 
     /**
      * @param  list<array{device_id:int, status:string, interfaces:list<array<string,mixed>>}>  $devices
      */
     public function __construct(public array $devices) {}
 
-    public function broadcastOn(): PrivateChannel
-    {
-        // Private channel - session-authorised operators only.
-        return new PrivateChannel('map');
-    }
 
     public function broadcastAs(): string
     {

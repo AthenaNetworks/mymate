@@ -69,6 +69,12 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Restricted operators no longer receive live updates for devices outside their maps.** The live
+  map's websocket channel carried the whole fleet and let any signed-in user subscribe, so a
+  map-restricted operator (per-user or through a group) was sent live status, traffic and metrics for
+  devices they can't otherwise see - hidden by the UI, but readable off the socket. The shared channel
+  is now for unrestricted operators only, and a restricted operator gets their own channel carrying
+  just their devices. Nothing to configure; their live map works as before.
 - **A device found by an agent's discovery sweep is now polled by that agent.** Discovery candidates
   never recorded which agent found them, so approving one created a *central* device the server usually
   had no route to (it sits on the remote site's network) and it just showed down. Candidates now carry

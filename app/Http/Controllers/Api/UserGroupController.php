@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\UserGroup\SaveUserGroupRequest;
 use App\Models\UserGroup;
 use App\Support\EngineLog;
+use App\Support\RestrictedAudience;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -40,6 +41,8 @@ class UserGroupController extends Controller
 
         $this->log('created', $group, $request);
 
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
+
         return response()->json($this->shape($group), 201);
     }
 
@@ -53,6 +56,8 @@ class UserGroupController extends Controller
         $this->syncRelations($userGroup, $request);
 
         $this->log('updated', $userGroup, $request);
+
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
 
         return response()->json($this->shape($userGroup));
     }
@@ -72,6 +77,8 @@ class UserGroupController extends Controller
 
         $userGroup->delete();
         $this->log('deleted', $userGroup, $request);
+
+        RestrictedAudience::forget(); // access changed - refresh who gets which live devices
 
         return response()->noContent();
     }
