@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\Tools\ToolsController;
 use App\Http\Controllers\Api\TraceController;
 use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\UserGroupController;
 use App\Http\Middleware\EnsurePasskeyVerified;
 use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
@@ -128,6 +129,15 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         Route::post('users', [UserController::class, 'store'])->name('users.store');
         Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    });
+
+    // Operator groups (GitHub #28). Admin-only end to end, reads included - membership and the
+    // map set decide what people can see, so a non-admin has no business listing them either.
+    Route::middleware(['admin', 'throttle:30,1'])->group(function (): void {
+        Route::get('user-groups', [UserGroupController::class, 'index'])->name('user-groups.index');
+        Route::post('user-groups', [UserGroupController::class, 'store'])->name('user-groups.store');
+        Route::put('user-groups/{userGroup}', [UserGroupController::class, 'update'])->name('user-groups.update');
+        Route::delete('user-groups/{userGroup}', [UserGroupController::class, 'destroy'])->name('user-groups.destroy');
     });
 
     // Danger zone: wipe all monitoring data, keep only admin accounts. Admin-only + password-
