@@ -14,6 +14,17 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Play back the geo map's history (GitHub #22).** A map in geographic mode has a new History button
+  next to the map picker. It swaps the live view for a playback bar: pick the last 1h, 6h, 24h or 7 days,
+  or type a date and time to open a window centred on it, then scrub, step, or play it at 1x to 8x. Link
+  colours and load labels, device up/down and ping latency all show what they were at that moment,
+  coloured exactly like the live map, and red marks on the timeline show where devices went down (click
+  one to jump there). Down comes from the recorded outages, so even a 30 second drop shows on a 5 minute
+  frame. The banner says PLAYBACK and the time while you're in it, live updates can't change what you're
+  looking at, and Live takes you back with everything refreshed. Long windows read the 5 minute and hourly
+  history rollups, and big maps load in chunks so it can start playing while the rest arrives. CPU, memory
+  and temperature aren't part of playback yet, so the cards leave them blank. Restricted operators only
+  get playback for maps they've been given.
 - **Port alerts show up on the map screen (GitHub #22).** When an alert starts firing or a firing one
   clears, the map now pops it up live the way it does a device outage, so a port going down on a core
   link gets noticed without anyone sitting on the Alerts page. Only port-level alerts toast (device
