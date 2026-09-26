@@ -28,8 +28,25 @@ class FakeSnmpClient implements SnmpClient
     /** When true, a table walk throws (simulates an SNMP timeout / filtered port). */
     public bool $throwOnWalk = false;
 
+    /**
+     * When set, GETs answer from this [oid => value] table and only for the OIDs asked for (an
+     * absent one is just missing, like PhpSnmpClient), and every request lands in $getCalls.
+     *
+     * @var array<string, string>|null
+     */
+    public ?array $values = null;
+
+    /** @var list<list<string>> */
+    public array $getCalls = [];
+
     public function get(string $host, SnmpCredential $cred, array $oids): array
     {
+        if ($this->values !== null) {
+            $this->getCalls[] = $oids;
+
+            return array_intersect_key($this->values, array_flip($oids));
+        }
+
         // Discovery scripts responses by the identity that answered - the community for v1/v2c,
         // the USM user for v3.
         $key = $cred->version === '3' ? $cred->secName : $cred->community;

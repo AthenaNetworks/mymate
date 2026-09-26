@@ -74,7 +74,7 @@ func TestPortCountersSumsColumnsAndNeedsTheFirst(t *testing.T) {
 		"1.3.6.1.2.1.31.1.1.1.12.3": 9,   // out mcast without ucast -> skipped
 		"1.3.6.1.2.1.2.2.1.14.3":    2,
 	}
-	got := portCounters(cols, vals, "3")
+	got := portCounters(&proto.PortStatsTarget{Columns: cols}, vals, "3")
 	if got["pkts_in"] != 105 || got["errors_in"] != 2 {
 		t.Errorf("portCounters = %v", got)
 	}

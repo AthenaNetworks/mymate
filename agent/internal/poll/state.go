@@ -11,6 +11,7 @@ import (
 type counterState struct {
 	in, out uint64
 	ts      time.Time
+	is32    bool // the 32-bit ifTable octets (v1 / no HC counters), which wrap
 }
 
 // portState is the same idea for the port counters (packets / errors / discards), kept apart
@@ -31,21 +32,30 @@ func newState() *state { return &state{m: map[int]counterState{}, ports: map[int
 // rate records the new counters and returns (inBps, outBps) vs the previous sample, or
 // (nil, nil) when there's no rate yet: the first sample for this interface, no elapsed time,
 // or a counter that went backwards (reset/wrap - discard rather than emit a garbage spike).
-func (s *state) rate(ifID int, in, out uint64, now time.Time) (inBps, outBps *float64) {
+//
+// is32 is the ifInOctets/ifOutOctets fallback: those do wrap, so a backwards step goes through
+// the same Counter32 wrap check as the port counters. A port that switched between the 64 and
+// 32-bit counters since the last read starts over rather than diffing the two.
+func (s *state) rate(ifID int, in, out uint64, is32 bool, now time.Time) (inBps, outBps *float64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	prev, ok := s.m[ifID]
-	s.m[ifID] = counterState{in: in, out: out, ts: now}
-	if !ok {
+	s.m[ifID] = counterState{in: in, out: out, ts: now, is32: is32}
+	if !ok || prev.is32 != is32 {
 		return nil, nil
 	}
 	dt := now.Sub(prev.ts).Seconds()
-	if dt <= 0 || in < prev.in || out < prev.out {
+	if dt <= 0 {
 		return nil, nil
 	}
-	i := float64(in-prev.in) * 8 / dt
-	o := float64(out-prev.out) * 8 / dt
+	di, okIn := counterDelta(prev.in, in, is32)
+	do, okOut := counterDelta(prev.out, out, is32)
+	if !okIn || !okOut {
+		return nil, nil
+	}
+	i := float64(di) * 8 / dt
+	o := float64(do) * 8 / dt
 	return &i, &o
 }
 

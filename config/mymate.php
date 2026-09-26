@@ -148,6 +148,10 @@ return [
             'if_high_speed' => '.1.3.6.1.2.1.31.1.1.1.15',
             'if_hc_in_octets' => '.1.3.6.1.2.1.31.1.1.1.6',
             'if_hc_out_octets' => '.1.3.6.1.2.1.31.1.1.1.10',
+            // 32-bit ifTable octets, only read when the HC ones aren't there (SNMPv1 can't carry
+            // Counter64 at all, which is every airOS box). They wrap, see RateCalculator.
+            'if_in_octets' => '.1.3.6.1.2.1.2.2.1.10',
+            'if_out_octets' => '.1.3.6.1.2.1.2.2.1.16',
             'if_oper_status' => '.1.3.6.1.2.1.2.2.1.8', // ifOperStatus (1=up) - per-port up/down
             // Port counters for errors/discards/packets, read by GET per known ifIndex on the
             // slower port_stats_interval. Errors and discards only exist as Counter32.
@@ -161,6 +165,12 @@ return [
             'if_hc_out_ucast_pkts' => '.1.3.6.1.2.1.31.1.1.1.11',
             'if_hc_out_mcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.12',
             'if_hc_out_bcast_pkts' => '.1.3.6.1.2.1.31.1.1.1.13',
+            // Packet fallback when the HC packet columns don't answer (v1, or a box without
+            // them): unicast + non-unicast from the ifTable, Counter32 so they wrap.
+            'if_in_ucast_pkts' => '.1.3.6.1.2.1.2.2.1.11',
+            'if_in_nucast_pkts' => '.1.3.6.1.2.1.2.2.1.12',
+            'if_out_ucast_pkts' => '.1.3.6.1.2.1.2.2.1.17',
+            'if_out_nucast_pkts' => '.1.3.6.1.2.1.2.2.1.18',
             // Uptime for the metrics tick: hrSystemUptime (the host) is preferred over
             // sysUpTime (the SNMP agent, which also resets when snmpd restarts).
             'hr_system_uptime' => '.1.3.6.1.2.1.25.1.1.0',

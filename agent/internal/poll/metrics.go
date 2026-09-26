@@ -1,6 +1,7 @@
 package poll
 
 import (
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,13 +45,112 @@ func (p *Poller) pollSNMPMetrics(t proto.SNMPTarget) *proto.MetricsResult {
 	}
 	temp := metricTemp(g, m)
 	uptime := metricUptime(g.Get, m.UptimeOids)
-	if cpu == nil && mem == nil && temp == nil && uptime == nil && len(cpus) == 0 && len(storage) == 0 {
+	wl := snmpWireless(g.Get, g.WalkAll, m)
+	if cpu == nil && mem == nil && temp == nil && uptime == nil && len(cpus) == 0 && len(storage) == 0 && wl.Empty() {
 		return nil // nothing readable - don't report an all-null frame
 	}
-	return &proto.MetricsResult{
+	res := &proto.MetricsResult{
 		DeviceID: t.DeviceID, CPUPct: clampPct(cpu), MemUsedPct: clampPct(mem), TempC: temp,
 		UptimeS: uptime, CPUs: cpus, Storage: storage,
 	}
+	res.SetWireless(wl)
+	return res
+}
+
+// snmpWireless reads RF from the profile's wireless OIDs the way the central
+// SnmpDeviceMetricsDriver::wireless does. Scalars and table walks are both read so one profile
+// covers an AP (per-station rows, averaged) and a station/CPE (one scalar or row):
+//
+//	signal/snr/ccq   GET each scalar + walk each column, average every numeric value
+//	clients          ClientsWalk counts the rows, else ClientsValueWalk sums the reported count
+//
+// Everything is best-effort: an OID the box doesn't have, or a walk that errors, just leaves
+// that field nil.
+func snmpWireless(get func([]string) (*gosnmp.SnmpPacket, error), walk func(string) ([]gosnmp.SnmpPDU, error), m *proto.MetricsTarget) proto.Wireless {
+	return proto.Wireless{
+		SignalDbm: rfMeasure(get, walk, m.SignalOids, m.SignalWalk),
+		SnrDb:     rfMeasure(get, walk, m.SnrOids, m.SnrWalk),
+		CcqPct:    clampPct(rfMeasure(get, walk, m.CcqOids, m.CcqWalk)),
+		Clients:   rfClients(walk, m),
+	}
+}
+
+// rfMeasure averages every numeric value from the scalar GETs and the column walks, to one
+// decimal like the server. nil when nothing answered.
+func rfMeasure(get func([]string) (*gosnmp.SnmpPacket, error), walk func(string) ([]gosnmp.SnmpPDU, error), oids, walks []string) *float64 {
+	var vals []float64
+	for _, oid := range oids {
+		// one OID per GET, so a v1 noSuchName on one can't take the others with it
+		res, err := get([]string{oid})
+		if err != nil || res == nil || res.Error != gosnmp.NoError {
+			continue
+		}
+		for _, v := range res.Variables {
+			if f, ok := pduFloat(v); ok {
+				vals = append(vals, f)
+				break
+			}
+		}
+	}
+	for _, oid := range walks {
+		vals = append(vals, walkFloats(walk, oid)...)
+	}
+	if len(vals) == 0 {
+		return nil
+	}
+	r := math.Round(sum(vals)/float64(len(vals))*10) / 10
+	return &r
+}
+
+// rfClients is the associated station count: the numeric rows of a registration table counted,
+// or else a count the device reports itself, summed across rows.
+func rfClients(walk func(string) ([]gosnmp.SnmpPDU, error), m *proto.MetricsTarget) *int {
+	if len(m.ClientsWalk) > 0 {
+		n, found := 0, false
+		for _, oid := range m.ClientsWalk {
+			if rows := walkFloats(walk, oid); len(rows) > 0 {
+				n += len(rows)
+				found = true
+			}
+		}
+		if !found {
+			return nil
+		}
+		return &n
+	}
+	if len(m.ClientsValueWalk) > 0 {
+		total, found := 0.0, false
+		for _, oid := range m.ClientsValueWalk {
+			for _, v := range walkFloats(walk, oid) {
+				total += v
+				found = true
+			}
+		}
+		if !found {
+			return nil
+		}
+		n := int(math.Round(total))
+		return &n
+	}
+	return nil
+}
+
+// walkFloats walks a column and returns its numeric values (none when the walk fails).
+func walkFloats(walk func(string) ([]gosnmp.SnmpPDU, error), oid string) []float64 {
+	if oid == "" {
+		return nil
+	}
+	pdus, err := walk(oid)
+	if err != nil {
+		return nil
+	}
+	var out []float64
+	for _, pdu := range pdus {
+		if f, ok := pduFloat(pdu); ok {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // metricCPU is the overall cpu % plus, for a walked profile (hrProcessorLoad), the load of each

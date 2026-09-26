@@ -104,9 +104,14 @@ type SNMPAuth struct {
 // PortStatsTarget lists, per rate name (pkts_in, errors_out, ...), the table column OIDs whose
 // values add up to that counter; the first column has to answer or the counter is skipped
 // (packets = unicast + multicast + broadcast, unicast first). Counter32 names can wrap.
+//
+// Fallback is the 32-bit ifTable version of a counter (packets = unicast + non-unicast), read for
+// a port whose Columns don't answer, and instead of them on SNMPv1. Always Counter32. Older
+// servers never send it.
 type PortStatsTarget struct {
 	Columns   map[string][]string `json:"columns"`
 	Counter32 []string            `json:"counter32,omitempty"`
+	Fallback  map[string][]string `json:"fallback,omitempty"`
 }
 
 // MetricsTarget describes how to read cpu/mem/temp for one device, driven by the server's
@@ -128,6 +133,17 @@ type MetricsTarget struct {
 	// Mem is "hrstorage"). UptimeOids are GET together, first one that answers wins.
 	HrEntry    string   `json:"hr_entry,omitempty"`
 	UptimeOids []string `json:"uptime_oids,omitempty"`
+	// Wireless RF from the vendor profile, same keys as the central SnmpDeviceMetricsDriver:
+	// *Oids are scalars to GET, *Walk table columns to walk, every numeric value averaged (an AP
+	// averages over its stations). ClientsWalk counts rows, ClientsValueWalk sums a reported count.
+	SignalOids       []string `json:"signal_oids,omitempty"`
+	SignalWalk       []string `json:"signal_walk,omitempty"`
+	SnrOids          []string `json:"snr_oids,omitempty"`
+	SnrWalk          []string `json:"snr_walk,omitempty"`
+	CcqOids          []string `json:"ccq_oids,omitempty"`
+	CcqWalk          []string `json:"ccq_walk,omitempty"`
+	ClientsWalk      []string `json:"clients_walk,omitempty"`
+	ClientsValueWalk []string `json:"clients_value_walk,omitempty"`
 }
 
 // OpticalTarget describes an SNMP optical table from the server's vendor profile: Rx/Tx power
@@ -321,14 +337,38 @@ type DeviceFacts struct {
 // The device page extras: UptimeS, the load per processor, and the storage entries. Storage is
 // deliberately not omitempty: nil (null) means it wasn't read, an empty slice ([]) means it was
 // read and the device has none, which lets the server drop entries that went away.
+//
+// Wireless RF (signal/snr/ccq/clients) is never omitted either: null is "no radio / not read"
+// and the server stores it like the central poller does. An agent from before RF support sends
+// none of the keys, which the server takes as "leave the stored values alone".
 type MetricsResult struct {
-	DeviceID   int            `json:"device_id"`
-	CPUPct     *float64       `json:"cpu_pct"`
-	MemUsedPct *float64       `json:"mem_used_pct"`
-	TempC      *float64       `json:"temp_c"`
-	UptimeS    *uint64        `json:"uptime_s,omitempty"`
-	CPUs       []CPULoad      `json:"cpus,omitempty"`
-	Storage    []StorageEntry `json:"storage"`
+	DeviceID        int            `json:"device_id"`
+	CPUPct          *float64       `json:"cpu_pct"`
+	MemUsedPct      *float64       `json:"mem_used_pct"`
+	TempC           *float64       `json:"temp_c"`
+	UptimeS         *uint64        `json:"uptime_s,omitempty"`
+	CPUs            []CPULoad      `json:"cpus,omitempty"`
+	Storage         []StorageEntry `json:"storage"`
+	SignalDbm       *float64       `json:"signal_dbm"`
+	SnrDb           *float64       `json:"snr_db"`
+	CcqPct          *float64       `json:"ccq_pct"`
+	WirelessClients *int           `json:"wireless_clients"`
+}
+
+// Wireless is one device's RF reading, filled into a MetricsResult.
+type Wireless struct {
+	SignalDbm, SnrDb, CcqPct *float64
+	Clients                  *int
+}
+
+// Empty is true when nothing was read.
+func (w Wireless) Empty() bool {
+	return w.SignalDbm == nil && w.SnrDb == nil && w.CcqPct == nil && w.Clients == nil
+}
+
+// SetWireless copies an RF reading onto the result.
+func (m *MetricsResult) SetWireless(w Wireless) {
+	m.SignalDbm, m.SnrDb, m.CcqPct, m.WirelessClients = w.SignalDbm, w.SnrDb, w.CcqPct, w.Clients
 }
 
 // CPULoad is one processor's load: the hrProcessorLoad row index over SNMP, the core number

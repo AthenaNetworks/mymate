@@ -19,9 +19,19 @@ class RateCalculator
      *  - no prior sample yet ($last === null),
      *  - non-positive elapsed time ($dtSeconds <= 0),
      *  - the counter went backwards (device reboot / 64-bit wrap) -> $current < $last.
+     *
+     * $bits = 32 is the ifTable ifInOctets/ifOutOctets fallback (SNMPv1 has no HC counters).
+     * Those wrap every few minutes on a busy port, so a backwards step is taken as a wrap the
+     * same way counterRate() does it, rather than throwing the tick away.
      */
-    public function bps(?int $last, int $current, float $dtSeconds): ?float
+    public function bps(?int $last, int $current, float $dtSeconds, int $bits = 64): ?float
     {
+        if ($bits === 32) {
+            $rate = $this->counterRate($last, $current, $dtSeconds, 32);
+
+            return $rate === null ? null : $rate * 8;
+        }
+
         if ($last === null || $dtSeconds <= 0.0) {
             return null;
         }
