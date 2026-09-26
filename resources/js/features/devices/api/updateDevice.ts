@@ -33,6 +33,9 @@ export function useUpdateDevice() {
             const { data } = await apiClient.patch<{ data: Device }>(`/devices/${id}`, body);
             return data.data;
         },
-        onSuccess: () => qc.invalidateQueries({ queryKey: deviceKeys.all }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: deviceKeys.all });
+            qc.invalidateQueries({ queryKey: ['geo', 'devices'] }); // a moved pin / new site
+        },
     });
 }

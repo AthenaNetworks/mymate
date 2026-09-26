@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, MagnifyingGlass, TreeStructure, X } from '@phosphor-icons/react';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
+import { useDebounced, useDeviceList } from '../../devices/api/getDevices';
 import { useIsAdmin } from '../../auth/api/auth';
 import { StatusDot } from '../../../components/StatusDot';
 import type { Device } from '../../../types';
@@ -13,36 +14,21 @@ import type { Device } from '../../../types';
  * Parent is the hierarchy the rest of the app reads: dependency-aware alert suppression,
  * downstream-first upgrade ordering, geo coordinate inheritance and the tree/dependency
  * layouts. Candidates are the whole fleet, not just this map - an uplink often lives on
- * another map (or none at all).
+ * another map (or none at all) - so they're searched server-side (GitHub #22). The server also
+ * leaves out this device and everything below it (`not_under`), the same walk as the
+ * NotADeviceDescendant rule, so the picker can't offer a parent that would close a loop.
  */
 
-/** Every device below this one, so the picker can't offer a parent that would close a loop.
- *  Mirrors the server's NotADeviceDescendant rule; cycle-guarded, like every parent walk. */
-function descendantIds(rootId: number, devices: Device[]): Set<number> {
-    const childrenOf = new Map<number, number[]>();
-    for (const d of devices) {
-        if (d.parent_device_id === null) continue;
-        const siblings = childrenOf.get(d.parent_device_id);
-        if (siblings) siblings.push(d.id);
-        else childrenOf.set(d.parent_device_id, [d.id]);
-    }
+const RESULTS = 50;
 
-    const out = new Set<number>();
-    const queue = [rootId];
-    while (queue.length > 0) {
-        for (const childId of childrenOf.get(queue.pop() as number) ?? []) {
-            if (out.has(childId)) continue; // a loop already in the data ends the walk here
-            out.add(childId);
-            queue.push(childId);
-        }
-    }
-    return out;
-}
-
-export function SetParentDialog({ device, devices, onClose }: { device: Device; devices: Device[]; onClose: () => void }) {
+export function SetParentDialog({ device, onClose }: { device: Device; onClose: () => void }) {
     const isAdmin = useIsAdmin();
     const update = useUpdateDevice();
     const [q, setQ] = useState('');
+    const needle = useDebounced(q.trim());
+    const { data, isFetching } = useDeviceList({ q: needle || undefined, not_under: device.id, per_page: RESULTS, fields: 'summary' });
+    const candidates = data?.data ?? [];
+    const more = (data?.meta.total ?? 0) > RESULTS;
 
     // Escape closes, regardless of focus - the backdrop click handles the rest.
     useEffect(() => {
@@ -52,23 +38,6 @@ export function SetParentDialog({ device, devices, onClose }: { device: Device; 
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
-
-    const nameById = useMemo(() => new Map(devices.map((d) => [d.id, d.name])), [devices]);
-    const excluded = useMemo(() => {
-        const below = descendantIds(device.id, devices);
-        below.add(device.id); // nor itself
-        return below;
-    }, [device.id, devices]);
-
-    const needle = q.trim().toLowerCase();
-    const candidates = useMemo(
-        () =>
-            devices
-                .filter((d) => !excluded.has(d.id))
-                .filter((d) => needle === '' || d.name.toLowerCase().includes(needle) || (d.mgmt_ip ?? '').includes(needle))
-                .sort((a, b) => a.name.localeCompare(b.name)),
-        [devices, excluded, needle],
-    );
 
     if (!isAdmin) return null;
 
@@ -133,7 +102,9 @@ export function SetParentDialog({ device, devices, onClose }: { device: Device; 
                                 {device.parent_device_id === null && <Check weight="bold" className="h-4 w-4 shrink-0 text-emerald-300" />}
                             </button>
                         </li>
-                        {candidates.length === 0 ? (
+                        {!data && isFetching ? (
+                            <li className="px-3 py-6 text-center text-xs text-white/35">Searching...</li>
+                        ) : candidates.length === 0 ? (
                             <li className="px-3 py-6 text-center text-xs text-white/35">
                                 {needle === '' ? 'No other devices to parent this one to.' : `No devices match "${q}".`}
                             </li>
@@ -146,7 +117,7 @@ export function SetParentDialog({ device, devices, onClose }: { device: Device; 
                                             <span className="block truncate text-sm text-white/90">{d.name}</span>
                                             <span className="block truncate text-[11px] text-white/35">
                                                 {d.mgmt_ip}
-                                                {d.parent_device_id !== null && ` - under ${nameById.get(d.parent_device_id) ?? 'another device'}`}
+                                                {d.parent_device_id !== null && ` - under ${d.parent_name ?? 'another device'}`}
                                             </span>
                                         </span>
                                         {device.parent_device_id === d.id && <Check weight="bold" className="h-4 w-4 shrink-0 text-emerald-300" />}
@@ -155,6 +126,7 @@ export function SetParentDialog({ device, devices, onClose }: { device: Device; 
                             ))
                         )}
                     </ul>
+                    {more && <p className="mt-1 px-3 text-[11px] text-white/30">Showing the first {RESULTS} - search to find others.</p>}
 
                     <p className="mt-3 px-1 text-[11px] text-white/30">
                         {device.name} and anything below it are left out - a device can't hang off its own downstream gear.

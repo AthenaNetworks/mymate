@@ -1,5 +1,5 @@
 import { useQueries } from '@tanstack/react-query';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDevicesByIds } from '../../devices/api/getDevices';
 import { deviceInterfaceKeys, fetchDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
 import type { AlertInterfaceFilter, AlertScope } from '../../../types';
 
@@ -38,7 +38,7 @@ export function InterfaceFilterEditor({
     onChange: (f: AlertInterfaceFilter) => void;
 }) {
     const deviceIds = scope.type === 'devices' ? (scope.device_ids ?? []) : [];
-    const { data: devices } = useDevices();
+    const { data: devices } = useDevicesByIds(deviceIds); // just the scoped devices, for their names
     const ifaceQueries = useQueries({
         queries: value.mode === 'selected' ? deviceIds.map((id) => ({ queryKey: deviceInterfaceKeys(id), queryFn: () => fetchDeviceInterfaces(id) })) : [],
     });

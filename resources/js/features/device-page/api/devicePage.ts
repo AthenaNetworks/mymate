@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
 import type { Device } from '../../../types';
+import { deviceKeys } from '../../devices/api/getDevices';
 
 // Data hooks for the full device page (GitHub #28). The page fetches its own single device
 // rather than picking it out of the fleet list, so it works on any size of install and a
@@ -8,7 +9,6 @@ import type { Device } from '../../../types';
 
 export const devicePageKeys = {
     all: ['device-page'] as const,
-    device: (id: number) => ['device-page', id, 'device'] as const,
     summary: (id: number) => ['device-page', id, 'summary'] as const,
     catalog: (id: number) => ['device-page', id, 'catalog'] as const,
     history: (id: number, q: HistoryParams) => ['device-page', id, 'history', q] as const,
@@ -16,9 +16,14 @@ export const devicePageKeys = {
     events: (id: number, page: number, types: string[]) => ['device-page', id, 'events', page, types] as const,
 };
 
+/**
+ * The page's device. Shares the inspector's cache entry (deviceKeys.detail) so an edit, a live
+ * status patch or a map click anywhere else shows up here too, plus a slow poll for fields the
+ * websocket doesn't carry.
+ */
 export function useDevicePageDevice(id: number) {
     return useQuery({
-        queryKey: devicePageKeys.device(id),
+        queryKey: deviceKeys.detail(id),
         queryFn: async (): Promise<Device> => {
             const { data } = await apiClient.get<{ data: Device }>(`/devices/${id}`);
             return data.data;

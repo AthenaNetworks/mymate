@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ArrowCircleUp, ArrowUp, ArrowDown, ArrowRight, CaretLeft, Check, LinkSimple, Trash, Archive, DownloadSimple } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
+import { ArrowCircleUp, ArrowUp, ArrowDown, ArrowRight, CaretLeft, Check, LinkSimple, Trash, Archive, DownloadSimple, MagnifyingGlass } from '@phosphor-icons/react';
+import { useDebounced, useDeviceList, useDevicesByIds, useInfiniteDeviceList } from '../../devices/api/getDevices';
 import { useUpgradePreflight, useUpgradeDevices, type UpgradePlanRow, type UpgradeSource } from '../../devices/api/upgradeDevices';
 import { useRouterosCatalog, useFetchPackage, useDeletePackage } from '../api/routerosCatalog';
 import { useIsAdmin } from '../../auth/api/auth';
@@ -19,7 +19,6 @@ import { UPGRADE_IN_PROGRESS, type Device } from '../../../types';
  */
 export function UpgradesView() {
     const isAdmin = useIsAdmin();
-    const { data: devices } = useDevices();
     const preflight = useUpgradePreflight();
     const upgrade = useUpgradeDevices();
 
@@ -30,8 +29,15 @@ export function UpgradesView() {
     const [version, setVersion] = useState(''); // '' = latest in the device's channel
     const [source, setSource] = useState<UpgradeSource>('mikrotik');
 
-    const candidates = (devices ?? []).filter((d) => d.poll_method === 'routeros');
-    const byId = new Map((devices ?? []).map((d) => [d.id, d]));
+    // RouterOS devices, searched and paged on the server (GitHub #22).
+    const [q, setQ] = useState('');
+    const query = useDebounced(q.trim());
+    const candidateList = useInfiniteDeviceList({ poll_method: 'routeros', q: query || undefined, per_page: 100 });
+    const candidates = candidateList.data?.pages.flatMap((p) => p.data) ?? [];
+    const candidateTotal = candidateList.data?.pages[0]?.meta.total ?? 0;
+    // Live rows for the planned order only; polls while any of them is mid-upgrade.
+    const { data: planned } = useDevicesByIds(order?.map((r) => r.device_id) ?? [], 'full');
+    const byId = new Map((planned ?? []).map((d) => [d.id, d]));
     const running = started && order !== null && order.some((r) => {
         const s = byId.get(r.device_id)?.upgrade_status;
         return s ? UPGRADE_IN_PROGRESS.has(s) : false;
@@ -111,9 +117,15 @@ export function UpgradesView() {
                     <UpgradeOptions version={version} setVersion={setVersion} source={source} setSource={setSource} />
                     <SelectStep
                         candidates={candidates}
+                        total={candidateTotal}
+                        search={q}
+                        onSearch={setQ}
+                        hasMore={!!candidateList.hasNextPage}
+                        loadingMore={candidateList.isFetchingNextPage}
+                        onMore={() => candidateList.fetchNextPage()}
                         selected={selected}
                         onToggle={toggle}
-                        onSelectAll={() => setSelected(new Set(candidates.map((d) => d.id)))}
+                        onSelectAll={() => setSelected((prev) => new Set([...prev, ...candidates.map((d) => d.id)]))}
                         onClear={() => setSelected(new Set())}
                         onPlan={plan}
                         planning={preflight.isPending}
@@ -157,6 +169,12 @@ export function UpgradesView() {
 
 function SelectStep({
     candidates,
+    total,
+    search,
+    onSearch,
+    hasMore,
+    loadingMore,
+    onMore,
     selected,
     onToggle,
     onSelectAll,
@@ -165,6 +183,12 @@ function SelectStep({
     planning,
 }: {
     candidates: Device[];
+    total: number;
+    search: string;
+    onSearch: (q: string) => void;
+    hasMore: boolean;
+    loadingMore: boolean;
+    onMore: () => void;
     selected: Set<number>;
     onToggle: (id: number) => void;
     onSelectAll: () => void;
@@ -176,16 +200,28 @@ function SelectStep({
         <>
             <div className="flex items-center justify-between">
                 <p className="text-xs font-medium uppercase tracking-wide text-white/40">
-                    Select devices - {selected.size} of {candidates.length}
+                    Select devices - {selected.size} of {total}
                 </p>
                 <div className="flex items-center gap-2 text-xs">
-                    <button onClick={onSelectAll} className="rounded-lg px-2 py-1 text-white/60 hover:bg-white/5 hover:text-white/90">Select all</button>
+                    <button onClick={onSelectAll} className="rounded-lg px-2 py-1 text-white/60 hover:bg-white/5 hover:text-white/90">Select all shown</button>
                     <button onClick={onClear} className="rounded-lg px-2 py-1 text-white/60 hover:bg-white/5 hover:text-white/90">Clear</button>
                 </div>
             </div>
 
+            <div className="relative">
+                <MagnifyingGlass weight="bold" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                <input
+                    value={search}
+                    onChange={(e) => onSearch(e.target.value)}
+                    placeholder="Search name, IP, model..."
+                    className="w-full rounded-lg bg-white/[0.04] py-1.5 pl-8 pr-3 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40 placeholder:text-white/30"
+                />
+            </div>
+
             {candidates.length === 0 ? (
-                <Placeholder>No RouterOS devices to upgrade. Only RouterOS gear can be upgraded.</Placeholder>
+                <Placeholder>
+                    {search.trim() ? 'No RouterOS devices match.' : 'No RouterOS devices to upgrade. Only RouterOS gear can be upgraded.'}
+                </Placeholder>
             ) : (
                 <div className="space-y-1.5">
                     {candidates.map((d) => {
@@ -214,6 +250,15 @@ function SelectStep({
                             </button>
                         );
                     })}
+                    {hasMore && (
+                        <button
+                            onClick={onMore}
+                            disabled={loadingMore}
+                            className="w-full rounded-xl px-3 py-2 text-xs text-white/50 ring-1 ring-white/[0.06] hover:bg-white/[0.04] hover:text-white/80 disabled:opacity-50"
+                        >
+                            {loadingMore ? 'Loading...' : `Show more (${total - candidates.length} left)`}
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -368,8 +413,10 @@ const optField =
  * this reads live device state). Click a device to jump to it on the map.
  */
 function UpgradeQueue() {
-    const { data: devices } = useDevices();
-    const active = (devices ?? []).filter((d) => d.upgrade_status && UPGRADE_IN_PROGRESS.has(d.upgrade_status));
+    // Asked of the server directly; polls fast while anything is running, slowly otherwise so
+    // a run started elsewhere still shows up.
+    const { data } = useDeviceList({ upgrading: true, per_page: 200 }, { refetchInterval: 15_000 });
+    const active = (data?.data ?? []).filter((d) => d.upgrade_status && UPGRADE_IN_PROGRESS.has(d.upgrade_status));
     if (active.length === 0) return null;
 
     return (

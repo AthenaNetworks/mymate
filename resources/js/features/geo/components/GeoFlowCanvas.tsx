@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
 import { GeoFlow } from './GeoFlow';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
-import { useDevices } from '../../devices/api/getDevices';
+import { useMapDevices } from '../../devices/api/getDevices';
 import { useLinks } from '../../topology/api/getLinks';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useIsAdmin } from '../../auth/api/auth';
@@ -16,7 +16,7 @@ function GeoFlowInner() {
     const isAdmin = useIsAdmin();
     const { data: config } = useMapConfig();
     const { data: mapDetail } = useMap(activeMapId);
-    const { data: devices } = useDevices();
+    const { data: devices } = useMapDevices(activeMapId); // this map's devices only (GitHub #22)
     const { data: links } = useLinks();
     const update = useUpdateDevice();
     const selectedDeviceId = useSelectedDeviceId();

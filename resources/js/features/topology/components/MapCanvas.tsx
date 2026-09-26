@@ -40,7 +40,7 @@ import { ConfirmDialog } from '../../../components/Dialog';
 import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useIsAdmin } from '../../auth/api/auth';
-import { useDevices } from '../../devices/api/getDevices';
+import { useMapDevices } from '../../devices/api/getDevices';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useLinks } from '../api/getLinks';
 import { useFaceSensors } from '../../settings/api/sensors';
@@ -101,10 +101,12 @@ const edgeBtn = (active: boolean): string =>
 
 export function MapCanvas() {
     const isAdmin = useIsAdmin();
-    const { data: devices, isLoading } = useDevices();
+    const activeMapId = useActiveMapId();
+    // Only this map's devices, not the fleet (GitHub #22) - everything below that looks a device
+    // up in `devices` is looking at something drawn on this canvas.
+    const { data: devices, isLoading } = useMapDevices(activeMapId);
     const { data: links } = useLinks();
     const { data: faceSensors } = useFaceSensors(); // custom SNMP readings shown on device cards (#40)
-    const activeMapId = useActiveMapId();
     const edgeStyle = useEdgeStyle(); // curved (default) / straight link geometry
     const edgeAttach = useEdgeAttach(); // 'auto' floats links to the facing side; 'fixed' keeps pinned sides
     const layoutKind = useLayoutKind(); // last-applied auto-layout algorithm
@@ -1097,11 +1099,7 @@ export function MapCanvas() {
 
             {/* Re-home a device onto its real uplink - from the node menu or the inspector. */}
             {parentForId !== null && devices?.some((d) => d.id === parentForId) && (
-                <SetParentDialog
-                    device={devices.find((d) => d.id === parentForId)!}
-                    devices={devices}
-                    onClose={() => setParentForId(null)}
-                />
+                <SetParentDialog device={devices.find((d) => d.id === parentForId)!} onClose={() => setParentForId(null)} />
             )}
 
             {/* Delete the device outright - the destructive twin of "Remove from this map". */}

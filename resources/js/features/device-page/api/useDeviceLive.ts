@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { useCurrentUser } from '../../auth/api/auth';
 import { devicePageKeys } from './devicePage';
+import { deviceKeys } from '../../devices/api/getDevices';
 import type { Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus } from '../../../types';
 
 /**
@@ -20,7 +21,7 @@ export function useDeviceLive(deviceId: number) {
     useEffect(() => {
         if (channelName === null) return;
         const channel = echo.private(channelName);
-        const key = devicePageKeys.device(deviceId);
+        const key = deviceKeys.detail(deviceId);
         const patch = (p: Partial<Device>) => qc.setQueryData<Device>(key, (d) => (d ? { ...d, ...p } : d));
 
         const onStatus = (e: { id: number; status: DeviceStatus; last_change: string | null }) => {

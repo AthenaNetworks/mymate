@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowCounterClockwise, Plus, X } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
+import { DevicePicker } from '../../../components/DevicePicker';
 import { useDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
 import { useProbes } from '../../topology/api/probes';
 import { useSensors } from '../../settings/api/sensors';
 import { useSaveGraph, useGraphStyleDefaults, type GraphInput } from '../api/graphs';
 import { GRAPH_PALETTE } from './GraphChart';
 import { pushToast } from '../../../lib/toast';
-import type { Graph, GraphColorMode, GraphDirection, GraphMetric, GraphSeriesDef, GraphSource } from '../../../types';
+import type { Device, Graph, GraphColorMode, GraphDirection, GraphMetric, GraphSeriesDef, GraphSource } from '../../../types';
 
 // The same group key the backend assigns (GetGraphData), so the editor's default swatches match
 // what the chart draws - and recolouring an interface recolours both its in + out rows together.
@@ -31,7 +31,6 @@ const SOURCES: { key: GraphSource; label: string }[] = [
 
 /** Build or edit a saved graph: name, metric, and the series (from any source) it plots. */
 export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; onDone: () => void; onCancel: () => void }) {
-    const { data: devices } = useDevices();
     const { data: sensors } = useSensors();
     const { data: styleDefaults } = useGraphStyleDefaults();
     const save = useSaveGraph();
@@ -79,7 +78,8 @@ export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; on
 
     // The add-a-series row.
     const [source, setSource] = useState<GraphSource>('interface');
-    const [deviceId, setDeviceId] = useState<number | null>(null);
+    const [device, setDevice] = useState<Device | null>(null); // typeahead pick (GitHub #22)
+    const deviceId = device?.id ?? null;
     const [interfaceId, setInterfaceId] = useState<number | null>(null);
     const [direction, setDirection] = useState<GraphDirection | 'both'>('both');
     const [sensorId, setSensorId] = useState<number | null>(null);
@@ -87,7 +87,7 @@ export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; on
     const { data: interfaces } = useDeviceInterfaces(source === 'interface' && deviceId ? deviceId : null);
     const { data: probes } = useProbes(source === 'probe' && deviceId ? deviceId : null);
 
-    const devName = (id: number | null) => devices?.find((d) => d.id === id)?.name ?? 'device';
+    const devName = (id: number | null) => (device && device.id === id ? device.name : 'device');
 
     function addSeries() {
         const next: GraphSeriesDef[] = [];
@@ -153,10 +153,9 @@ export function GraphEditor({ initial, onDone, onCancel }: { initial?: Graph; on
                         </select>
                     ) : null}
 
-                    <select className={`${field} min-w-40`} value={deviceId ?? ''} onChange={(e) => { setDeviceId(Number(e.target.value) || null); setInterfaceId(null); setProbeId(null); }}>
-                        <option value="">Device...</option>
-                        {(devices ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    <div className="min-w-40">
+                        <DevicePicker value={device} onChange={(d) => { setDevice(d); setInterfaceId(null); setProbeId(null); }} placeholder="Device..." className={field} />
+                    </div>
 
                     {source === 'interface' && (
                         <>

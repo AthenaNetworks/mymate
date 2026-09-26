@@ -168,6 +168,25 @@ of commit subjects.
   the agent updated to report optical power; older agents keep working, they just don't send it.
 
 ### Changed
+- **`GET /api/devices` is now paginated (GitHub #22). API change.** It used to return the whole fleet
+  in one go, which at ~25,000 devices was a 36 MB response that ran php-fpm out of memory. It now
+  returns one page in Laravel's usual `data` / `links` / `meta` shape, 50 per page by default and at
+  most 200 (`?per_page=`, `?page=`). You can search with `?q=` (name, IP, vendor, model), filter with
+  `?status=`, `?device_type=`, `?poll_method=`, `?monitored=`, `?placed=`, `?map_id=`, `?ids[]=` and a
+  few others, and sort with `?sort=name|status|mgmt_ip|last_change|vendor|model` (prefix `-` to
+  reverse; `status` puts down first). `?fields=summary` gives a lean row for pickers. **If you have a
+  script that reads `/api/devices`, it now only sees the first 50 devices** - walk `meta.last_page` or
+  follow `links.next` to get the rest. New alongside it: `GET /api/devices/stats` (up/down/unknown and
+  paused counts) and `GET /api/maps/{id}/devices` (every device on one map). `GET /api/devices/{id}`
+  was already there and now also resolves coordinates inherited from the uplink chain.
+- **The console no longer loads every device up front (GitHub #22).** Each screen asks for what it
+  shows: the map pulls only the devices on the open map, the device panel fetches the one you clicked,
+  the header counts come from the new stats endpoint, and the Devices page searches, filters, sorts and
+  pages on the server (50 at a time), so it stays quick at tens of thousands of devices. The parent,
+  far-end-of-link, graph, sensor test and alert "specific devices" pickers are now search-as-you-type,
+  as are the map's "add a device" palette and the Upgrades and Backups lists (with "show more"). The
+  geo overlay draws from the compact geo feed and lists unplaced devices 200 at a time. Live status,
+  latency and CPU/memory updates reach all of these the same as before.
 - **Map links show traffic both ways (GitHub #22).** The label on a link used to show only the busier
   direction. It now shows each direction's rate with a small arrow pointing the way that traffic is
   going along the wire (so you can read tx and rx at a glance whichever way the cards are laid out),
@@ -179,6 +198,10 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Large fleets: header counts, the map inspector and the Devices page work again (GitHub #22).** On a
+  network of ~25,000 devices the header showed "0 up / 0 down", clicking a device on the map did nothing
+  and the Devices page hung the tab, all because the one fleet-wide device request never finished. See
+  the paginated `/api/devices` change above.
 - **A public wallboard link no longer hands out links that leave the shared map.** A link with only one
   end on the map was included in the wallboard's link data even though it was never drawn, which gave an
   anonymous viewer the far device's id and that port's name and traffic. Only links with both ends on the

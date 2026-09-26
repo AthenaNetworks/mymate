@@ -175,6 +175,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->middleware('throttle:10,1')->name('devices.upgrade.preflight');
     Route::post('devices/upgrade', [DeviceController::class, 'upgrade'])
         ->middleware('throttle:10,1')->name('devices.upgrade');
+    // Up/down/unknown tallies for the header (GitHub #22). Also before the resource.
+    Route::get('devices/stats', [DeviceController::class, 'stats'])->name('devices.stats');
     Route::apiResource('devices', DeviceController::class);
 
     // A device's interfaces (link binder picks each end from these).
@@ -291,6 +293,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Bulk: every node moved in one gesture (group drag, Tidy) lands in one transaction (GitHub #44).
     Route::patch('maps/{map}/positions', [MapController::class, 'savePositions'])->name('maps.positions.save-many');
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
+    // Every device placed on this map, full rows - what the canvas and inspector draw (GitHub #22).
+    Route::get('maps/{map}/devices', [MapController::class, 'devices'])->name('maps.devices.index');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
     // Layout undo stack: snapshot before a tidy, roll back from any browser.
