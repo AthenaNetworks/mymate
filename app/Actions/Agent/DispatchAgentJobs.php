@@ -146,6 +146,9 @@ class DispatchAgentJobs
                     // Read SFP power via /interface/ethernet/monitor this cycle.
                     'optical' => $opticalDue,
                     'discover' => $discoverDue,
+                    // Keys the agent's cache of which wireless menus (wifi / wifiwave2 / legacy /
+                    // caps-man) the board has, so an upgrade probes again. Older agents ignore it.
+                    'os_version' => (string) ($d->os_version ?? ''),
                 ];
             }
         }

@@ -11,12 +11,16 @@ use App\Enums\PollMethod;
 use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\Agent;
+use App\Models\Credential;
 use App\Models\Device;
+use App\Models\DiscoveryCandidate;
 use App\Models\NetworkInterface;
 use App\Models\Outage;
+use App\Models\Probe;
 use App\Models\Subnet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Redis;
 use Tests\TestCase;
 
 /**
@@ -110,7 +114,7 @@ class AgentIngestionTest extends TestCase
     public function test_build_job_carries_ping_snmp_with_creds_and_subnets(): void
     {
         $agent = Agent::factory()->create();
-        $cred = \App\Models\Credential::create(['name' => 'c', 'type' => 'snmp', 'snmp_community' => 'public']);
+        $cred = Credential::create(['name' => 'c', 'type' => 'snmp', 'snmp_community' => 'public']);
         $device = Device::factory()->create([
             'agent_id' => $agent->id, 'poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id, 'monitored' => true,
         ]);
@@ -135,9 +139,10 @@ class AgentIngestionTest extends TestCase
     public function test_build_job_carries_routeros_targets_with_login_and_interface_names(): void
     {
         $agent = Agent::factory()->create();
-        $cred = \App\Models\Credential::create(['name' => 'ros', 'type' => 'routeros', 'username' => 'admin', 'password' => 'pw', 'api_port' => 8729]);
+        $cred = Credential::create(['name' => 'ros', 'type' => 'routeros', 'username' => 'admin', 'password' => 'pw', 'api_port' => 8729]);
         $device = Device::factory()->create([
             'agent_id' => $agent->id, 'poll_method' => PollMethod::RouterOs, 'credential_id' => $cred->id, 'monitored' => true,
+            'os_version' => '7.16.2',
         ]);
         NetworkInterface::factory()->create(['device_id' => $device->id, 'name' => 'ether1']);
 
@@ -150,13 +155,15 @@ class AgentIngestionTest extends TestCase
         $this->assertSame('pw', $job['poll']['routeros'][0]['password']);
         $this->assertSame(8729, $job['poll']['routeros'][0]['api_port']);
         $this->assertSame('ether1', $job['poll']['routeros'][0]['interfaces'][0]['name']);
+        // keys the agent's wireless menu cache
+        $this->assertSame('7.16.2', $job['poll']['routeros'][0]['os_version']);
     }
 
     public function test_build_job_scan_carries_due_subnets_and_the_credential_pool(): void
     {
         $agent = Agent::factory()->create();
-        \App\Models\Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
-        \App\Models\Credential::create(['name' => 'r', 'type' => 'routeros', 'username' => 'admin', 'password' => 'pw', 'api_port' => 8729]);
+        Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
+        Credential::create(['name' => 'r', 'type' => 'routeros', 'username' => 'admin', 'password' => 'pw', 'api_port' => 8729]);
         // Due: never scanned. Not due: scanned a moment ago with an hour cadence.
         Subnet::factory()->create(['agent_id' => $agent->id, 'cidr' => '10.9.0.0/24', 'enabled' => true, 'last_scanned_at' => null]);
         Subnet::factory()->create(['agent_id' => $agent->id, 'cidr' => '10.8.0.0/24', 'enabled' => true, 'scan_interval_s' => 3600, 'last_scanned_at' => now()]);
@@ -174,7 +181,7 @@ class AgentIngestionTest extends TestCase
     public function test_build_job_omits_credential_pool_when_no_subnets_are_due(): void
     {
         $agent = Agent::factory()->create();
-        \App\Models\Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
+        Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
         Device::factory()->create(['agent_id' => $agent->id, 'monitored' => true]); // gives it ping work
 
         $job = app(DispatchAgentJobs::class)->buildJob($agent->id);
@@ -187,7 +194,7 @@ class AgentIngestionTest extends TestCase
     {
         $agent = Agent::factory()->create();
         $subnet = Subnet::factory()->create(['agent_id' => $agent->id, 'cidr' => '10.9.0.0/24', 'last_scanned_at' => null]);
-        $cred = \App\Models\Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
+        $cred = Credential::create(['name' => 's', 'type' => 'snmp', 'snmp_community' => 'public']);
 
         app(IngestAgentScan::class)($agent, ['subnets' => [[
             'subnet_id' => $subnet->id,
@@ -210,7 +217,7 @@ class AgentIngestionTest extends TestCase
         $subnet = Subnet::factory()->create(['agent_id' => $agent->id, 'cidr' => '10.9.0.0/24']);
         // Both live in this agent's scope - uniqueness is per agent now (GitHub #49).
         Device::factory()->create(['mgmt_ip' => '10.9.0.5', 'agent_id' => $agent->id]);
-        $existing = \App\Models\DiscoveryCandidate::create([
+        $existing = DiscoveryCandidate::create([
             'ip' => '10.9.0.6', 'agent_id' => $agent->id, 'status' => 'ignored', 'detected_method' => 'snmp',
             'first_seen' => now()->subDay(), 'last_seen' => now()->subDay(),
         ]);
@@ -252,7 +259,7 @@ class AgentIngestionTest extends TestCase
         Device::factory()->create(['agent_id' => $online->id, 'monitored' => true]);
         Device::factory()->create(['agent_id' => $offline->id, 'monitored' => true]);
 
-        \Illuminate\Support\Facades\Redis::shouldReceive('publish')->once()
+        Redis::shouldReceive('publish')->once()
             ->with(DispatchAgentJobs::CHANNEL, \Mockery::type('string'));
 
         $count = app(DispatchAgentJobs::class)();
@@ -318,7 +325,7 @@ class AgentIngestionTest extends TestCase
     {
         $agent = Agent::factory()->create();
         $device = Device::factory()->create(['agent_id' => $agent->id]);
-        $probe = \App\Models\Probe::factory()->create(['device_id' => $device->id, 'fail_threshold' => 1]);
+        $probe = Probe::factory()->create(['device_id' => $device->id, 'fail_threshold' => 1]);
 
         app(IngestAgentResults::class)($agent, ['probes' => [[
             'probe_id' => $probe->id, 'up' => true, 'latency_ms' => 12.3, 'message' => 'HTTP 200',

@@ -221,9 +221,10 @@ class SnmpFallbackAndAgentWirelessTest extends TestCase
         $this->assertSame(['.1.3.6.1.4.1.41112.1.4.5.1.15'], $m['clients_value_walk']);
         $this->assertArrayNotHasKey('snr_walk', $m);
 
-        // a single OID in the profile still goes out as a list
+        // legacy mtxrWlRtab plus the RouterOS 7 wifi registration table
         $m = $targets[$mt->id]['metrics'];
-        $this->assertSame(['.1.3.6.1.4.1.14988.1.1.1.2.1.3'], $m['clients_walk']);
+        $this->assertSame(['.1.3.6.1.4.1.14988.1.1.1.2.1.3', '.1.3.6.1.4.1.14988.1.1.21.4.1.6'], $m['clients_walk']);
+        $this->assertSame(['.1.3.6.1.4.1.14988.1.1.21.4.1.6'], $m['signal_walk']);
         $this->assertSame(['.1.3.6.1.4.1.14988.1.1.1.1.1.4'], $m['signal_oids']);
 
         $this->assertArrayNotHasKey('signal_oids', $targets[$plain->id]['metrics']);

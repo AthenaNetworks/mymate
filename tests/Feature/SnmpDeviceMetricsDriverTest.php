@@ -53,6 +53,20 @@ class SnmpDeviceMetricsDriverTest extends TestCase
         $this->assertSame(45.0, $m->tempC);
     }
 
+    public function test_reads_routeros7_wifi_clients_from_the_wifi_registration_table(): void
+    {
+        $snmp = new FakeSnmpClient;
+        // mtxrWifiRegistrationSignal, one row per station on a cAP ax (no legacy mtxrWlRtab rows).
+        $snmp->walks['.1.3.6.1.4.1.14988.1.1.21.4.1.6'] = ['a.1' => '-55', 'b.1' => '-65', 'c.2' => '-60'];
+
+        $m = $this->driver($snmp)->sample($this->device());
+
+        $this->assertSame(3, $m->wirelessClients);
+        $this->assertSame(-60.0, $m->signalDbm);
+        $this->assertNull($m->snrDb); // the wifi table has no SNR
+        $this->assertNull($m->ccqPct); // or CCQ
+    }
+
     public function test_reads_ubiquiti_airmax_rf_from_the_station_table(): void
     {
         $snmp = new FakeSnmpClient;

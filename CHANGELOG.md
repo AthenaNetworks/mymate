@@ -210,6 +210,14 @@ of commit subjects.
   reboots the map pops "sw1 rebooted (was up 41d 3h)" (a batch of them becomes one "12 devices
   rebooted"), and an open device page adds it to its Events tab. Restricted operators only get their own
   devices, as with everything else live. Graphs on a live range keep refreshing once a minute as before.
+- **Wireless stats for RouterOS 7 wifi (cAP ax, hAP ax2/ax3, wAP ax and friends).** Signal and client
+  count now come from the new wifi registration table (7.13+) or wifiwave2 (7.12 and older) as well as
+  the old wireless package, over the RouterOS API both centrally and from a remote agent. A CAPsMAN
+  controller reports every client across its CAPs (wifi or legacy CAPsMAN), each station counted once.
+  The wifi stack has no CCQ or SNR, so those stay blank rather than being guessed. Which menus a board
+  has is worked out once per RouterOS version, so a normal poll doesn't try all of them. Over SNMP the
+  MikroTik profile now also walks the wifi registration table (mtxrWifiRegistrationTable), which gives
+  signal and clients on newer 7.x; wifiwave2 and wifi CAPsMAN clients still need the API.
 
 ### Changed
 - **Live port updates are smaller.** Each interface in the per-tick util update no longer repeats its
@@ -246,6 +254,8 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **A wired MikroTik polled over the API no longer shows 1 wireless client.** The "no such command"
+  reply for a missing wireless menu was being counted as a registration table row.
 - **No traffic spike when a switch's 64-bit counters drop out for a poll.** A v2c device that briefly
   stopped answering the 64-bit octet counters fell back to the 32-bit ones, and the tick they came back
   compared a 32-bit reading against a 64-bit one and drew a spike of tens of Gbps. The poller now
