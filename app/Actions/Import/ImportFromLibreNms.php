@@ -53,9 +53,12 @@ class ImportFromLibreNms
                 ?? ($credMap[$ip] ?? null)
                 ?? ($importCreds ? $this->credentialForCommunity($d['snmp_community'] ?? null, $summary) : null);
 
-            $exists = Device::where('mgmt_ip', $ip)->exists();
-            $device = Device::updateOrCreate(
-                ['mgmt_ip' => $ip],
+            // Update the matching device (central preferred when the IP is reused across agents),
+            // else create a central one - LibreNMS polls from one place, so its devices are central.
+            $device = Device::matchForImport($ip);
+            $exists = $device !== null;
+            $device ??= new Device(['mgmt_ip' => $ip]);
+            $device->fill(
                 [
                     'name' => $d['sysname'] ?: ($d['hostname'] ?: $ip),
                     'poll_method' => $credentialId !== null ? PollMethod::Snmp : PollMethod::None,
@@ -66,7 +69,7 @@ class ImportFromLibreNms
                     'model' => $d['hardware'] ?: null,
                     'serial' => $d['serial'] ?: null,
                 ],
-            );
+            )->save();
 
             $deviceIdByIp[$ip] = $device->id;
             $summary['devices'][$exists ? 'updated' : 'created']++;
@@ -87,7 +90,7 @@ class ImportFromLibreNms
 
             foreach ($m['nodes'] as $node) {
                 $ip = self::resolveIp($node['ip'] ?? null, $node['hostname'] ?? null);
-                $deviceId = $ip !== null ? ($deviceIdByIp[$ip] ?? Device::where('mgmt_ip', $ip)->value('id')) : null;
+                $deviceId = $ip !== null ? ($deviceIdByIp[$ip] ?? Device::matchForImport($ip)?->id) : null;
                 if ($deviceId === null) {
                     continue;
                 }

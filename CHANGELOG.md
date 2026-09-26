@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **The same IP can exist at more than one site (GitHub #49).** A management IP now only has to be
+  unique within its poll scope - one remote agent, or the central server - instead of across the whole
+  install, so 192.168.1.10 behind Site A's agent and 192.168.1.10 behind Site B's can both be added.
+  This is the Dude-style setup where every site reuses the same private subnet. A genuine clash (same
+  IP, same agent, including moving a device onto an agent that already polls that IP) is refused with a
+  message naming the device it collides with. Removing an agent whose devices would clash with central
+  ones once moved back to central polling is refused up front with the list, instead of failing.
 - **Manage a device's parent straight from the map (GitHub #45).** Right-click any device card for a node
   menu: set, change or clear its parent device, take it off this map, or delete it outright. The
   inspector's Parent row is editable too - both open the same searchable picker, so you can re-home a
@@ -27,6 +34,12 @@ of commit subjects.
   history), and warns you when it has child devices, which survive with no parent.
 
 ### Fixed
+- **A device found by an agent's discovery sweep is now polled by that agent.** Discovery candidates
+  never recorded which agent found them, so approving one created a *central* device the server usually
+  had no route to (it sits on the remote site's network) and it just showed down. Candidates now carry
+  their agent, approving one assigns the device to it, and the discovery queue shows "via agent X".
+  Existing queued candidates are matched to their agent by subnet on upgrade. Devices already approved
+  this way keep their current setting - set the Agent on them if they're showing down.
 - **Docker images now bundle the intended backup engine (GitHub #41).** The image cloned rusted's moving
   `main` in a cached build layer, so every 1.7.x Docker image silently shipped an old engine without
   the MikroTik exec-channel fix, and MikroTik backups kept failing with "captured empty configuration"

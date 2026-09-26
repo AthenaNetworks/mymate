@@ -222,7 +222,7 @@ class ImportDudeDatabase
 
             // Upsert by mgmt_ip (the operational identity). Preserve live/operator
             // fields on an existing device - only set identity/config from the import.
-            $device = Device::where('mgmt_ip', $ip)->first();
+            $device = Device::matchForImport($ip);
             if ($device !== null) {
                 $device->fill($attrs)->save();
                 $updated++;

@@ -113,6 +113,44 @@ class Device extends Model
     }
 
     /**
+     * Devices polled from the same place: one agent's, or the central server's (agent_id null).
+     * A management IP only has to be unique within this scope (GitHub #49) - two sites behind two
+     * agents can reuse the same private subnet.
+     */
+    public function scopeInPollScope(Builder $query, ?int $agentId): Builder
+    {
+        return $agentId === null ? $query->whereNull('agent_id') : $query->where('agent_id', $agentId);
+    }
+
+    /**
+     * The existing device an importer should update for $ip. Importers (Dude, LibreNMS) bring in
+     * one flat list with no agent context, so when the same IP now exists in several poll scopes
+     * prefer the central one, deterministically, rather than whichever row the DB returns first.
+     */
+    public static function matchForImport(string $ip): ?self
+    {
+        return static::withoutGlobalScope('visibility')
+            ->where('mgmt_ip', $ip)
+            ->orderByRaw('agent_id IS NOT NULL') // central (false) first
+            ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * The device already using $ip in the given poll scope, if any (ignoring $ignoreId, the device
+     * being edited). Bypasses the restricted-operator visibility scope on purpose: a clash with a
+     * device the operator can't see must still be caught here, not surface as a unique-index 500.
+     */
+    public static function ipConflict(string $ip, ?int $agentId, ?int $ignoreId = null): ?self
+    {
+        return static::withoutGlobalScope('visibility')
+            ->inPollScope($agentId)
+            ->where('mgmt_ip', $ip)
+            ->when($ignoreId !== null, fn (Builder $q) => $q->whereKeyNot($ignoreId))
+            ->first(['id', 'name', 'mgmt_ip', 'agent_id']);
+    }
+
+    /**
      * The physical location this device sits at, or null when it isn't assigned to one.
      *
      * The site's coordinates reach the geo map through DeviceGeo::resolve at read time rather

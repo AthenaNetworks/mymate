@@ -208,9 +208,10 @@ class AgentIngestionTest extends TestCase
     {
         $agent = Agent::factory()->create();
         $subnet = Subnet::factory()->create(['agent_id' => $agent->id, 'cidr' => '10.9.0.0/24']);
-        Device::factory()->create(['mgmt_ip' => '10.9.0.5']);
+        // Both live in this agent's scope - uniqueness is per agent now (GitHub #49).
+        Device::factory()->create(['mgmt_ip' => '10.9.0.5', 'agent_id' => $agent->id]);
         $existing = \App\Models\DiscoveryCandidate::create([
-            'ip' => '10.9.0.6', 'status' => 'ignored', 'detected_method' => 'snmp',
+            'ip' => '10.9.0.6', 'agent_id' => $agent->id, 'status' => 'ignored', 'detected_method' => 'snmp',
             'first_seen' => now()->subDay(), 'last_seen' => now()->subDay(),
         ]);
 

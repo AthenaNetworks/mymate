@@ -19,7 +19,7 @@ class DiscoveryCandidateController extends Controller
     /** The review queue. Optional `?status=new|approved|ignored` filter. */
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = DiscoveryCandidate::query()->latest('last_seen');
+        $query = DiscoveryCandidate::query()->with('agent:id,name')->latest('last_seen');
 
         $status = $request->query('status');
         if (is_string($status) && DiscoveryStatus::tryFrom($status) !== null) {

@@ -45,8 +45,8 @@ class SitesImportCommand extends Command
             }
             $this->info("Assigning devices from mapping {$map} ...");
             $m = $assign->fromMapping((string) $map);
-            $this->line(sprintf('  mapping: %d assigned, %d ip-unmatched, %d unknown-site, %d manual-kept',
-                $m['assigned'], $m['unmatched_ip'], $m['unknown_site'], $m['skipped_manual']));
+            $this->line(sprintf('  mapping: %d assigned, %d ip-unmatched, %d ip-ambiguous (same IP on several agents), %d unknown-site, %d manual-kept',
+                $m['assigned'], $m['unmatched_ip'], $m['ambiguous_ip'], $m['unknown_site'], $m['skipped_manual']));
         }
 
         if (($links = $this->option('links')) !== null) {

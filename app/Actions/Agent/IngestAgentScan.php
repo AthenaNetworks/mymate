@@ -55,9 +55,12 @@ class IngestAgentScan
         $now = now();
         $ips = array_values(array_filter(array_map(fn ($c) => $c['ip'] ?? null, $candidates)));
 
-        // IPs that are already devices (skip) and candidates already queued (bump, never dup).
-        $deviceIps = Device::whereIn('mgmt_ip', $ips)->pluck('mgmt_ip')->flip();
-        $existing = DiscoveryCandidate::whereIn('ip', $ips)->get()->keyBy('ip');
+        // IPs that are already devices (skip) and candidates already queued (bump, never dup) -
+        // within this agent's scope only. Another site can reuse the same private subnet, so a
+        // central or other-agent device with the same IP is a different box (GitHub #49).
+        $agentId = $subnet->agent_id;
+        $deviceIps = Device::inPollScope($agentId)->whereIn('mgmt_ip', $ips)->pluck('mgmt_ip')->flip();
+        $existing = DiscoveryCandidate::where('agent_id', $agentId)->whereIn('ip', $ips)->get()->keyBy('ip');
 
         $new = 0;
         $skipped = 0;
@@ -83,6 +86,9 @@ class IngestAgentScan
 
             DiscoveryCandidate::create([
                 'ip' => $ip,
+                // Remember who found it, so promoting it makes an agent-polled device - previously it
+                // became a central device the server had no route to.
+                'agent_id' => $agentId,
                 'status' => DiscoveryStatus::New,
                 'sysname' => $c['sysname'] ?? null,
                 'detected_method' => $method,

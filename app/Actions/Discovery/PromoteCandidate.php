@@ -32,7 +32,10 @@ class PromoteCandidate
     public function __invoke(DiscoveryCandidate $candidate): Device
     {
         $device = DB::transaction(function () use ($candidate): Device {
-            $device = Device::where('mgmt_ip', $candidate->ip)->first();
+            // Same poll scope as the candidate: an agent-found host is looked up (and created)
+            // behind that agent, so a same-IP device at another site is left alone (GitHub #49).
+            $agentId = $candidate->agent_id;
+            $device = Device::withoutGlobalScope('visibility')->inPollScope($agentId)->where('mgmt_ip', $candidate->ip)->first();
 
             if ($device === null) {
                 // Discovery only queues hosts it matched at least one credential to. A candidate
@@ -47,6 +50,8 @@ class PromoteCandidate
                 $attributes = [
                     'name' => $candidate->sysname ?: $candidate->ip,
                     'mgmt_ip' => $candidate->ip,
+                    // Polled by the agent that found it - the central server usually has no route there.
+                    'agent_id' => $agentId,
                     // SSH-only match -> a ping-only device we can still back up over SSH.
                     'poll_method' => $candidate->detected_method ?? \App\Enums\PollMethod::None,
                     'credential_id' => $candidate->matched_credential_id,
@@ -66,7 +71,7 @@ class PromoteCandidate
                         throw $e;
                     }
                     // Another request won the race and already created it - reuse it.
-                    $device = Device::where('mgmt_ip', $candidate->ip)->firstOrFail();
+                    $device = Device::withoutGlobalScope('visibility')->inPollScope($agentId)->where('mgmt_ip', $candidate->ip)->firstOrFail();
                 }
             }
 

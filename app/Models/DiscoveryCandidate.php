@@ -21,7 +21,7 @@ class DiscoveryCandidate extends Model
     use HasFactory;
 
     protected $fillable = [
-        'ip', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'matched_credential_ids', 'first_seen', 'last_seen',
+        'ip', 'agent_id', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'matched_credential_ids', 'first_seen', 'last_seen',
     ];
 
     protected $casts = [
@@ -35,6 +35,12 @@ class DiscoveryCandidate extends Model
     protected $attributes = [
         'status' => 'new',
     ];
+
+    /** The agent whose subnet sweep found this host, or null for a central scan. A promoted device inherits it. */
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(Agent::class);
+    }
 
     public function matchedCredential(): BelongsTo
     {

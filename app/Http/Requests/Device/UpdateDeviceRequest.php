@@ -6,8 +6,10 @@ use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Rules\ManageableIp;
 use App\Rules\NotADeviceDescendant;
+use App\Support\DeviceIpScope;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateDeviceRequest extends FormRequest
 {
@@ -20,7 +22,8 @@ class UpdateDeviceRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', Rule::unique('devices', 'mgmt_ip')->ignore($this->route('device')?->id), new ManageableIp],
+            // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
+            'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', new ManageableIp],
             'poll_method' => ['sometimes', 'required', Rule::enum(PollMethod::class)],
             // Enable/disable monitoring - false pauses throughput + metrics polling.
             'monitored' => ['sometimes', 'boolean'],
@@ -55,5 +58,26 @@ class UpdateDeviceRequest extends FormRequest
                 new NotADeviceDescendant($this->route('device')?->id),
             ],
         ];
+    }
+
+    /**
+     * Check the device's *effective* IP + agent after this edit, so changing only the agent (moving
+     * the device onto an agent that already polls that IP) is caught too, not just an IP change.
+     *
+     * @return list<callable>
+     */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $device = $this->route('device');
+            if ($device === null) {
+                return;
+            }
+            $ip = $this->has('mgmt_ip') ? $this->input('mgmt_ip') : $device->mgmt_ip;
+            $agentId = $this->has('agent_id')
+                ? ($this->filled('agent_id') ? (int) $this->input('agent_id') : null)
+                : $device->agent_id;
+            DeviceIpScope::check($validator, $ip, $agentId, $device->id);
+        }];
     }
 }

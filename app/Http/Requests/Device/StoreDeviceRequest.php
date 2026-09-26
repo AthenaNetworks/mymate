@@ -5,8 +5,10 @@ namespace App\Http\Requests\Device;
 use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Rules\ManageableIp;
+use App\Support\DeviceIpScope;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreDeviceRequest extends FormRequest
 {
@@ -19,7 +21,8 @@ class StoreDeviceRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'mgmt_ip' => ['required', 'string', 'max:45', 'ip', 'unique:devices,mgmt_ip', new ManageableIp],
+            // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
+            'mgmt_ip' => ['required', 'string', 'max:45', 'ip', new ManageableIp],
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
@@ -32,5 +35,14 @@ class StoreDeviceRequest extends FormRequest
             // Off = monitored but placed on no map (default on: lands on the default map).
             'place_on_map' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /** @return list<callable> */
+    public function after(): array
+    {
+        return [function (Validator $validator): void {
+            $agentId = $this->filled('agent_id') ? (int) $this->input('agent_id') : null;
+            DeviceIpScope::check($validator, $this->input('mgmt_ip'), $agentId);
+        }];
     }
 }

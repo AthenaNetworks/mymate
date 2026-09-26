@@ -76,9 +76,11 @@ class ScanSubnet
         if ($reachable !== []) {
             // Read-only try-pool - secrets decrypted only inside the prober, never logged.
             $credentials = Credential::all();
-            // IPs that are already devices (skip) and existing candidates (update, never dup).
-            $deviceIps = Device::pluck('mgmt_ip')->flip();
-            $existing = DiscoveryCandidate::whereIn('ip', $reachable)->get()->keyBy('ip');
+            // IPs that are already devices (skip) and existing candidates (update, never dup). This
+            // is a central scan, so only the central poll scope counts: an agent-polled device that
+            // happens to share an IP is a different box on another site's network (GitHub #49).
+            $deviceIps = Device::inPollScope(null)->pluck('mgmt_ip')->flip();
+            $existing = DiscoveryCandidate::whereNull('agent_id')->whereIn('ip', $reachable)->get()->keyBy('ip');
 
             // Probing tries SNMP + RouterOS + SSH per host, which is slow; cap the wall-clock so
             // the job can't blow past its queue timeout. Un-probed responders are just retried on

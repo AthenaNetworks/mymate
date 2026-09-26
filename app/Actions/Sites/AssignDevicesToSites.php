@@ -32,7 +32,7 @@ class AssignDevicesToSites
     /**
      * Assign from an authoritative `mgmt_ip,external_ref` CSV.
      *
-     * @return array{assigned: int, unmatched_ip: int, unknown_site: int, skipped_manual: int}
+     * @return array{assigned: int, unmatched_ip: int, ambiguous_ip: int, unknown_site: int, skipped_manual: int}
      */
     public function fromMapping(string $csvPath): array
     {
@@ -42,10 +42,13 @@ class AssignDevicesToSites
 
         // Both sides in memory: a fleet's devices and sites are thousands of rows, not
         // millions, and this turns the whole pass into one query each plus one update per hit.
-        $devicesByIp = Device::query()->get(['id', 'mgmt_ip', 'site_source'])->keyBy('mgmt_ip');
+        // Grouped, not keyed: an IP can now repeat across agents (GitHub #49), and a mapping row
+        // carries no agent - so an IP shared by several devices is ambiguous and is skipped rather
+        // than guessed at (reported as ambiguous_ip).
+        $devicesByIp = Device::query()->get(['id', 'mgmt_ip', 'site_source'])->groupBy('mgmt_ip');
         $siteIdByRef = Site::query()->whereNotNull('external_ref')->pluck('id', 'external_ref');
 
-        $summary = ['assigned' => 0, 'unmatched_ip' => 0, 'unknown_site' => 0, 'skipped_manual' => 0];
+        $summary = ['assigned' => 0, 'unmatched_ip' => 0, 'ambiguous_ip' => 0, 'unknown_site' => 0, 'skipped_manual' => 0];
 
         DB::transaction(function () use ($csvPath, $devicesByIp, $siteIdByRef, &$summary): void {
             foreach (CsvReader::rows($csvPath) as $row) {
@@ -55,12 +58,18 @@ class AssignDevicesToSites
                     continue;
                 }
 
-                $device = $devicesByIp->get($ip);
-                if ($device === null) {
+                $matches = $devicesByIp->get($ip);
+                if ($matches === null) {
                     $summary['unmatched_ip']++;
 
                     continue;
                 }
+                if ($matches->count() > 1) {
+                    $summary['ambiguous_ip']++;
+
+                    continue;
+                }
+                $device = $matches->first();
                 if ($device->site_source === 'manual') {
                     $summary['skipped_manual']++;
 

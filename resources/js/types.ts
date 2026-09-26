@@ -670,6 +670,7 @@ export interface Subnet {
 export interface DiscoveryCandidate {
     id: number;
     ip: string;
+    agent: { id: number; name: string | null } | null; // agent whose sweep found it; null = central
     status: DiscoveryStatus;
     sysname: string | null;
     detected_method: PollMethod | null;

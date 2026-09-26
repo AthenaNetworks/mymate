@@ -113,7 +113,8 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
                                 <CredentialTags candidate={c} />
                             </span>
                             <span className="block truncate text-xs text-white/40">
-                                {c.sysname ?? 'unidentified'} - seen {relativeTime(c.last_seen)}
+                                {c.sysname ?? 'unidentified'}
+                                {c.agent ? ` - via agent ${c.agent.name ?? `#${c.agent.id}`}` : ''} - seen {relativeTime(c.last_seen)}
                             </span>
                         </span>
 

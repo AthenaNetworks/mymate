@@ -16,6 +16,9 @@ class DiscoveryCandidateResource extends JsonResource
         return [
             'id' => $this->id,
             'ip' => $this->ip,
+            // Which agent's sweep found it (null = central). Promoting it makes a device polled by
+            // that agent, and the same IP can appear once per agent (GitHub #49).
+            'agent' => $this->agent_id === null ? null : ['id' => $this->agent_id, 'name' => $this->agent?->name],
             'status' => $this->status->value,
             'sysname' => $this->sysname,
             'detected_method' => $this->detected_method?->value,
