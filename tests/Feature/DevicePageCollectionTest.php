@@ -8,6 +8,7 @@ use App\Actions\History\ManageHistoryPartitions;
 use App\Actions\Polling\PollDeviceInterfaces;
 use App\Actions\Polling\PollDeviceMetrics;
 use App\Actions\Polling\PollInterfaces;
+use App\Actions\Polling\RecordDeviceResources;
 use App\Actions\Polling\RecordOpticalPower;
 use App\Enums\PollMethod;
 use App\Models\Agent;
@@ -451,6 +452,87 @@ class DevicePageCollectionTest extends TestCase
             ->assertJsonPath('data.count', 2)
             ->assertJsonPath('data.processors.1.index', 196609)
             ->assertJsonPath('data.cpu_pct', 20.0);
+    }
+
+    public function test_history_catalog_lists_the_new_families_with_labels_and_units(): void
+    {
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $if = NetworkInterface::factory()->create(['device_id' => $device->id, 'name' => 'sfp1']);
+        $disk = DeviceStorage::create(['device_id' => $device->id, 'storage_key' => '31', 'descr' => '/', 'type' => 'fixed_disk', 'size_bytes' => 2000]);
+        $ram = DeviceStorage::create(['device_id' => $device->id, 'storage_key' => '1', 'descr' => 'Physical memory', 'type' => 'ram', 'size_bytes' => 1000]);
+        $ts = now()->format('Y-m-d H:i:s');
+        DB::table('interface_samples')->insert([
+            'interface_id' => $if->id, 'ts' => $ts, 'bps_in' => 1000, 'bps_out' => 1000,
+            'errors_in' => 0.5, 'discards_out' => 0.1, 'pkts_in' => 100, 'pkts_out' => 90, 'oper_up' => true,
+        ]);
+        DB::table('optical_samples')->insert(['interface_id' => $if->id, 'ts' => $ts, 'rx_dbm' => -5.0, 'tx_dbm' => -2.0]);
+        DB::table('cpu_samples')->insert([
+            ['device_id' => $device->id, 'cpu_index' => 196609, 'ts' => $ts, 'load_pct' => 30.0],
+            ['device_id' => $device->id, 'cpu_index' => 196608, 'ts' => $ts, 'load_pct' => 10.0],
+        ]);
+        DB::table('storage_samples')->insert([
+            ['storage_id' => $disk->id, 'device_id' => $device->id, 'ts' => $ts, 'used_pct' => 75.0, 'used_bytes' => 1500, 'size_bytes' => 2000],
+            ['storage_id' => $ram->id, 'device_id' => $device->id, 'ts' => $ts, 'used_pct' => 25.0, 'used_bytes' => 250, 'size_bytes' => 1000],
+        ]);
+        DB::table('device_metric_samples')->insert(['device_id' => $device->id, 'ts' => $ts, 'uptime_s' => 3600]);
+
+        $families = collect($this->getJson("/api/devices/{$device->id}/history/catalog")->assertOk()->json('data.families'))->keyBy('family');
+        $pick = fn (array $m) => [$m['label'], $m['unit'], $m['group']];
+
+        $iface = collect($families['interface']['metrics'])->keyBy('metric');
+        $this->assertSame(['In', 'bps', 'traffic'], $pick($iface['bps_in'])); // the originals read as before
+        $this->assertSame(['In errors', 'pps', 'port_errors'], $pick($iface['errors_in']));
+        $this->assertSame(['Out discards', 'pps', 'port_errors'], $pick($iface['discards_out']));
+        $this->assertSame(['In packets', 'pps', 'traffic'], $pick($iface['pkts_in']));
+        $this->assertSame(['Port up', '%', 'port_status'], $pick($iface['up_pct']));
+        $this->assertArrayNotHasKey('errors_out', $iface->all()); // no data, not listed
+
+        $optical = $families['optical'];
+        $this->assertSame('interfaces', $optical['owner']); // hangs off the port picker
+        $this->assertSame([['key' => (string) $if->id, 'label' => 'sfp1', 'description' => $if->description]], $optical['keys']);
+        $this->assertSame(['Rx power', 'dBm', 'optical'], $pick(collect($optical['metrics'])->firstWhere('metric', 'rx_dbm')));
+
+        $cpu = $families['cpu'];
+        $this->assertSame('Processor', $cpu['key_label']);
+        $this->assertSame([['key' => '196608', 'label' => 'CPU 1'], ['key' => '196609', 'label' => 'CPU 2']], $cpu['keys']);
+        $this->assertSame(['Load', '%', 'cpu'], $pick($cpu['metrics'][0]));
+
+        $storage = $families['storage'];
+        $this->assertSame(['Physical memory', '/'], array_column($storage['keys'], 'label')); // RAM first
+        $st = collect($storage['metrics'])->keyBy('metric');
+        $this->assertSame(['Used', '%', 'storage'], $pick($st['used_pct']));
+        $this->assertSame('B', $st['used_bytes']['unit']);
+
+        $health = collect($families['device_metric']['metrics'])->keyBy('metric');
+        $this->assertSame(['Uptime', 's', 'uptime'], $pick($health['uptime_s']));
+        $this->assertSame(['avg', 'max', 'min'], $health['uptime_s']['aggs']);
+
+        // and the generic read serves them, scoped to the device
+        $this->getJson("/api/devices/{$device->id}/history?family=storage&metrics[]=used_pct&keys[]={$disk->id}")->assertOk();
+        $this->getJson("/api/devices/{$device->id}/history?family=cpu&metrics[]=load_pct")->assertOk();
+    }
+
+    public function test_reboots_the_poller_sees_land_on_the_events_timeline(): void
+    {
+        $this->actingAsUser();
+        $device = Device::factory()->create(['uptime_seconds' => 864000, 'uptime_at' => now()->subSeconds(30)]);
+
+        $device->forceFill(RecordDeviceResources::deviceAttributes($device, new DeviceMetrics(uptimeSeconds: 20), now()))->save();
+
+        $row = DB::table('device_reboots')->where('device_id', $device->id)->first();
+        $this->assertNotNull($row);
+        $this->assertSame(864000, (int) $row->previous_uptime_s);
+
+        $events = $this->getJson("/api/devices/{$device->id}/events?types[]=reboot")->assertOk()->json('data');
+        // the current boot is that same reboot, so it isn't listed twice
+        $this->assertCount(1, $events);
+        $this->assertSame('rebooted', $events[0]['kind']);
+        $this->assertSame('Had been up 10d 0h', $events[0]['detail']);
+
+        // still climbing next poll: nothing new
+        $device->forceFill(RecordDeviceResources::deviceAttributes($device, new DeviceMetrics(uptimeSeconds: 50), now()))->save();
+        $this->assertSame(1, DB::table('device_reboots')->where('device_id', $device->id)->count());
     }
 
     public function test_new_tables_and_partitions_exist(): void

@@ -44,8 +44,13 @@ of commit subjects.
   polling got a little cheaper.
 - **Load per CPU core.** Each processor's load is kept and graphed alongside the overall CPU figure,
   with the current per-core values at `GET /api/devices/{device}/processors`.
-- **Uptime history.** Uptime is read on every metrics poll now (not only at discovery) and graphed, so a
-  reboot shows as the line dropping to zero. A reboot is also noted in the engine log.
+- All of these show up on the device page by themselves (Graphs tab sections for packets, errors and
+  discards, port status, storage, per-core CPU, uptime and optical power; the Ports tab gets its errors
+  column).
+- **Uptime history and every reboot on the Events tab.** Uptime is read on every metrics poll now (not
+  only at discovery) and graphed, so a reboot shows as the line dropping to zero. Each reboot the poller
+  catches is also kept and listed on the device page's Events tab with how long the box had been up,
+  instead of only the latest boot.
 - **Optical power history.** SFP Rx / Tx light levels are kept as history per port, not just the latest
   reading, so a slowly dying optic or a dirty patch is easy to spot.
 - Remote agents report all of the above for their devices too (update the agent to get it; older agents

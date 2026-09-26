@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * History the full device page needs that we didn't keep before: port packets / errors /
  * discards and oper status per interface, optical power, per-CPU load, storage (disks and
- * memory) and uptime. Everything plugs into the rollup machinery from GitHub #28, see
+ * memory) and uptime, plus a small table of the reboots the poller spotted. Everything plugs into the rollup machinery from GitHub #28, see
  * App\Actions\History\HistoryFamilies for the key and metric names.
  *
  * Safe on a big install: every change to an existing (and possibly huge, partitioned) table is
@@ -96,6 +96,18 @@ return new class extends Migration
             )
         SQL);
 
+        // Reboots the metrics poller saw (uptime went backwards), for the device events timeline.
+        DB::statement(<<<'SQL'
+            CREATE TABLE device_reboots (
+                id bigserial PRIMARY KEY,
+                device_id bigint NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+                booted_at timestamp(0) without time zone NOT NULL,
+                previous_uptime_s bigint,
+                created_at timestamp(0) without time zone
+            )
+        SQL);
+        DB::statement('CREATE INDEX device_reboots_device_booted_idx ON device_reboots (device_id, booted_at)');
+
         foreach (self::NEW_FAMILIES as [$raw, $keys, $cols]) {
             $defs = [];
             foreach ($keys as $k => $type) {
@@ -167,6 +179,7 @@ return new class extends Migration
             DB::table('history_rollup_state')->where('family', $family)->delete();
         }
         DB::statement('DROP TABLE IF EXISTS device_storages');
+        DB::statement('DROP TABLE IF EXISTS device_reboots');
 
         foreach (self::NEW_METRICS as $family => $metrics) {
             foreach (['5m', '1h'] as $tier) {

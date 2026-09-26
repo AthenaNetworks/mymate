@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\DB;
  * Shared by the central metrics tick and agent ingest so both write the same rows.
  *
  *  - deviceAttributes(): what goes on the device row (cpu_loads, uptime_seconds/uptime_at), and
- *    spots a reboot (uptime went backwards) for the log. The caller saves the device, it's
- *    already saving it for cpu/mem/temp.
+ *    spots a reboot (uptime went backwards), kept in device_reboots for the events timeline. The
+ *    caller saves the device, it's already saving it for cpu/mem/temp.
  *  - __invoke(): one batch's history. cpu_samples per processor; device_storages upserted to the
  *    current state (an entry that's gone from a successful read is removed) and storage_samples
  *    per entry. Inserts are one statement per table for the whole batch, and best-effort like
@@ -39,20 +39,38 @@ class RecordDeviceResources
 
         if ($m->uptimeSeconds !== null) {
             if (self::rebooted($device->uptime_seconds, $device->uptime_at, $m->uptimeSeconds, $now)) {
-                // No device event timeline to hang this on yet. The uptime history shows it
-                // (uptime_s min per bucket drops), this just makes it findable in the log.
-                EngineLog::info('metrics: device rebooted', [
-                    'device_id' => $device->id,
-                    'device' => $device->name,
-                    'previous_uptime_s' => $device->uptime_seconds,
-                    'uptime_s' => $m->uptimeSeconds,
-                ]);
+                self::recordReboot($device, $m->uptimeSeconds, $now);
             }
             $attrs['uptime_seconds'] = $m->uptimeSeconds;
             $attrs['uptime_at'] = $now;
         }
 
         return $attrs;
+    }
+
+    /**
+     * Keep a reboot for the device events timeline (GetDeviceEvents) and the log. The uptime
+     * history shows it too (uptime_s min per bucket drops), this is what names it. Best-effort,
+     * a failed insert never costs the poll.
+     */
+    private static function recordReboot(Device $device, int $uptime, CarbonInterface $now): void
+    {
+        EngineLog::info('metrics: device rebooted', [
+            'device_id' => $device->id,
+            'device' => $device->name,
+            'previous_uptime_s' => $device->uptime_seconds,
+            'uptime_s' => $uptime,
+        ]);
+        try {
+            DB::transaction(fn () => DB::table('device_reboots')->insert([
+                'device_id' => $device->id,
+                'booted_at' => $now->copy()->subSeconds($uptime)->format('Y-m-d H:i:s'),
+                'previous_uptime_s' => $device->uptime_seconds,
+                'created_at' => $now->format('Y-m-d H:i:s'),
+            ]));
+        } catch (\Throwable $e) {
+            EngineLog::warning('metrics: reboot record failed', ['device_id' => $device->id, 'error' => $e->getMessage()]);
+        }
     }
 
     /**

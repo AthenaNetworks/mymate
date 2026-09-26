@@ -63,6 +63,12 @@ class HistoryCatalog
         ],
     ];
 
+    /**
+     * HistoryFamilies meta units that the page spells differently (it formats '%' and 'B', and a
+     * plain count has no unit to show).
+     */
+    private const UNIT_DISPLAY = ['pct' => '%', 'bytes' => 'B', 'count' => null];
+
     /** Child tables a family can be keyed by, key column => owning table (has a device_id). */
     private const OWNERS = [
         'interface_id' => 'interfaces',
@@ -200,17 +206,25 @@ class HistoryCatalog
         $spec = HistoryFamilies::get($family);
         $def = $spec['metrics'][$metric] ?? [];
         $fallback = self::FALLBACK[$family][$metric] ?? null;
+        // the registry's own label / unit / group for the metric (HistoryFamilies 'meta')
+        $meta = $spec['meta'][$metric] ?? null;
+        $metaUnit = $meta !== null && array_key_exists('unit', $meta)
+            ? (array_key_exists((string) $meta['unit'], self::UNIT_DISPLAY) ? self::UNIT_DISPLAY[(string) $meta['unit']] : $meta['unit'])
+            : null;
 
         // Metadata on the family spec wins, in whichever shape it's written: keyed on the metric's
-        // own entry, or a per-family labels/units map.
+        // own entry, or a per-family labels/units map. Then the fallback map here (it keeps the
+        // page's existing wording for the original metrics), then the registry meta.
         $label = (is_array($def) ? ($def['label'] ?? null) : null)
             ?? ($spec['labels'][$metric] ?? null)
             ?? $fallback[0]
+            ?? $meta['label']
             ?? Str::of($metric)->replace('_', ' ')->ucfirst()->toString();
         $unit = (is_array($def) && array_key_exists('unit', $def)) ? $def['unit']
-            : ($spec['units'][$metric] ?? ($fallback !== null ? $fallback[1] : self::guessUnit($metric)));
+            : ($spec['units'][$metric] ?? ($fallback !== null ? $fallback[1] : ($meta !== null ? $metaUnit : self::guessUnit($metric))));
         $group = (is_array($def) ? ($def['group'] ?? null) : null)
             ?? $fallback[2]
+            ?? $meta['group']
             ?? self::guessGroup($family, $metric);
 
         return ['label' => (string) $label, 'unit' => $unit === null ? null : (string) $unit, 'group' => (string) $group];
@@ -309,6 +323,14 @@ class HistoryCatalog
                 ->map(fn ($r) => ['key' => (string) $r->id, 'label' => $r->name, 'unit' => $r->unit]),
             'probe_id' => DB::table('probes')->where('device_id', $device->id)->whereIn('id', $ids)->orderBy('name')->get(['id', 'name'])
                 ->map(fn ($r) => ['key' => (string) $r->id, 'label' => $r->name]),
+            // disks / memory: the entry's description ("/", "Physical memory"), RAM first
+            'storage_id' => DB::table('device_storages')->where('device_id', $device->id)->whereIn('id', $ids)
+                ->orderByRaw("CASE type WHEN 'ram' THEN 0 WHEN 'virtual_memory' THEN 1 ELSE 2 END")->orderBy('descr')
+                ->get(['id', 'descr'])
+                ->map(fn ($r) => ['key' => (string) $r->id, 'label' => $r->descr]),
+            // processors: hrDeviceIndex (196608...) or the core number, shown as CPU 1, CPU 2...
+            'cpu_index' => collect($keys)->sort(SORT_NATURAL)->values()
+                ->map(fn ($k, $i) => ['key' => (string) $k, 'label' => 'CPU '.($i + 1)]),
             default => null,
         };
 

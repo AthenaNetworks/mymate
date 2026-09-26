@@ -17,10 +17,11 @@ namespace App\Actions\History;
  * there). `exprs` is for a metric that isn't a plain raw column, eg probe up/down as a percent.
  *
  * This is also the single source of truth for anything that reads history generically (the
- * device page graphs): `label` and `entity` describe the family and what its keys point at,
- * and `meta` gives every metric a label, a unit and a kind. Units are one of bps, pps, pct,
- * dBm, dB, s, bytes, count, ms, C (celsius), or null when it depends on the row (a custom
- * sensor). Kinds:
+ * device page graphs, HistoryCatalog): `label` and `entity` describe the family and what its
+ * keys point at, `group` / `key_label` / `owner` are for the page's catalog (the Graphs tab
+ * section, what one key is called, and the table a child key's rows live in), and `meta` gives
+ * every metric a label, a unit, a kind and a group. Units are one of bps, pps, pct, dBm, dB, s,
+ * bytes, count, ms, C (celsius), or null when it depends on the row (a custom sensor). Kinds:
  *   gauge         a reading at poll time (cpu %, signal, disk used)
  *   rate          per second, worked out from counter deltas between two polls (bps, errors/s)
  *   availability  0 or 100 per sample, so the average over a bucket is "% of the time up"
@@ -37,8 +38,10 @@ class HistoryFamilies
 {
     public const FAMILIES = [
         'interface' => [
-            'label' => 'Interface',
+            'label' => 'Ports',
             'entity' => 'interface',
+            'group' => 'traffic',
+            'key_label' => 'Port',
             'raw' => 'interface_samples',
             'keys' => ['interface_id'],
             'metrics' => [
@@ -62,22 +65,23 @@ class HistoryFamilies
                 'up_pct' => 'CASE WHEN oper_up THEN 100.0 WHEN NOT oper_up THEN 0.0 END',
             ],
             'meta' => [
-                'bps_in' => ['label' => 'Traffic in', 'unit' => 'bps', 'kind' => 'rate'],
-                'bps_out' => ['label' => 'Traffic out', 'unit' => 'bps', 'kind' => 'rate'],
-                'util_in' => ['label' => 'Utilisation in', 'unit' => 'pct', 'kind' => 'rate'],
-                'util_out' => ['label' => 'Utilisation out', 'unit' => 'pct', 'kind' => 'rate'],
-                'pkts_in' => ['label' => 'Packets in', 'unit' => 'pps', 'kind' => 'rate'],
-                'pkts_out' => ['label' => 'Packets out', 'unit' => 'pps', 'kind' => 'rate'],
-                'errors_in' => ['label' => 'Errors in', 'unit' => 'pps', 'kind' => 'rate'],
-                'errors_out' => ['label' => 'Errors out', 'unit' => 'pps', 'kind' => 'rate'],
-                'discards_in' => ['label' => 'Discards in', 'unit' => 'pps', 'kind' => 'rate'],
-                'discards_out' => ['label' => 'Discards out', 'unit' => 'pps', 'kind' => 'rate'],
-                'up_pct' => ['label' => 'Port up', 'unit' => 'pct', 'kind' => 'availability'],
+                'bps_in' => ['label' => 'Traffic in', 'unit' => 'bps', 'kind' => 'rate', 'group' => 'traffic'],
+                'bps_out' => ['label' => 'Traffic out', 'unit' => 'bps', 'kind' => 'rate', 'group' => 'traffic'],
+                'util_in' => ['label' => 'Utilisation in', 'unit' => 'pct', 'kind' => 'rate', 'group' => 'traffic'],
+                'util_out' => ['label' => 'Utilisation out', 'unit' => 'pct', 'kind' => 'rate', 'group' => 'traffic'],
+                'pkts_in' => ['label' => 'In packets', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'traffic'],
+                'pkts_out' => ['label' => 'Out packets', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'traffic'],
+                'errors_in' => ['label' => 'In errors', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'port_errors'],
+                'errors_out' => ['label' => 'Out errors', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'port_errors'],
+                'discards_in' => ['label' => 'In discards', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'port_errors'],
+                'discards_out' => ['label' => 'Out discards', 'unit' => 'pps', 'kind' => 'rate', 'group' => 'port_errors'],
+                'up_pct' => ['label' => 'Port up', 'unit' => 'pct', 'kind' => 'availability', 'group' => 'port_status'],
             ],
         ],
         'ping' => [
             'label' => 'Latency',
             'entity' => 'device',
+            'group' => 'latency',
             'raw' => 'ping_samples',
             'keys' => ['device_id'],
             'metrics' => [
@@ -86,14 +90,16 @@ class HistoryFamilies
                 'jitter_ms' => ['max'],
             ],
             'meta' => [
-                'rtt_ms' => ['label' => 'Round trip', 'unit' => 'ms', 'kind' => 'gauge'],
-                'loss_pct' => ['label' => 'Packet loss', 'unit' => 'pct', 'kind' => 'gauge'],
-                'jitter_ms' => ['label' => 'Jitter', 'unit' => 'ms', 'kind' => 'gauge'],
+                'rtt_ms' => ['label' => 'Round trip', 'unit' => 'ms', 'kind' => 'gauge', 'group' => 'latency'],
+                'loss_pct' => ['label' => 'Packet loss', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'latency'],
+                'jitter_ms' => ['label' => 'Jitter', 'unit' => 'ms', 'kind' => 'gauge', 'group' => 'latency'],
             ],
         ],
         'sensor' => [
-            'label' => 'Sensor',
+            'label' => 'Sensors',
             'entity' => 'sensor',
+            'group' => 'sensors',
+            'key_label' => 'Sensor',
             'raw' => 'sensor_samples',
             'keys' => ['sensor_id', 'device_id'],
             'metrics' => [
@@ -101,12 +107,14 @@ class HistoryFamilies
             ],
             'meta' => [
                 // the unit lives on the sensor row, it's whatever the operator set up
-                'value' => ['label' => 'Value', 'unit' => null, 'kind' => 'gauge'],
+                'value' => ['label' => 'Value', 'unit' => null, 'kind' => 'gauge', 'group' => 'sensors'],
             ],
         ],
         'probe' => [
-            'label' => 'Service probe',
+            'label' => 'Probes',
             'entity' => 'probe',
+            'group' => 'probes',
+            'key_label' => 'Probe',
             'raw' => 'probe_samples',
             'keys' => ['probe_id'],
             'metrics' => [
@@ -118,13 +126,14 @@ class HistoryFamilies
                 'up_pct' => 'CASE WHEN up THEN 100.0 WHEN NOT up THEN 0.0 END',
             ],
             'meta' => [
-                'latency_ms' => ['label' => 'Response time', 'unit' => 'ms', 'kind' => 'gauge'],
-                'up_pct' => ['label' => 'Availability', 'unit' => 'pct', 'kind' => 'availability'],
+                'latency_ms' => ['label' => 'Response time', 'unit' => 'ms', 'kind' => 'gauge', 'group' => 'probes'],
+                'up_pct' => ['label' => 'Availability', 'unit' => 'pct', 'kind' => 'availability', 'group' => 'probes'],
             ],
         ],
         'device_metric' => [
-            'label' => 'Device health',
+            'label' => 'Health',
             'entity' => 'device',
+            'group' => 'health',
             'raw' => 'device_metric_samples',
             'keys' => ['device_id'],
             'metrics' => [
@@ -140,20 +149,22 @@ class HistoryFamilies
                 'uptime_s' => ['max', 'min'],
             ],
             'meta' => [
-                'cpu_pct' => ['label' => 'CPU', 'unit' => 'pct', 'kind' => 'gauge'],
-                'mem_used_pct' => ['label' => 'Memory used', 'unit' => 'pct', 'kind' => 'gauge'],
-                'temp_c' => ['label' => 'Temperature', 'unit' => 'C', 'kind' => 'gauge'],
-                'signal_dbm' => ['label' => 'Signal', 'unit' => 'dBm', 'kind' => 'gauge'],
-                'snr_db' => ['label' => 'SNR', 'unit' => 'dB', 'kind' => 'gauge'],
-                'ccq_pct' => ['label' => 'CCQ', 'unit' => 'pct', 'kind' => 'gauge'],
-                'wireless_clients' => ['label' => 'Wireless clients', 'unit' => 'count', 'kind' => 'gauge'],
-                'ospf_neighbors' => ['label' => 'OSPF neighbours', 'unit' => 'count', 'kind' => 'gauge'],
-                'uptime_s' => ['label' => 'Uptime', 'unit' => 's', 'kind' => 'gauge'],
+                'cpu_pct' => ['label' => 'CPU', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'cpu'],
+                'mem_used_pct' => ['label' => 'Memory used', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'memory'],
+                'temp_c' => ['label' => 'Temperature', 'unit' => 'C', 'kind' => 'gauge', 'group' => 'temperature'],
+                'signal_dbm' => ['label' => 'Signal', 'unit' => 'dBm', 'kind' => 'gauge', 'group' => 'wireless'],
+                'snr_db' => ['label' => 'SNR', 'unit' => 'dB', 'kind' => 'gauge', 'group' => 'wireless'],
+                'ccq_pct' => ['label' => 'CCQ', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'wireless'],
+                'wireless_clients' => ['label' => 'Wireless clients', 'unit' => 'count', 'kind' => 'gauge', 'group' => 'wireless'],
+                'ospf_neighbors' => ['label' => 'OSPF neighbours', 'unit' => 'count', 'kind' => 'gauge', 'group' => 'routing'],
+                'uptime_s' => ['label' => 'Uptime', 'unit' => 's', 'kind' => 'gauge', 'group' => 'uptime'],
             ],
         ],
         'optical' => [
             'label' => 'Optical power',
             'entity' => 'interface',
+            'group' => 'optical',
+            'key_label' => 'Port',
             'raw' => 'optical_samples',
             'keys' => ['interface_id'],
             'metrics' => [
@@ -161,25 +172,30 @@ class HistoryFamilies
                 'tx_dbm' => ['max', 'min'],
             ],
             'meta' => [
-                'rx_dbm' => ['label' => 'Rx power', 'unit' => 'dBm', 'kind' => 'gauge'],
-                'tx_dbm' => ['label' => 'Tx power', 'unit' => 'dBm', 'kind' => 'gauge'],
+                'rx_dbm' => ['label' => 'Rx power', 'unit' => 'dBm', 'kind' => 'gauge', 'group' => 'optical'],
+                'tx_dbm' => ['label' => 'Tx power', 'unit' => 'dBm', 'kind' => 'gauge', 'group' => 'optical'],
             ],
         ],
         'cpu' => [
-            'label' => 'Processor',
+            'label' => 'Processors',
             'entity' => 'device',
+            'group' => 'cpu',
+            'key_label' => 'Processor',
             'raw' => 'cpu_samples',
             'keys' => ['device_id', 'cpu_index'],
             'metrics' => [
                 'load_pct' => ['max'],
             ],
             'meta' => [
-                'load_pct' => ['label' => 'Load', 'unit' => 'pct', 'kind' => 'gauge'],
+                'load_pct' => ['label' => 'Load', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'cpu'],
             ],
         ],
         'storage' => [
             'label' => 'Storage',
             'entity' => 'storage',
+            'group' => 'storage',
+            'key_label' => 'Storage',
+            'owner' => 'device_storages',
             'raw' => 'storage_samples',
             'keys' => ['storage_id', 'device_id'],
             'metrics' => [
@@ -188,14 +204,14 @@ class HistoryFamilies
                 'size_bytes' => ['max'],
             ],
             'meta' => [
-                'used_pct' => ['label' => 'Used', 'unit' => 'pct', 'kind' => 'gauge'],
-                'used_bytes' => ['label' => 'Used', 'unit' => 'bytes', 'kind' => 'gauge'],
-                'size_bytes' => ['label' => 'Size', 'unit' => 'bytes', 'kind' => 'gauge'],
+                'used_pct' => ['label' => 'Used', 'unit' => 'pct', 'kind' => 'gauge', 'group' => 'storage'],
+                'used_bytes' => ['label' => 'Used', 'unit' => 'bytes', 'kind' => 'gauge', 'group' => 'storage'],
+                'size_bytes' => ['label' => 'Size', 'unit' => 'bytes', 'kind' => 'gauge', 'group' => 'storage'],
             ],
         ],
     ];
 
-    /** @return array{raw:string, keys:list<string>, metrics:array<string,list<string>>, exprs?:array<string,string>, label?:string, entity?:string, meta?:array<string,array{label:string,unit:?string,kind:string}>} */
+    /** @return array{raw:string, keys:list<string>, metrics:array<string,list<string>>, exprs?:array<string,string>, label?:string, entity?:string, group?:string, key_label?:string, owner?:string, meta?:array<string,array{label:string,unit:?string,kind:string,group:string}>} */
     public static function get(string $family): array
     {
         return self::FAMILIES[$family] ?? throw new \InvalidArgumentException("Unknown history family [{$family}]");
@@ -218,7 +234,7 @@ class HistoryFamilies
         return array_values(array_unique(array_column(self::FAMILIES, 'raw')));
     }
 
-    /** @return array{label:string, unit:?string, kind:string} */
+    /** @return array{label:string, unit:?string, kind:string, group:string} */
     public static function metricMeta(string $family, string $metric): array
     {
         $spec = self::get($family);
@@ -226,7 +242,7 @@ class HistoryFamilies
             throw new \InvalidArgumentException("Unknown metric [{$metric}] in history family [{$family}]");
         }
 
-        return $spec['meta'][$metric] ?? ['label' => $metric, 'unit' => null, 'kind' => 'gauge'];
+        return ($spec['meta'][$metric] ?? []) + ['label' => $metric, 'unit' => null, 'kind' => 'gauge', 'group' => 'other'];
     }
 
     /**
@@ -234,7 +250,7 @@ class HistoryFamilies
      * label, what the keys refer to, and each metric with label/unit/kind and the aggregates a
      * reader can ask for (avg always, plus whatever the rollups keep).
      *
-     * @return array<string, array{label:string, entity:string, keys:list<string>, metrics:array<string, array{label:string, unit:?string, kind:string, aggregates:list<string>}>}>
+     * @return array<string, array{label:string, entity:string, keys:list<string>, metrics:array<string, array{label:string, unit:?string, kind:string, group:string, aggregates:list<string>}>}>
      */
     public static function describe(): array
     {

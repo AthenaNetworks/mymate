@@ -23,6 +23,7 @@ class HistoryFamiliesTest extends TestCase
                 $this->assertNotSame('', $meta['label']);
                 $this->assertContains($meta['unit'], self::UNITS, "{$family}.{$metric} unit");
                 $this->assertContains($meta['kind'], self::KINDS, "{$family}.{$metric} kind");
+                $this->assertNotEmpty($meta['group'] ?? null, "{$family}.{$metric} group");
             }
             // no meta for a metric that doesn't exist
             $this->assertSame([], array_diff(array_keys($spec['meta'] ?? []), array_keys($spec['metrics'])), $family);
@@ -40,6 +41,9 @@ class HistoryFamiliesTest extends TestCase
         $this->assertArrayHasKey('uptime_s', HistoryFamilies::get('device_metric')['metrics']);
         $this->assertSame('availability', HistoryFamilies::metricMeta('interface', 'up_pct')['kind']);
         $this->assertSame('pps', HistoryFamilies::metricMeta('interface', 'errors_in')['unit']);
+        // the device page's Ports tab looks for errors / discards in this group
+        $this->assertSame('port_errors', HistoryFamilies::metricMeta('interface', 'discards_out')['group']);
+        $this->assertSame('device_storages', HistoryFamilies::get('storage')['owner']);
         $this->assertStringContainsString('oper_up', HistoryFamilies::rawExpr('interface', 'up_pct'));
 
         foreach (['optical_samples', 'cpu_samples', 'storage_samples', 'interface_samples'] as $t) {

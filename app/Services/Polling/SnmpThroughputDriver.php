@@ -110,11 +110,15 @@ class SnmpThroughputDriver implements PortStatsDriver, ThroughputDriver
             'pkts_out' => ['if_hc_out_ucast_pkts', 'if_hc_out_mcast_pkts', 'if_hc_out_bcast_pkts'],
         ];
 
+        // SNMPv1 can't carry Counter64, and a v1 agent fails the whole PDU on one of them (ext-snmp
+        // then retries without it, one OID at a time), so don't ask a v1 box for the HC packets.
+        $v1 = $community->version === '1';
+
         $wanted = [];
         foreach ($ifIndexes as $ifIndex) {
             foreach ($columns as $cols) {
                 foreach ($cols as $col) {
-                    if (isset($oids[$col])) {
+                    if (isset($oids[$col]) && ! ($v1 && str_starts_with($col, 'if_hc_'))) {
                         $wanted[] = ltrim($oids[$col], '.').'.'.(int) $ifIndex;
                     }
                 }
