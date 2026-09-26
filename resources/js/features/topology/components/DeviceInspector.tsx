@@ -48,6 +48,8 @@ import { DeviceGlyph } from '../nodes/DeviceGlyph';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
 import { relativeTime } from '../../../lib/relativeTime';
 import { formatMbps, formatRate } from '../../../lib/formatRate';
+import { usePlaybackOverrides } from '../../geo/hooks/usePlaybackOverrides';
+import { PlaybackInspectorBanner } from '../../geo/components/PlaybackBar';
 import { UPGRADE_IN_PROGRESS, type Device, type DeviceStatus, type DeviceType, type Link, type NetworkInterface, type PollMethod } from '../../../types';
 
 const pollLabel: Record<string, string> = { snmp: 'SNMP v2c', routeros: 'RouterOS API', none: 'Ping only' };
@@ -539,11 +541,13 @@ export function DeviceInspector() {
     const activeMapId = useActiveMapId();
     // Just the selected device (GitHub #22) - it used to be looked up in the whole fleet, which
     // at 25k devices never arrived. Seeded from the map's rows, so a click paints straight away.
-    const { data: device, error: deviceError } = useDevice(id);
+    const { data: liveDevice, error: deviceError } = useDevice(id);
     const deviceGone = (deviceError as { response?: { status?: number } } | null)?.response?.status === 404;
     const { data: mapDevices } = useMapDevices(activeMapId);
     const { data: stats } = useDeviceStats();
-    const { data: interfaces } = useDeviceInterfaces(id);
+    const { data: liveInterfaces } = useDeviceInterfaces(id);
+    // While the map is playing back history, the frame's values over the live ones (GitHub #22).
+    const { device, interfaces, playback } = usePlaybackOverrides(liveDevice, liveInterfaces);
     // all its ports on the live stream while it's selected, not just the link ends
     useWatchDevice(deviceGone ? null : id);
     const { data: links } = useDeviceLinks(id);
@@ -682,6 +686,7 @@ export function DeviceInspector() {
 
     return (
         <InspectorShell open={inspectorOpen}>
+            {playback && <PlaybackInspectorBanner playback={playback} />}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
                     {isAdmin ? (

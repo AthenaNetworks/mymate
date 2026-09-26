@@ -4,6 +4,7 @@ import { deviceKeys } from '../../devices/api/getDevices';
 import { linkKeys } from '../../topology/api/getLinks';
 import { fetchPlayback } from '../api/playback';
 import { createStore, frameAt, frameDevices, frameLinks, mergeChunk, nextUnloaded, sameAxis, type PlaybackStore } from '../lib/playbackFrame';
+import { publishPlayback } from '../lib/playbackState';
 import type { Device, Link } from '../../../types';
 
 /** Frames per second at 1x. */
@@ -17,12 +18,13 @@ export const PLAYBACK_PRESETS = [
     { label: '7d', hours: 24 * 7 },
 ] as const;
 
-type Window = { from: number; to: number; hours: number; focus: number | null }; // unix ms, focus = frame to open on
+// unix ms, focus = frame to open on. `at` is the single instant view: one frame, that moment.
+type Window = { from: number; to: number; hours: number; focus: number | null; at?: boolean };
 
 export type Playback = ReturnType<typeof usePlayback>;
 
 /**
- * Historical playback state for the geo map (GitHub #22), kept out of the canvas itself.
+ * Historical playback state for the geo and logical maps (GitHub #22), kept out of the canvases.
  *
  * Entering playback freezes a copy of the devices and links as they are right now; every frame is
  * drawn from that copy with the frame's status/rtt/bps swapped in, so the live socket can keep
@@ -31,6 +33,13 @@ export type Playback = ReturnType<typeof usePlayback>;
  *
  * The window loads in chunks (the server sizes them to the map), starting from wherever the
  * playhead is, so a big map can start playing after the first chunk while the rest streams in.
+ *
+ * `jump` is the other way in: one frame for one moment (the API's ?at=), so a date typed into the
+ * bar lands on exactly that moment, rather than on whichever 5 minute or hourly frame of a window
+ * it falls in. From there `load(hours, at)` opens a window around it to scrub.
+ *
+ * What's on screen is also published to lib/playbackState, so the device inspector can show the
+ * same frame without anything being passed down to it.
  */
 export function usePlayback(mapId: number | null, devices: Device[] | undefined, links: Link[] | undefined) {
     const qc = useQueryClient();
@@ -79,6 +88,20 @@ export function usePlayback(mapId: number | null, devices: Device[] | undefined,
         [active, devices, links],
     );
 
+    /** The single instant view: the network at that moment and nothing either side. */
+    const jump = useCallback(
+        (at: number) => {
+            if (!devices || !links) return;
+            if (!active) {
+                setSnapshot({ devices, links });
+                setActive(true);
+            }
+            setWin({ from: at, to: at, hours: 0, focus: at, at: true });
+            setPlaying(false);
+        },
+        [active, devices, links],
+    );
+
     // Switching maps leaves playback, the window belongs to the old map's devices.
     useEffect(() => {
         if (active) exit();
@@ -96,6 +119,13 @@ export function usePlayback(mapId: number | null, devices: Device[] | undefined,
 
         (async () => {
             try {
+                if (win.at) {
+                    // one frame, nothing to page through
+                    const s = createStore(await fetchPlayback(mapId, { at: new Date(win.from).toISOString() }, ctrl.signal));
+                    setFrame(0);
+                    setStore(s);
+                    return;
+                }
                 const first = await fetchPlayback(mapId, q, ctrl.signal);
                 const s = createStore(first);
                 const start = win.focus === null ? 0 : frameAt(s, Math.floor(win.focus / 1000));
@@ -158,6 +188,24 @@ export function usePlayback(mapId: number | null, devices: Device[] | undefined,
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active, snapshot, store, frame, version, devices, links]);
 
+    // Share the frame with the inspector. Cleared on the way out, and if the canvas goes away
+    // mid-playback (switching views) the live queries still get their catch-up refetch.
+    useEffect(() => {
+        publishPlayback(active && mapId !== null ? { mapId, store, frame, version, exit } : null);
+    }, [active, mapId, store, frame, version, exit]);
+    const activeRef = useRef(active);
+    activeRef.current = active;
+    useEffect(
+        () => () => {
+            publishPlayback(null);
+            if (activeRef.current) {
+                void qc.invalidateQueries({ queryKey: deviceKeys.all });
+                void qc.invalidateQueries({ queryKey: linkKeys.all });
+            }
+        },
+        [qc],
+    );
+
     const loadedCount = useMemo(() => (store ? store.loaded.filter(Boolean).length : 0), [store, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return {
@@ -172,8 +220,10 @@ export function usePlayback(mapId: number | null, devices: Device[] | undefined,
         speed,
         error,
         view,
+        snapshot,
         canStart: !!devices && !!links && mapId !== null,
         load,
+        jump,
         exit,
         setFrame: (i: number) => {
             setPlaying(false);

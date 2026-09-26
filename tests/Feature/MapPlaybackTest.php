@@ -66,6 +66,12 @@ class MapPlaybackTest extends TestCase
         DB::table('ping_samples')->insert(['device_id' => $deviceId, 'ts' => $ts, 'rtt_ms' => $rtt, 'loss_pct' => $loss]);
     }
 
+    private function metric(int $deviceId, string $ts, ?float $cpu, ?float $mem, ?float $temp): void
+    {
+        app(ManageHistoryPartitions::class)->ensure('device_metric_samples', 'day', Carbon::parse($ts));
+        DB::table('device_metric_samples')->insert(['device_id' => $deviceId, 'ts' => $ts, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp]);
+    }
+
     private function frameOf(array $data, string $ts): int
     {
         $i = array_search(Carbon::parse($ts)->getTimestamp(), $data['frames'], true);
@@ -105,6 +111,54 @@ class MapPlaybackTest extends TestCase
         // b never answered a ping in the window, so it has no series at all
         $this->assertArrayNotHasKey((string) $this->b->id, $data['devices']);
         $this->assertEquals([], $data['down']);
+    }
+
+    public function test_health_metrics_are_averaged_per_frame_and_only_sent_when_reported(): void
+    {
+        $this->actingAsUser();
+        // a reports all three, twice in the 11:05 frame and once at 11:40. b only has cpu.
+        $this->metric($this->a->id, '2026-09-26 11:05:00', 10, 40, 50);
+        $this->metric($this->a->id, '2026-09-26 11:05:30', 21, 41.3, 53);
+        $this->metric($this->a->id, '2026-09-26 11:40:00', 99.94, 60, 61.6);
+        $this->metric($this->b->id, '2026-09-26 11:59:59', 3.25, null, null);
+        // outside the window either side, never in a frame
+        $this->metric($this->a->id, '2026-09-26 10:59:59', 77, 77, 77);
+        $this->metric($this->a->id, '2026-09-26 12:00:00', 88, 88, 88);
+
+        $data = $this->getJson($this->url('from=2026-09-26T11:00:00Z&to=2026-09-26T12:00:00Z&points=12'))
+            ->assertOk()->json('data');
+
+        $a = $data['health'][$this->a->id];
+        foreach (['cpu_pct', 'mem_used_pct', 'temp_c'] as $m) {
+            $this->assertCount(12, $a[$m], $m);
+        }
+        $f = $this->frameOf($data, '2026-09-26 11:05:00');
+        // rounded the way the tiles show them: whole percent from 10 up, whole degrees
+        $this->assertSame(16, $a['cpu_pct'][$f]); // (10 + 21) / 2
+        $this->assertSame(41, $a['mem_used_pct'][$f]); // (40 + 41.3) / 2
+        $this->assertSame(52, $a['temp_c'][$f]);
+        $late = $this->frameOf($data, '2026-09-26 11:40:00');
+        $this->assertSame(100, $a['cpu_pct'][$late]);
+        $this->assertSame(62, $a['temp_c'][$late]);
+        // nothing either side of the samples, and nothing leaked in from outside the window
+        $this->assertSame(2, count(array_filter($a['cpu_pct'], fn ($v) => $v !== null)));
+        $this->assertNull($a['cpu_pct'][0]);
+        $this->assertNull($a['cpu_pct'][11]);
+
+        // b never reported mem or temp, so those arrays aren't sent at all
+        $this->assertSame(['cpu_pct'], array_keys($data['health'][$this->b->id]));
+        $this->assertEquals(3.3, $data['health'][$this->b->id]['cpu_pct'][11]); // a tenth under 10
+    }
+
+    public function test_devices_with_no_health_samples_are_left_out(): void
+    {
+        $this->actingAsUser();
+        // a row that carries no cpu/mem/temp at all (eg a box that only answers uptime)
+        $this->metric($this->a->id, '2026-09-26 11:05:00', null, null, null);
+
+        $data = $this->getJson($this->url('from=2026-09-26T11:00:00Z&to=2026-09-26T12:00:00Z&points=12'))
+            ->assertOk()->assertJsonPath('data.health', [])->json('data');
+        $this->assertSame([], $data['health']);
     }
 
     public function test_status_comes_from_outages_including_short_and_open_ones(): void
@@ -159,6 +213,9 @@ class MapPlaybackTest extends TestCase
         $this->bps($this->ifA->id, '2026-09-26 10:31:00', 300, 30);
         $this->bps($this->ifA->id, '2026-09-26 10:33:00', 9999, 9999); // after the moment
         $this->bps($this->ifA->id, '2026-09-26 10:20:00', 9999, 9999); // too long before it
+        $this->metric($this->a->id, '2026-09-26 10:29:00', 10, 30, 44);
+        $this->metric($this->a->id, '2026-09-26 10:31:30', 15, 30, 46);
+        $this->metric($this->a->id, '2026-09-26 10:32:30', 99, 99, 99); // after the moment
         Outage::create(['device_id' => $this->b->id, 'started_at' => '2026-09-26 10:30:00', 'ended_at' => '2026-09-26 10:40:00', 'duration_s' => 600]);
         Outage::create(['device_id' => $this->a->id, 'started_at' => '2026-09-26 10:10:00', 'ended_at' => '2026-09-26 10:29:00', 'duration_s' => 1140]);
 
@@ -169,6 +226,7 @@ class MapPlaybackTest extends TestCase
         $this->assertSame([200], $data['interfaces'][$this->ifA->id]['bps_in']);
         $this->assertSame([0], $data['down'][$this->b->id]);
         $this->assertArrayNotHasKey((string) $this->a->id, $data['down']); // recovered before 10:32
+        $this->assertEquals(['cpu_pct' => [13], 'mem_used_pct' => [30], 'temp_c' => [45]], $data['health'][$this->a->id]);
 
         // a moment past raw retention is read from the rollup bucket it falls in
         $old = now()->subDays(20)->setTime(6, 0);
@@ -188,6 +246,8 @@ class MapPlaybackTest extends TestCase
         Link::create(['a_device_id' => $this->a->id, 'a_interface_id' => $this->ifA->id, 'b_device_id' => $off->id, 'b_interface_id' => $ifOff->id]);
         $this->bps($ifOff->id, '2026-09-26 11:05:00', 1, 1);
         $this->ping($off->id, '2026-09-26 11:05:00', 5, 0);
+        $this->metric($off->id, '2026-09-26 11:05:00', 50, 50, 50);
+        $this->metric($this->a->id, '2026-09-26 11:05:00', 1, 2, 3);
         Outage::create(['device_id' => $off->id, 'started_at' => '2026-09-26 11:10:00']);
 
         $data = $this->getJson($this->url('from=2026-09-26T11:00:00Z&to=2026-09-26T12:00:00Z'))->assertOk()->json('data');
@@ -195,6 +255,7 @@ class MapPlaybackTest extends TestCase
         $this->assertNotContains($off->id, $data['device_ids']);
         $this->assertArrayNotHasKey((string) $ifOff->id, $data['interfaces']);
         $this->assertArrayNotHasKey((string) $off->id, $data['devices']);
+        $this->assertSame([(string) $this->a->id], array_map('strval', array_keys($data['health'])));
         $this->assertSame([], $data['outages']);
     }
 
@@ -208,11 +269,17 @@ class MapPlaybackTest extends TestCase
         $this->getJson($this->url('from=2026-09-26T11:00:00Z'))->assertNotFound();
         $this->getJson("/api/maps/{$other->id}/playback")->assertOk();
 
-        // and on a granted map they get its devices
+        // and on a granted map they get its devices, health included, but nothing of Region B's
+        $onB = Device::factory()->create(['name' => 'on-b']);
+        DeviceMapPosition::create(['device_id' => $onB->id, 'map_id' => $other->id, 'x' => 0, 'y' => 0]);
+        $this->metric($onB->id, '2026-09-26 11:05:00', 70, 70, 70);
+        $this->metric($this->b->id, '2026-09-26 11:05:00', 20, 30, 40);
         $granted = User::factory()->create(['is_admin' => false, 'restricted' => true]);
         $granted->maps()->attach($this->map->id);
-        $this->actingAs($granted)->getJson($this->url('from=2026-09-26T11:00:00Z'))->assertOk()
-            ->assertJsonPath('data.device_ids', fn ($ids) => count($ids) === 2);
+        $data = $this->actingAs($granted)->getJson($this->url('from=2026-09-26T11:00:00Z'))->assertOk()
+            ->assertJsonPath('data.device_ids', fn ($ids) => count($ids) === 2)->json('data');
+        $this->assertSame([(string) $this->b->id], array_map('strval', array_keys($data['health'])));
+        $this->assertArrayNotHasKey((string) $onB->id, $data['health']);
     }
 
     public function test_chunks_line_up_with_the_whole_window_across_rollups_and_raw(): void
@@ -224,6 +291,7 @@ class MapPlaybackTest extends TestCase
         for ($t = now()->subHours(4); $t->lessThan(now()); $t->addMinutes(2)) {
             $this->bps($this->ifA->id, $t->format('Y-m-d H:i:s'), $t->minute * 1000, 5);
             $this->ping($this->a->id, $t->format('Y-m-d H:i:s'), $t->minute, 0);
+            $this->metric($this->a->id, $t->format('Y-m-d H:i:s'), $t->minute, $t->hour, null);
         }
         app(RollupHistory::class)(0.0);
         $this->assertSame('2026-09-26 09:55:00', DB::table('history_rollup_state')->where(['family' => 'interface', 'tier' => '5m'])->value('rolled_to'));
@@ -231,6 +299,7 @@ class MapPlaybackTest extends TestCase
         for ($t = Carbon::parse('2026-09-26 10:03:00'); $t->lessThan(now()); $t->addMinutes(2)) {
             $this->bps($this->ifA->id, $t->format('Y-m-d H:i:s'), $t->minute * 1000, 5);
             $this->ping($this->a->id, $t->format('Y-m-d H:i:s'), $t->minute, 0);
+            $this->metric($this->a->id, $t->format('Y-m-d H:i:s'), $t->minute, $t->hour, null);
         }
 
         $window = 'from=2026-09-26T06:00:00Z&to=2026-09-26T12:00:00Z&points=72';
@@ -239,20 +308,28 @@ class MapPlaybackTest extends TestCase
         $this->assertSame(72, $whole['limit']);
         $this->assertCount(72, $whole['interfaces'][$this->ifA->id]['bps_in']);
 
-        $stitched = ['bps_in' => [], 'rtt_ms' => []];
+        $stitched = ['bps_in' => [], 'rtt_ms' => [], 'cpu_pct' => []];
         for ($offset = 0; $offset < 72; $offset += 10) {
             $part = $this->getJson($this->url("{$window}&offset={$offset}&limit=10"))->assertOk()->json('data');
             $this->assertSame($offset, $part['offset']);
             $this->assertSame($whole['frames'], $part['frames']);
             $stitched['bps_in'] = [...$stitched['bps_in'], ...$part['interfaces'][$this->ifA->id]['bps_in'] ?? array_fill(0, $part['limit'], null)];
             $stitched['rtt_ms'] = [...$stitched['rtt_ms'], ...$part['devices'][$this->a->id]['rtt_ms'] ?? array_fill(0, $part['limit'], null)];
+            $stitched['cpu_pct'] = [...$stitched['cpu_pct'], ...$part['health'][$this->a->id]['cpu_pct'] ?? array_fill(0, $part['limit'], null)];
+            $this->assertArrayNotHasKey('temp_c', $part['health'][$this->a->id] ?? []);
         }
         $this->assertSame($whole['interfaces'][$this->ifA->id]['bps_in'], $stitched['bps_in']);
         $this->assertEquals($whole['devices'][$this->a->id]['rtt_ms'], $stitched['rtt_ms']);
+        $this->assertEquals($whole['health'][$this->a->id]['cpu_pct'], $stitched['cpu_pct']);
+        $this->assertCount(72, $whole['health'][$this->a->id]['cpu_pct']);
 
         // a frame from the rollups and one from raw, both the average of their polls
         $this->assertSame(47000, $whole['interfaces'][$this->ifA->id]['bps_in'][$this->frameOf($whole, '2026-09-26 09:45:00')]); // polls at :45, :47, :49
         $this->assertSame(22000, $whole['interfaces'][$this->ifA->id]['bps_in'][$this->frameOf($whole, '2026-09-26 11:20:00')]); // :21 and :23
+        // and health lines up the same way, from the rollup then from raw
+        $this->assertEquals(47, $whole['health'][$this->a->id]['cpu_pct'][$this->frameOf($whole, '2026-09-26 09:45:00')]);
+        $this->assertEquals(9, $whole['health'][$this->a->id]['mem_used_pct'][$this->frameOf($whole, '2026-09-26 09:45:00')]);
+        $this->assertEquals(22, $whole['health'][$this->a->id]['cpu_pct'][$this->frameOf($whole, '2026-09-26 11:20:00')]);
     }
 
     public function test_frames_are_capped_and_bad_windows_refused(): void

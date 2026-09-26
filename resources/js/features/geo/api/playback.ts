@@ -3,8 +3,11 @@ import { apiClient } from '../../../lib/apiClient';
 /**
  * One response from GET /maps/{map}/playback (GitHub #22). Every series is an array aligned to
  * `frames` (unix seconds, one per frame start), null where there was no sample. The axis, `down`
- * and `outages` always cover the whole window; the interface/device series only hold frames
+ * and `outages` always cover the whole window; the interface/device/health series only hold frames
  * [offset, offset + limit), so a big map pages through a long window chunk by chunk.
+ *
+ * `health` is sparse: a device only has the metrics it reported in the chunk, and none at all if
+ * it reported nothing, so any of the arrays can be missing.
  */
 export interface PlaybackChunk {
     mode: 'range' | 'at';
@@ -19,17 +22,20 @@ export interface PlaybackChunk {
     device_ids: number[];
     interfaces: Record<string, { bps_in: Array<number | null>; bps_out: Array<number | null> }>;
     devices: Record<string, { rtt_ms: Array<number | null>; loss_pct: Array<number | null> }>;
+    health: Record<string, { cpu_pct?: Array<number | null>; mem_used_pct?: Array<number | null>; temp_c?: Array<number | null> }>;
     down: Record<string, number[]>; // device id -> frame indexes it was down in
     outages: Array<[number, number, number | null]>; // [device_id, start, end|null], unix seconds
 }
 
-export interface PlaybackQuery {
-    from: string; // ISO
-    to: string;
-    points?: number;
-    offset?: number;
-    limit?: number;
-}
+export type PlaybackQuery =
+    | {
+          from: string; // ISO
+          to: string;
+          points?: number;
+          offset?: number;
+          limit?: number;
+      }
+    | { at: string }; // one frame: the network at that moment
 
 export async function fetchPlayback(mapId: number, q: PlaybackQuery, signal?: AbortSignal): Promise<PlaybackChunk> {
     const { data } = await apiClient.get<{ data: PlaybackChunk }>(`/maps/${mapId}/playback`, { params: q, signal });

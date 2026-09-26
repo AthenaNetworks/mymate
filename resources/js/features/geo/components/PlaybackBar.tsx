@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CaretLeft, CaretRight, ClockCounterClockwise, Pause, Play, X } from '@phosphor-icons/react';
 import { PLAYBACK_PRESETS, PLAYBACK_SPEEDS, type Playback } from '../hooks/usePlayback';
+import type { PlaybackOverrides } from '../hooks/usePlaybackOverrides';
 import { frameAt } from '../lib/playbackFrame';
 
 /** "Tue 24 Sep, 14:32" in the viewer's own zone. */
@@ -62,11 +63,17 @@ export function PlaybackBadge({ pb }: { pb: Playback }) {
 }
 
 /**
- * The playback controls along the bottom of the geo map: window presets and a date/time jump,
- * play/pause/step/speed, and a scrubber with red ticks where devices went down and a shade for
- * the frames that have loaded so far.
+ * The playback controls along the bottom of the map (geo and logical): window presets and a
+ * date/time jump, play/pause/step/speed, and a scrubber with red ticks where devices went down
+ * and a shade for the frames that have loaded so far.
+ *
+ * The jump is the instant view (?at=): exactly that moment, the few minutes of samples up to it
+ * and who was down right then, instead of the 5 minute or hourly frame of a window it would
+ * otherwise land in. "Scrub around it" then opens a two hour window centred on it, which at that
+ * width is one minute frames, so nothing is lost going from one to the other.
  */
-export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id: number) => string }) {
+// `inset` sets the sides, the logical map keeps its zoom buttons clear on the left
+export function PlaybackBar({ pb, deviceName, inset = 'inset-x-4' }: { pb: Playback; deviceName: (id: number) => string; inset?: string }) {
     const { store, window: win } = pb;
     const [jump, setJump] = useState('');
 
@@ -93,15 +100,16 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
     }, [store, pb.version]);
 
     const downNow = store?.downAt[pb.frame]?.size ?? 0;
+    const instant = store?.mode === 'at';
 
     return (
-        <div className={`absolute inset-x-4 bottom-6 z-10 rounded-xl px-3 py-2 ${glass}`}>
+        <div className={`absolute ${inset} bottom-6 z-10 rounded-xl px-3 py-2 ${glass}`}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="flex items-center gap-0.5">
                     <button type="button" className={btn} onClick={() => pb.step(-1)} disabled={!store || pb.frame <= 0} title="Previous frame">
                         <CaretLeft weight="bold" className="h-4 w-4" />
                     </button>
-                    <button type="button" className={btn} onClick={pb.togglePlay} disabled={!store} title={pb.playing ? 'Pause' : 'Play'}>
+                    <button type="button" className={btn} onClick={pb.togglePlay} disabled={!store || n < 2} title={pb.playing ? 'Pause' : 'Play'}>
                         {pb.playing ? <Pause weight="fill" className="h-4 w-4" /> : <Play weight="fill" className="h-4 w-4" />}
                     </button>
                     <button type="button" className={btn} onClick={() => pb.step(1)} disabled={!store || pb.frame >= n - 1} title="Next frame">
@@ -110,7 +118,23 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
                 </div>
 
                 <div className="min-w-0 text-xs">
-                    {store ? (
+                    {store && instant ? (
+                        <>
+                            <span className="font-semibold text-white">{formatFrameTime(store.frames[0])}</span>
+                            <span className="ml-2 text-white/40">
+                                {store.tier === 'raw' ? `the ${formatStep(store.span[1] - store.span[0])} up to it` : `${formatStep(store.step)} average it falls in`}
+                            </span>
+                            {downNow > 0 && <span className="ml-2 text-red-300">{downNow} down</span>}
+                            <button
+                                type="button"
+                                onClick={() => pb.load(2, store.frames[0] * 1000)}
+                                className="ml-2 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/80 ring-1 ring-amber-300/30 hover:text-white"
+                                title="Open an hour either side of this moment to scrub through"
+                            >
+                                Scrub around it
+                            </button>
+                        </>
+                    ) : store ? (
                         <>
                             <span className="font-semibold text-white">{formatFrameTime(store.frames[pb.frame])}</span>
                             <span className="ml-2 text-white/40">
@@ -158,7 +182,7 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
                         onSubmit={(e) => {
                             e.preventDefault();
                             const at = jump ? new Date(jump).getTime() : NaN;
-                            if (Number.isFinite(at)) pb.load(win?.hours ?? 24, Math.min(at, Date.now()));
+                            if (Number.isFinite(at)) pb.jump(Math.min(at, Date.now()));
                         }}
                     >
                         <input
@@ -167,7 +191,7 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
                             max={toLocalInput(Date.now())}
                             onChange={(e) => setJump(e.target.value)}
                             className="w-44 rounded-lg bg-white/[0.04] px-2 py-1 text-xs text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
-                            title="Jump to a moment: opens the window centred on it"
+                            title="Jump to a moment: the network exactly as it was then"
                         />
                         <button type="submit" disabled={!jump} className="rounded-lg px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60 ring-1 ring-white/10 hover:text-white disabled:opacity-40">
                             Go
@@ -178,6 +202,7 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
 
             {/* Scrubber: loaded frames shaded, outages as red marks (their width is how long they
                 lasted), the native range input on top for dragging and arrow keys. */}
+            {!instant && (
             <div className="relative mt-2 h-6">
                 <div className="absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-white/10">
                     {loadedRuns.map(([a, b]) => (
@@ -210,12 +235,45 @@ export function PlaybackBar({ pb, deviceName }: { pb: Playback; deviceName: (id:
                     aria-label="Playback position"
                 />
             </div>
-            {store && (
+            )}
+            {store && !instant && (
                 <div className="flex justify-between text-[10px] text-white/35">
                     <span>{formatFrameTime(t0)}</span>
                     <span>{formatFrameTime(store.frames[n - 1])}</span>
                 </div>
             )}
+        </div>
+    );
+}
+
+/**
+ * Top of the device inspector while the map is in playback: which moment the panel is showing,
+ * so nobody mistakes a frame from last Tuesday for what the box is doing now.
+ */
+export function PlaybackInspectorBanner({ playback }: { playback: NonNullable<PlaybackOverrides<undefined, undefined>['playback']> }) {
+    const what = playback.at === null ? 'Loading history...' : `Viewing ${formatFrameTime(playback.at)}`;
+    const detail = !playback.onMap
+        ? 'Not on the map being played back, these are live values'
+        : playback.at === null
+          ? 'Values fill in once the history loads'
+          : playback.instant
+            ? 'That moment, from the samples just before it'
+            : `${formatStep(playback.step ?? 0)} average, not live`;
+    return (
+        <div className="flex items-center gap-2 rounded-xl bg-amber-500/15 px-3 py-2 ring-1 ring-amber-400/40" role="status">
+            <ClockCounterClockwise weight="bold" className="h-4 w-4 shrink-0 text-amber-300" />
+            <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold text-amber-100">{what}</div>
+                <div className="truncate text-[10px] text-amber-200/70">{detail}</div>
+            </div>
+            <button
+                type="button"
+                onClick={playback.exit}
+                title="Back to the live map"
+                className="shrink-0 rounded-md px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-100/80 ring-1 ring-amber-300/30 hover:bg-white/10 hover:text-white"
+            >
+                Live
+            </button>
         </div>
     );
 }

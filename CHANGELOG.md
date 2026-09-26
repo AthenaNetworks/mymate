@@ -33,15 +33,23 @@ of commit subjects.
   upgrade and the last reboot, merged newest first on the device page's Events tab.
 - **Play back the geo map's history (GitHub #22).** A map in geographic mode has a new History button
   next to the map picker. It swaps the live view for a playback bar: pick the last 1h, 6h, 24h or 7 days,
-  or type a date and time to open a window centred on it, then scrub, step, or play it at 1x to 8x. Link
+  then scrub, step, or play it at 1x to 8x. Link
   colours and load labels, device up/down and ping latency all show what they were at that moment,
   coloured exactly like the live map, and red marks on the timeline show where devices went down (click
   one to jump there). Down comes from the recorded outages, so even a 30 second drop shows on a 5 minute
   frame. The banner says PLAYBACK and the time while you're in it, live updates can't change what you're
   looking at, and Live takes you back with everything refreshed. Long windows read the 5 minute and hourly
-  history rollups, and big maps load in chunks so it can start playing while the rest arrives. CPU, memory
-  and temperature aren't part of playback yet, so the cards leave them blank. Restricted operators only
-  get playback for maps they've been given.
+  history rollups, and big maps load in chunks so it can start playing while the rest arrives. Restricted
+  operators only get playback for maps they've been given.
+- **Playback on the regular map too, with CPU / memory / temperature and the inspector following
+  along (GitHub #22).** The non-geo map has the same History button and bar, with links coloured the
+  same way as live and cards locked in place while you look back. Device cards now show the CPU, memory
+  or temperature they had in each frame instead of going blank, on both maps. Click a device during
+  playback and the inspector shows that frame too, status, latency and loss, CPU / memory / temperature
+  and the traffic on its linked ports, under a "Viewing <time>" banner with a way back to live. Typing a
+  date and time and hitting Go now shows the network at exactly that moment (the few minutes of samples
+  up to it, and who was down right then), and "Scrub around it" opens an hour either side in one minute
+  frames.
 - **Port errors, discards and packets are graphed now.** Every interface keeps in / out errors,
   discards and packets per second as history, rolled up to a year like traffic, plus the port's up /
   down state over time (as % up). Over SNMP the counters are read once a minute by default
