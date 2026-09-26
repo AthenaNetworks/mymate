@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapBackgroundController;
 use App\Http\Controllers\Api\MapController;
+use App\Http\Controllers\Api\MapPlaybackController;
 use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
 use App\Http\Controllers\Api\PasskeyController;
@@ -295,6 +296,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
     // Every device placed on this map, full rows - what the canvas and inspector draw (GitHub #22).
     Route::get('maps/{map}/devices', [MapController::class, 'devices'])->name('maps.devices.index');
+    // Historical playback for the geo map (GitHub #22): frames of link bps + device status/rtt.
+    Route::get('maps/{map}/playback', MapPlaybackController::class)
+        ->middleware('throttle:60,1')->name('maps.playback');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
     // Layout undo stack: snapshot before a tidy, roll back from any browser.
