@@ -128,6 +128,17 @@ class Device extends Model
         return $query->where('monitored', true)->whereNotNull('mgmt_ip');
     }
 
+    /**
+     * Whether a device counts toward the live picture (header counts, geo feed, live count
+     * patches). Normally that's just `monitored`, a paused device is left out. The sales demo is
+     * the exception: its devices are unmonitored on purpose so no real poller touches them while
+     * the simulator animates them, and they still need to show up as a live network.
+     */
+    public static function countsAsLive(bool $monitored): bool
+    {
+        return $monitored || (bool) config('mymate.demo.enabled');
+    }
+
     /** A static map object: no management IP, so never polled (see scopePollable). */
     public function isStatic(): bool
     {

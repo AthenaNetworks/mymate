@@ -149,7 +149,7 @@ class DemoCommand extends Command
         if ($devices->isEmpty()) {
             return;
         }
-        $capOut = $this->linkCapOut();
+        [$capOut, $capIn] = $this->linkCaps();
 
         $step = 60;
         $to = now()->startOfSecond();
@@ -207,7 +207,7 @@ class DemoCommand extends Command
 
                 foreach ($device->interfaces as $if) {
                     [$utilIn, $utilOut] = $this->synthUtil($if->id, $t);
-                    $speedIn = (int) ($if->speed_mbps ?: 1000);
+                    $speedIn = (int) ($capIn[$if->id] ?? ($if->speed_mbps ?: 1000));
                     $speedOut = (int) ($capOut[$if->id] ?? ($if->speed_up_mbps ?: $if->speed_mbps ?: 1000));
                     $bpsIn = (int) round($utilIn / 100 * $speedIn * 1_000_000);
                     $bpsOut = (int) round($utilOut / 100 * $speedOut * 1_000_000);
@@ -275,7 +275,7 @@ class DemoCommand extends Command
         $devices = Device::where('monitored', false)->with('interfaces')->get();
         $this->maybeFlap($devices);
 
-        $capOut = $this->linkCapOut();
+        [$capOut, $capIn] = $this->linkCaps();
 
         $frames = [];
         $ifaceUpdates = [];
@@ -346,7 +346,7 @@ class DemoCommand extends Command
                 }
 
                 [$utilIn, $utilOut] = $this->synthUtil($if->id, $t);
-                $speedIn = (int) ($if->speed_mbps ?: 1000);
+                $speedIn = (int) ($capIn[$if->id] ?? ($if->speed_mbps ?: 1000));
                 // Size outbound bps against the link's effective capacity so link util
                 // (bps_out / effective speed) lands at the synthetic util%, never >100%.
                 $speedOut = (int) ($capOut[$if->id] ?? ($if->speed_up_mbps ?: $if->speed_mbps ?: 1000));
@@ -398,19 +398,22 @@ class DemoCommand extends Command
      * effective speed (slower end / override) - that's what Link::util() divides by.
      * Computing it against the interface's own (faster) speed makes link util blow
      * past 100%. Maps each link end's interface id -> the capacity (Mbps) to size
-     * its bps_out against.
+     * its bps_out against, and its bps_in too: what arrives at A is what B sent, so on an
+     * asymmetric radio link (500 down / 50 up) A's inbound is capped by the B->A speed.
      *
-     * @return array<int, int|null>
+     * @return array{0: array<int, int|null>, 1: array<int, int|null>} [capOut, capIn]
      */
-    private function linkCapOut(): array
+    private function linkCaps(): array
     {
-        $capOut = [];
+        $capOut = $capIn = [];
         foreach (Link::with(['aInterface:id,speed_mbps', 'bInterface:id,speed_mbps'])->get() as $l) {
             $capOut[$l->a_interface_id] = $l->effAbMbps();
             $capOut[$l->b_interface_id] = $l->effBaMbps();
+            $capIn[$l->a_interface_id] = $l->effBaMbps();
+            $capIn[$l->b_interface_id] = $l->effAbMbps();
         }
 
-        return $capOut;
+        return [$capOut, $capIn];
     }
 
     /**

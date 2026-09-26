@@ -21,6 +21,7 @@ export type UtilEdgeData = {
     baMbps?: number | null; // target -> source
     down: boolean; // either endpoint device is down
     effAb?: number | null; // link effective speed (Mbps) - shown as the port/link capacity
+    effBa?: number | null; // reverse direction, differs on an asymmetric (radio) link
     aCost?: number | null; // OSPF cost out of each end (directional); shown near that end
     bCost?: number | null;
     mediaType?: LinkMediaType | null; // physical medium - dash pattern only (load keeps the colour)
@@ -42,7 +43,10 @@ function capLabel(d: UtilEdgeData, withRate: boolean): string {
     // Percentage only when a speed is known (util computable); otherwise show the rate
     // alone - never a % or load colour for a speedless link (spec).
     const pct = d.util !== null ? `${d.util.toFixed(d.util < 10 ? 1 : 0)}%` : null;
-    const cap = speedLabel(d.effAb);
+    // An asymmetric link (a 500/50 radio) shows both speeds, in the same order as the arrows.
+    const ab = speedLabel(d.effAb);
+    const ba = speedLabel(d.effBa);
+    const cap = ab && ba && ab !== ba ? `${ab}/${ba}` : ab;
     if (!withRate) return [cap ? `/${cap}` : null, pct].filter(Boolean).join(' ');
     // Show the link capacity next to the load ("730M/1G 42%") so the port speed is visible.
     const load = cap && rate ? `${rate}/${cap}` : rate || (cap ? `-/${cap}` : null);

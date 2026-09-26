@@ -60,7 +60,7 @@ class GeoController extends Controller
         DeviceGeo::apply($devices);
 
         $rows = $devices
-            ->filter(fn (Device $d) => $d->monitored && $d->geo_latitude !== null)
+            ->filter(fn (Device $d) => Device::countsAsLive((bool) $d->monitored) && $d->geo_latitude !== null)
             ->values()
             ->map(fn (Device $d) => [
                 'id' => $d->id,

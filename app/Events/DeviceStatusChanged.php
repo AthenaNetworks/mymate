@@ -59,7 +59,7 @@ class DeviceStatusChanged implements ScopableLiveEvent, ShouldBroadcastNow
             // without having the device in any cached list (GitHub #22).
             'name' => $this->device->name,
             'previous_status' => $this->previousStatus,
-            'monitored' => (bool) $this->device->monitored,
+            'monitored' => Device::countsAsLive((bool) $this->device->monitored),
         ];
     }
 }

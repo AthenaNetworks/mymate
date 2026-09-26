@@ -36,6 +36,34 @@ class MockDataCommandTest extends TestCase
         $this->assertDatabaseHas('links', ['bw_ab_mbps' => 500, 'bw_ba_mbps' => 50]);
     }
 
+    public function test_mock_devices_are_placed_around_brisbane(): void
+    {
+        $this->artisan('mymate:mock')->assertSuccessful();
+
+        $devices = Device::where('mgmt_ip', 'like', '198.51.100.%')->get();
+        foreach ($devices as $d) {
+            $this->assertEqualsWithDelta(-27.46, $d->latitude, 0.15, "{$d->name} latitude");
+            $this->assertEqualsWithDelta(153.03, $d->longitude, 0.2, "{$d->name} longitude");
+            $this->assertSame('snmp', $d->geo_source);
+            $this->assertSame($d->latitude, $d->snmp_latitude); // so "Use SNMP location" has something to hand back
+        }
+    }
+
+    public function test_demo_counts_its_unmonitored_devices_as_live(): void
+    {
+        $this->artisan('mymate:mock')->assertSuccessful();
+        $this->actingAsUser();
+
+        // A real install leaves paused devices out of the header and the geo feed...
+        $this->getJson('/api/devices/stats')->assertJsonPath('data.up', 0)->assertJsonPath('data.paused', 8);
+        $this->getJson('/api/geo/devices')->assertJsonCount(0, 'data');
+
+        // ...the demo's are unmonitored on purpose, so there they count.
+        config(['mymate.demo.enabled' => true]);
+        $this->getJson('/api/devices/stats')->assertJsonPath('data.up', 7)->assertJsonPath('data.down', 1)->assertJsonPath('data.paused', 0);
+        $this->getJson('/api/geo/devices')->assertJsonCount(8, 'data');
+    }
+
     public function test_clear_removes_only_the_mock_data(): void
     {
         $real = Device::factory()->create(['mgmt_ip' => '10.20.30.40']); // a real, monitored device

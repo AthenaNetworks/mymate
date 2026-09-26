@@ -106,7 +106,7 @@ class DeviceController extends Controller
         $counts = ['up' => 0, 'down' => 0, 'unknown' => 0];
         $paused = 0;
         foreach ($rows as $row) {
-            if (! $row->monitored) {
+            if (! Device::countsAsLive((bool) $row->monitored)) {
                 $paused += (int) $row->n;
 
                 continue;

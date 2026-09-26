@@ -20,7 +20,8 @@ export function formatRate(bps: number | null, opts: { compact?: boolean } = {})
     if (bps === null || !Number.isFinite(bps)) return opts.compact ? '' : '-';
     if (bps <= 0) return opts.compact ? '0' : '0 bps';
 
-    const i = Math.min(Math.floor(Math.log10(Math.abs(bps)) / 3), COMPACT.length - 1);
+    // Clamp at 0 too: under 1 bps (an empty chart's axis, a tiny average) log10 goes negative.
+    const i = Math.max(0, Math.min(Math.floor(Math.log10(Math.abs(bps)) / 3), COMPACT.length - 1));
     const value = bps / 1000 ** i;
     const digits = value >= 100 ? 0 : value >= 10 ? 1 : 2; // ~3 significant figures
     const num = trim(value.toFixed(digits));

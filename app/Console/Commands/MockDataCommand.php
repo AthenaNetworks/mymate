@@ -82,6 +82,13 @@ class MockDataCommand extends Command
                     'uptime_at' => isset($d['updays']) ? now() : null,
                     'map_x' => $d['x'],
                     'map_y' => $d['y'],
+                    // Spread around Brisbane as if each box advertised its SNMP location, so the
+                    // geo map, geo playback and "Use SNMP location" all have something to show.
+                    'latitude' => $d['lat'],
+                    'longitude' => $d['lng'],
+                    'geo_source' => 'snmp',
+                    'snmp_latitude' => $d['lat'],
+                    'snmp_longitude' => $d['lng'],
                 ]);
                 $byKey[$d['key']] = $device;
 
@@ -145,34 +152,34 @@ class MockDataCommand extends Command
     private function blueprint(): array
     {
         $devices = [
-            ['key' => 'inet', 'name' => 'INET-EDGE', 'octet' => 1, 'type' => 'internet', 'parent' => null, 'status' => 'up', 'poll' => 'snmp', 'x' => 420, 'y' => 0, 'model' => 'Upstream / ISP', 'ifaces' => [
+            ['key' => 'inet', 'lat' => -27.4556, 'lng' => 153.036, 'name' => 'INET-EDGE', 'octet' => 1, 'type' => 'internet', 'parent' => null, 'status' => 'up', 'poll' => 'snmp', 'x' => 420, 'y' => 0, 'model' => 'Upstream / ISP', 'ifaces' => [
                 ['n' => 'ether1', 'i' => 1, 'sp' => 10000, 'ui' => 70, 'uo' => 91],
                 ['n' => 'ether2', 'i' => 2, 'sp' => 10000, 'ui' => 40, 'uo' => 58],
             ]],
-            ['key' => 'core1', 'name' => 'CORE-01', 'octet' => 2, 'type' => 'router', 'parent' => 'inet', 'status' => 'up', 'poll' => 'routeros', 'x' => 200, 'y' => 150, 'vendor' => 'MikroTik', 'model' => 'CCR2004-1G-12S+2XS', 'os' => '7.15.2', 'updays' => 88, 'ifaces' => [
+            ['key' => 'core1', 'lat' => -27.47, 'lng' => 153.0003, 'name' => 'CORE-01', 'octet' => 2, 'type' => 'router', 'parent' => 'inet', 'status' => 'up', 'poll' => 'routeros', 'x' => 200, 'y' => 150, 'vendor' => 'MikroTik', 'model' => 'CCR2004-1G-12S+2XS', 'os' => '7.15.2', 'updays' => 88, 'ifaces' => [
                 ['n' => 'sfp-sfpplus1', 'i' => 1, 'sp' => 10000, 'ui' => 88, 'uo' => 70],
                 ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 20, 'uo' => 34],
             ]],
-            ['key' => 'core2', 'name' => 'CORE-02', 'octet' => 3, 'type' => 'router', 'parent' => 'inet', 'status' => 'up', 'poll' => 'routeros', 'x' => 640, 'y' => 150, 'vendor' => 'MikroTik', 'model' => 'CCR2004-1G-12S+2XS', 'os' => '7.15.2', 'updays' => 88, 'ifaces' => [
+            ['key' => 'core2', 'lat' => -27.488, 'lng' => 153.036, 'name' => 'CORE-02', 'octet' => 3, 'type' => 'router', 'parent' => 'inet', 'status' => 'up', 'poll' => 'routeros', 'x' => 640, 'y' => 150, 'vendor' => 'MikroTik', 'model' => 'CCR2004-1G-12S+2XS', 'os' => '7.15.2', 'updays' => 88, 'ifaces' => [
                 ['n' => 'sfp-sfpplus1', 'i' => 1, 'sp' => 10000, 'ui' => 58, 'uo' => 40],
                 ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 9, 'uo' => 6],
             ]],
-            ['key' => 'dista', 'name' => 'DIST-A', 'octet' => 10, 'type' => 'switch', 'parent' => 'core1', 'status' => 'up', 'poll' => 'routeros', 'x' => 110, 'y' => 310, 'vendor' => 'MikroTik', 'model' => 'CRS328-24P-4S+', 'os' => '7.14', 'updays' => 45, 'ifaces' => [
+            ['key' => 'dista', 'lat' => -27.4449, 'lng' => 152.987, 'name' => 'DIST-A', 'octet' => 10, 'type' => 'switch', 'parent' => 'core1', 'status' => 'up', 'poll' => 'routeros', 'x' => 110, 'y' => 310, 'vendor' => 'MikroTik', 'model' => 'CRS328-24P-4S+', 'os' => '7.14', 'updays' => 45, 'ifaces' => [
                 ['n' => 'sfp1', 'i' => 1, 'sp' => 1000, 'ui' => 34, 'uo' => 20],
                 ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 0, 'uo' => 0],
                 ['n' => 'ether3', 'i' => 3, 'sp' => 1000, 'ui' => 55, 'uo' => 73],
             ]],
-            ['key' => 'distb', 'name' => 'DIST-B', 'octet' => 11, 'type' => 'switch', 'parent' => 'core2', 'status' => 'up', 'poll' => 'routeros', 'x' => 600, 'y' => 310, 'vendor' => 'MikroTik', 'model' => 'CRS328-24P-4S+', 'os' => '7.14', 'updays' => 45, 'ifaces' => [
+            ['key' => 'distb', 'lat' => -27.503, 'lng' => 153.102, 'name' => 'DIST-B', 'octet' => 11, 'type' => 'switch', 'parent' => 'core2', 'status' => 'up', 'poll' => 'routeros', 'x' => 600, 'y' => 310, 'vendor' => 'MikroTik', 'model' => 'CRS328-24P-4S+', 'os' => '7.14', 'updays' => 45, 'ifaces' => [
                 ['n' => 'sfp1', 'i' => 1, 'sp' => 1000, 'ui' => 9, 'uo' => 6],
                 ['n' => 'ether2', 'i' => 2, 'sp' => 1000, 'ui' => 16, 'uo' => 12],
             ]],
-            ['key' => 'ap', 'name' => 'AP-NORTH', 'octet' => 20, 'type' => 'ap', 'parent' => 'dista', 'status' => 'down', 'poll' => 'routeros', 'x' => 10, 'y' => 470, 'vendor' => 'MikroTik', 'model' => 'cAP ax', 'os' => '7.13', 'ifaces' => [
+            ['key' => 'ap', 'lat' => -27.3858, 'lng' => 153.031, 'name' => 'AP-NORTH', 'octet' => 20, 'type' => 'ap', 'parent' => 'dista', 'status' => 'down', 'poll' => 'routeros', 'x' => 10, 'y' => 470, 'vendor' => 'MikroTik', 'model' => 'cAP ax', 'os' => '7.13', 'ifaces' => [
                 ['n' => 'ether1', 'i' => 1, 'sp' => 1000, 'ui' => null, 'uo' => null],
             ]],
-            ['key' => 'srv', 'name' => 'SRV-DB', 'octet' => 30, 'type' => 'server', 'parent' => 'dista', 'status' => 'up', 'poll' => 'snmp', 'x' => 230, 'y' => 470, 'vendor' => 'Dell', 'model' => 'PowerEdge R650', 'updays' => 120, 'ifaces' => [
+            ['key' => 'srv', 'lat' => -27.4851, 'lng' => 152.9932, 'name' => 'SRV-DB', 'octet' => 30, 'type' => 'server', 'parent' => 'dista', 'status' => 'up', 'poll' => 'snmp', 'x' => 230, 'y' => 470, 'vendor' => 'Dell', 'model' => 'PowerEdge R650', 'updays' => 120, 'ifaces' => [
                 ['n' => 'eno1', 'i' => 1, 'sp' => 1000, 'ui' => 73, 'uo' => 55],
             ]],
-            ['key' => 'cpe', 'name' => 'CPE-RAD', 'octet' => 40, 'type' => 'router', 'parent' => 'distb', 'status' => 'up', 'poll' => 'routeros', 'x' => 600, 'y' => 470, 'vendor' => 'MikroTik', 'model' => 'hAP ax3', 'os' => '7.15.1', 'updays' => 12, 'ifaces' => [
+            ['key' => 'cpe', 'lat' => -27.4431, 'lng' => 153.172, 'name' => 'CPE-RAD', 'octet' => 40, 'type' => 'router', 'parent' => 'distb', 'status' => 'up', 'poll' => 'routeros', 'x' => 600, 'y' => 470, 'vendor' => 'MikroTik', 'model' => 'hAP ax3', 'os' => '7.15.1', 'updays' => 12, 'ifaces' => [
                 // Gig port, but the circuit is asymmetric 500dn/50up - modelled on the LINK now.
                 ['n' => 'ether1', 'i' => 1, 'sp' => 500, 'ui' => 16, 'uo' => 4], // 80Mdn / 20Mup
             ]],

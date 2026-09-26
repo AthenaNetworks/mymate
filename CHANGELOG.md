@@ -233,6 +233,15 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Graph axes no longer read "250 undefined" on an empty or near-zero traffic chart.** Rates under
+  1 bps picked a unit that doesn't exist. Showed up on every device page graph while it loaded.
+- **Asymmetric links show both speeds.** A 500/50 radio link used to label itself "/500M" and then show
+  the upload direction at several hundred percent. The label now reads "/500M/50M", in the same order as
+  the direction arrows.
+- **Demo: devices sit around Brisbane and show as live.** The demo network now has real coordinates
+  (so the geo map, geo playback and "Use SNMP location" all have something to show), the header counts
+  and geo map include its devices instead of reading 0 up / 0 down, and the simulated traffic on the
+  asymmetric radio link stays within its 50M upload.
 - **Large fleets: header counts, the map inspector and the Devices page work again (GitHub #22).** On a
   network of ~25,000 devices the header showed "0 up / 0 down", clicking a device on the map did nothing
   and the Devices page hung the tab, all because the one fleet-wide device request never finished. See
