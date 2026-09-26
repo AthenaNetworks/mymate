@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapBackgroundController;
 use App\Http\Controllers\Api\MapController;
+use App\Http\Controllers\Api\MapPlaybackController;
 use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
 use App\Http\Controllers\Api\PasskeyController;
@@ -282,6 +283,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Bulk: every node moved in one gesture (group drag, Tidy) lands in one transaction (GitHub #44).
     Route::patch('maps/{map}/positions', [MapController::class, 'savePositions'])->name('maps.positions.save-many');
     Route::patch('maps/{map}/links/{link}/position', [MapController::class, 'saveLinkPosition'])->name('maps.links.position');
+    // Historical playback for the geo map (GitHub #22): frames of link bps + device status/rtt.
+    Route::get('maps/{map}/playback', MapPlaybackController::class)
+        ->middleware('throttle:60,1')->name('maps.playback');
     Route::post('maps/{map}/devices', [MapController::class, 'addDevice'])->name('maps.devices.add');
     Route::delete('maps/{map}/devices/{device}', [MapController::class, 'removeDevice'])->name('maps.devices.remove');
     // Layout undo stack: snapshot before a tidy, roll back from any browser.
