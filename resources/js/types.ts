@@ -63,6 +63,10 @@ export interface Device {
     latitude: number | null; // geo overlay position (the device's own coords)
     longitude: number | null;
     geo_source: 'manual' | 'address' | 'snmp' | null;
+    // What the device's own SNMP / RouterOS location advertises (null = no coords in it), kept
+    // even under a manual pin so it can be handed back to it (GitHub #22).
+    snmp_latitude: number | null;
+    snmp_longitude: number | null;
     // Site placement: assigning a site places the device at it without copying coordinates.
     site_id: number | null;
     site_name: string | null;

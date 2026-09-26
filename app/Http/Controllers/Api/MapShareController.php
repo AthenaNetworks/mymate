@@ -8,6 +8,7 @@ use App\Models\MapShare;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /**
  * Manage a map's public wallboard links (GitHub #15). Admin-only (the route group applies the
@@ -21,6 +22,7 @@ class MapShareController extends Controller
         return [
             'id' => $share->id,
             'label' => $share->label,
+            'view' => $share->view,
             'enabled' => $share->enabled,
             'url' => $share->url(),
             'last_viewed_at' => $share->last_viewed_at,
@@ -39,11 +41,13 @@ class MapShareController extends Controller
     {
         $validated = $request->validate([
             'label' => ['nullable', 'string', 'max:120'],
+            'view' => ['sometimes', Rule::in(MapShare::VIEWS)],
         ]);
 
         $share = $map->shares()->create([
             'token' => MapShare::newToken(),
             'label' => $validated['label'] ?? null,
+            'view' => $validated['view'] ?? 'logical',
             'enabled' => true,
         ]);
 
@@ -57,6 +61,7 @@ class MapShareController extends Controller
         $validated = $request->validate([
             'label' => ['sometimes', 'nullable', 'string', 'max:120'],
             'enabled' => ['sometimes', 'boolean'],
+            'view' => ['sometimes', Rule::in(MapShare::VIEWS)],
         ]);
 
         $share->update($validated);

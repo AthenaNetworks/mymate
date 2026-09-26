@@ -9,6 +9,7 @@ import { useIsAdmin } from '../../auth/api/auth';
 import { useGeocode, useMapConfig } from '../../geo/api/geo';
 import { pushToast } from '../../../lib/toast';
 import { Toggle } from '../../../components/Toggle';
+import { UseSnmpLocationButton } from './UseSnmpLocationButton';
 import { DEVICE_ICONS, DEVICE_ICON_KEYS, ICON_COLORS } from '../../../components/deviceIcons';
 import type { Device, DeviceType, PollMethod } from '../../../types';
 
@@ -286,9 +287,17 @@ export function DeviceDialog({
                                     </button>
                                 </div>
                             )}
-                            {(lat.trim() !== '' || lng.trim() !== '') && (
-                                <button type="button" onClick={() => { setLat(''); setLng(''); }} className="text-[11px] text-white/45 hover:text-white/80">Clear location</button>
-                            )}
+                            <div className="flex items-center gap-4">
+                                {(lat.trim() !== '' || lng.trim() !== '') && (
+                                    <button type="button" onClick={() => { setLat(''); setLng(''); }} className="text-[11px] text-white/45 hover:text-white/80">Clear location</button>
+                                )}
+                                {device && (
+                                    <UseSnmpLocationButton
+                                        device={device}
+                                        onMoved={(d) => { setLat(d.latitude != null ? String(d.latitude) : ''); setLng(d.longitude != null ? String(d.longitude) : ''); }}
+                                    />
+                                )}
+                            </div>
                         </div>
                     )}
 

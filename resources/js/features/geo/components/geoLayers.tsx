@@ -6,22 +6,30 @@
  *
  * Sites and backhauls are the map's actual content, so they start on; weather is context an
  * operator asks for, and it costs a third-party fetch, so it starts off.
+ *
+ * The per-map geo mode (GeoFlow) draws real device links, and planning wants to peel those back
+ * (GitHub #22): `links` is the link lines themselves, `bandwidth` their load/capacity labels and
+ * `ospf` the per-end OSPF cost badges. All three start on, same as the logical map.
  */
-export type LayerPrefs = { sites: boolean; backhauls: boolean; weather: boolean };
+export type LayerPrefs = { sites: boolean; backhauls: boolean; weather: boolean; links: boolean; bandwidth: boolean; ospf: boolean };
 
 const LAYER_PREFS_KEY = 'mymate.geo.layers';
 
-export const LAYER_DEFAULTS: LayerPrefs = { sites: true, backhauls: true, weather: false };
+export const LAYER_DEFAULTS: LayerPrefs = { sites: true, backhauls: true, weather: false, links: true, bandwidth: true, ospf: true };
 
 export function loadLayerPrefs(): LayerPrefs {
     if (typeof window === 'undefined') return LAYER_DEFAULTS;
     try {
         const raw = window.localStorage.getItem(LAYER_PREFS_KEY);
         const saved = raw ? (JSON.parse(raw) as Partial<LayerPrefs>) : {};
+        const pick = (k: keyof LayerPrefs): boolean => (typeof saved[k] === 'boolean' ? (saved[k] as boolean) : LAYER_DEFAULTS[k]);
         return {
-            sites: typeof saved.sites === 'boolean' ? saved.sites : LAYER_DEFAULTS.sites,
-            backhauls: typeof saved.backhauls === 'boolean' ? saved.backhauls : LAYER_DEFAULTS.backhauls,
-            weather: typeof saved.weather === 'boolean' ? saved.weather : LAYER_DEFAULTS.weather,
+            sites: pick('sites'),
+            backhauls: pick('backhauls'),
+            weather: pick('weather'),
+            links: pick('links'),
+            bandwidth: pick('bandwidth'),
+            ospf: pick('ospf'),
         };
     } catch {
         return LAYER_DEFAULTS; // storage disabled or corrupt - fall back, never blank the map

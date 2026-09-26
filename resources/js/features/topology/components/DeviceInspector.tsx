@@ -24,6 +24,7 @@ import { useMap, useAddDeviceToMap, useRemoveDeviceFromMap } from '../../maps/ap
 import { LinkHistoryDialog } from './LinkHistoryDialog';
 import { AddLinkDialog } from './LinkBinderDialog';
 import { DeviceDialog } from '../../devices/components/DeviceDialog';
+import { UseSnmpLocationButton } from '../../devices/components/UseSnmpLocationButton';
 import { ChartModal } from './ChartModal';
 import { HealthChartModal } from './HealthChartModal';
 import { TraceModal } from './TraceModal';
@@ -757,6 +758,15 @@ export function DeviceInspector() {
                     <Detail label="Parent" value={device.parent_name ?? '-'} />
                 )}
             </div>
+
+            {/* A hand-placed pin ignores the device's SNMP location from then on - offer the way
+                back right here, not just in the editor (GitHub #22). */}
+            {isAdmin && device.geo_source === 'manual' && (
+                <div className="-mt-2 flex items-center justify-between px-0.5">
+                    <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/30">Location pinned by hand</span>
+                    <UseSnmpLocationButton device={device} />
+                </div>
+            )}
 
             {(device.vendor || device.model || device.serial || device.cpu || device.ram_bytes) && (
                 <Section title="Hardware">

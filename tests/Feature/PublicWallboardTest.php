@@ -87,6 +87,25 @@ class PublicWallboardTest extends TestCase
             ->assertJsonCount(0, 'data.inter_map_links');
     }
 
+    public function test_links_endpoint_only_returns_links_with_both_ends_on_the_map(): void
+    {
+        [$map, $device] = $this->mapWithDevice();
+        $peer = Device::factory()->create(['mgmt_ip' => '10.9.9.11']);
+        DeviceMapPosition::create(['device_id' => $peer->id, 'map_id' => $map->id, 'x' => 0, 'y' => 0]);
+        $offMap = Device::factory()->create(['mgmt_ip' => '10.9.9.12']); // on no map this share covers
+        $ifA = NetworkInterface::factory()->create(['device_id' => $device->id]);
+        $ifB = NetworkInterface::factory()->create(['device_id' => $peer->id]);
+        $ifC = NetworkInterface::factory()->create(['device_id' => $offMap->id, 'name' => 'secret-uplink']);
+        $onMap = Link::create(['a_device_id' => $device->id, 'a_interface_id' => $ifA->id, 'b_device_id' => $peer->id, 'b_interface_id' => $ifB->id]);
+        Link::create(['a_device_id' => $offMap->id, 'a_interface_id' => $ifC->id, 'b_device_id' => $device->id, 'b_interface_id' => $ifA->id]);
+        $token = MapShare::create(['map_id' => $map->id, 'token' => MapShare::newToken(), 'enabled' => true])->token;
+
+        $res = $this->getJson("/api/public/wall/{$token}/links")->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $onMap->id);
+        $this->assertStringNotContainsString('secret-uplink', $res->getContent());
+    }
+
     public function test_disabled_and_unknown_tokens_404(): void
     {
         [$map] = $this->mapWithDevice();

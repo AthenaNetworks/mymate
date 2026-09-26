@@ -7,6 +7,7 @@ use App\Actions\Devices\DeleteDevice;
 use App\Actions\Devices\UpdateDevice;
 use App\Actions\Devices\UpdateDevicePosition;
 use App\Actions\Devices\UpgradePreflight;
+use App\Actions\Devices\UseSnmpLocation;
 use App\Enums\UpgradeStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Device\StoreDeviceRequest;
@@ -17,6 +18,7 @@ use App\Http\Resources\DeviceResource;
 use App\Jobs\BulkUpgradeJob;
 use App\Jobs\UpgradeDeviceJob;
 use App\Models\Device;
+use App\Support\DeviceGeo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -32,7 +34,7 @@ class DeviceController extends Controller
         // Resolve effective geo coordinates (own, else the site's, else inherited from the uplink
         // parent) in-memory for the whole set, so the geo map can place CPE that have no
         // coordinates of their own.
-        \App\Support\DeviceGeo::apply($devices);
+        DeviceGeo::apply($devices);
 
         return DeviceResource::collection($devices);
     }
@@ -49,7 +51,7 @@ class DeviceController extends Controller
         $device->loadMissing('parent', 'site')->loadCount('mapPositions');
         // Single-device responses can still resolve own-or-site coordinates; only uplink
         // inheritance needs the full set and stays a list-endpoint concern.
-        \App\Support\DeviceGeo::apply([$device]);
+        DeviceGeo::apply([$device]);
 
         return new DeviceResource($device);
     }
@@ -57,9 +59,22 @@ class DeviceController extends Controller
     public function update(UpdateDeviceRequest $request, Device $device, UpdateDevice $updateDevice): DeviceResource
     {
         $device = $updateDevice($device, $request->validated())->loadMissing('parent', 'site');
-        \App\Support\DeviceGeo::apply([$device]);
+        DeviceGeo::apply([$device]);
 
         return new DeviceResource($device);
+    }
+
+    /**
+     * Drop a manual pin and put the device back on its SNMP / RouterOS location (GitHub #22).
+     * `moved` says whether it moved now or waits for the next capture to place it.
+     */
+    public function useSnmpLocation(Device $device, UseSnmpLocation $useSnmpLocation): JsonResponse
+    {
+        $moved = $useSnmpLocation($device);
+        $device->loadMissing('parent', 'site');
+        DeviceGeo::apply([$device]);
+
+        return (new DeviceResource($device))->additional(['meta' => ['moved' => $moved]])->response();
     }
 
     public function updatePosition(UpdateDevicePositionRequest $request, Device $device, UpdateDevicePosition $updatePosition): DeviceResource

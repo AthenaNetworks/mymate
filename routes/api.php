@@ -17,13 +17,13 @@ use App\Http\Controllers\Api\DiscoveryCandidateController;
 use App\Http\Controllers\Api\FactoryResetController;
 use App\Http\Controllers\Api\GeoController;
 use App\Http\Controllers\Api\GraphController;
+use App\Http\Controllers\Api\GraphSettingController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InterfaceController;
 use App\Http\Controllers\Api\InterfaceSampleController;
 use App\Http\Controllers\Api\LibreNmsImportController;
 use App\Http\Controllers\Api\LinkController;
-use App\Http\Controllers\Api\GraphSettingController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapController;
@@ -67,6 +67,7 @@ Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
         Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
+        Route::get('map-config', [PublicWallController::class, 'mapConfig'])->name('public.wall.map-config');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
@@ -152,6 +153,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // RestrictWritesToAdmins keeps it admin-only.
     Route::delete('devices/{device}/map-positions', [DeviceController::class, 'unplace'])
         ->name('devices.map-positions.destroy');
+    // Hand a hand-placed device back to its SNMP location (GitHub #22). A write, so admin-only.
+    Route::post('devices/{device}/use-snmp-location', [DeviceController::class, 'useSnmpLocation'])
+        ->name('devices.use-snmp-location');
     // Bulk firmware upgrade - one isolated job per device. Before the
     // resource so `devices/upgrade` isn't shadowed by `devices/{device}`.
     // Dry-run the dependency checks first; both before the resource.

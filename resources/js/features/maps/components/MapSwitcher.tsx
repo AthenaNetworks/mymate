@@ -221,7 +221,7 @@ export function MapSwitcher() {
             </div>
 
             {sharing && active && (
-                <ShareWallboardDialog mapId={active.id} mapName={active.name} onClose={() => setSharing(false)} />
+                <ShareWallboardDialog mapId={active.id} mapName={active.name} geoMode={active.leaflet_enabled} onClose={() => setSharing(false)} />
             )}
 
             {dialog?.mode === 'create' && (

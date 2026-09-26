@@ -22,6 +22,7 @@ export type UtilEdgeData = {
     aCost?: number | null; // OSPF cost out of each end (directional); shown near that end
     bCost?: number | null;
     mediaType?: LinkMediaType | null; // physical medium - dash pattern only (load keeps the colour)
+    hideLabel?: boolean; // drop the centred load/capacity label (geo map "Bandwidth" toggle, GitHub #22)
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
     emphasized?: boolean; // touches the selected device - bring it forward
     dimmed?: boolean; // a device is selected but this link isn't its - push it back
@@ -145,6 +146,7 @@ export function UtilEdge({
                     }}
                 />
             )}
+            {!d.hideLabel && (
             <EdgeLabelRenderer>
                 <div
                     style={{
@@ -172,6 +174,7 @@ export function UtilEdge({
                     )}
                 </div>
             </EdgeLabelRenderer>
+            )}
             {/* OSPF cost per end (directional). Lifted off the wire (perpendicular to the link)
                 so it doesn't sit on the line or collide with the centred load label - the readability
                 gripe in GitHub #22. Size + colour are operator prefs. */}

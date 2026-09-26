@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Services\RouterOs\RouterOsClient;
 use App\Services\RouterOs\RouterOsTarget;
 use App\Services\Snmp\SnmpClient;
+use App\Services\Snmp\SnmpCredential;
 use App\Support\EngineLog;
 use Throwable;
 
@@ -61,6 +62,13 @@ class CaptureDeviceFacts
         $detectedType = $facts['device_type'] ?? null;
         unset($facts['device_type']);
 
+        // Keep what the location advertised in its own columns, manual pin or not, so "use the
+        // SNMP location" (GitHub #22) can hand a device straight back without waiting for another
+        // capture. Unlike the other facts a null here is real: the location lost its coordinates.
+        $snmpGeo = array_key_exists('latitude', $facts)
+            ? ['snmp_latitude' => $facts['latitude'], 'snmp_longitude' => $facts['longitude'] ?? null]
+            : [];
+
         $facts = array_filter($facts, static fn ($v): bool => $v !== null && $v !== '');
 
         // Never let an SNMP-derived coordinate overwrite a pin the operator placed by hand.
@@ -74,6 +82,8 @@ class CaptureDeviceFacts
             && ($device->device_type ?? DeviceType::Unknown) === DeviceType::Unknown) {
             $facts['device_type'] = $detectedType;
         }
+
+        $facts += $snmpGeo;
 
         if ($facts === []) {
             return;
@@ -90,7 +100,7 @@ class CaptureDeviceFacts
      * already-fetched values so the remote agent (#33) can walk the standard OIDs itself and hand
      * the raw results back for the server to parse (vendor/model knowledge stays here).
      *
-     * @param  list<string>  $entModels   entPhysicalModelName values (row order)
+     * @param  list<string>  $entModels  entPhysicalModelName values (row order)
      * @param  list<string>  $entSerials  entPhysicalSerialNum values (row order)
      * @return array<string, mixed>
      */
@@ -141,7 +151,7 @@ class CaptureDeviceFacts
             $location = '';
             try {
                 $location = (string) (($conn->query('/snmp/print')[0] ?? [])['location'] ?? '');
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // SNMP settings unreadable - just skip geo.
             }
 
@@ -207,7 +217,7 @@ class CaptureDeviceFacts
     private function fromSnmp(Device $device): array
     {
         $device->loadMissing('credential');
-        $community = \App\Services\Snmp\SnmpCredential::fromCredential($device->credential);
+        $community = SnmpCredential::fromCredential($device->credential);
         if (! $community->isUsable()) {
             return [];
         }

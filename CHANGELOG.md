@@ -21,6 +21,23 @@ of commit subjects.
   that's all you'll see. The Alerts item in the nav has a red count of what's firing right now, and a
   port that's operationally down is marked "down" in the device panel's interface list. Restricted
   operators only hear about devices on their own maps.
+- **Share the geo map on a public wallboard link (GitHub #37).** A wallboard link can now show the map's
+  geographic view as well as (or instead of) the logical one - pick Map, Geo or Both when you create the
+  link in Share wallboard, and change it later per link. A Both link gets a Map / Geo switcher in the page
+  header (and remembers it as #geo / #map in the URL, so a TV reloads onto the same one). It's still no
+  login and read only. A geo link hands out each device's drawn position on top of what the wallboard
+  already showed, and only for that map's devices; no addresses, credentials or anything else. Existing
+  links stay logical-only and show exactly what they did before.
+- **OSPF costs and link toggles on the geo map (GitHub #22).** A map in geographic mode now shows the same
+  per-end OSPF cost badges as the logical map, using your S/M/L size and colour choice (the OSPF button
+  appears on the geo map too). New Links, Bandwidth and OSPF cost toggles in the top right let you strip
+  the view back for planning, eg just the costs with no load labels. They're remembered per browser.
+- **"Use SNMP location" for a hand-placed device (GitHub #22).** Once a device is dragged on the geo map
+  or has coordinates typed in, it's a manual pin and its SNMP / RouterOS location stops moving it. Admins
+  now get a "Use SNMP location" action in the device inspector and in both device editors that hands it
+  back. We now remember the coordinates the location advertises even while a pin is manual, so if we
+  already know them the device moves there straight away; if not, the manual flag is dropped and the
+  next discovery pass places it.
 - **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
   building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
   elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet
@@ -99,6 +116,14 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **A public wallboard link no longer hands out links that leave the shared map.** A link with only one
+  end on the map was included in the wallboard's link data even though it was never drawn, which gave an
+  anonymous viewer the far device's id and that port's name and traffic. Only links with both ends on the
+  shared map are sent now.
+- **Saving a device no longer turns its SNMP-placed pin into a manual one (GitHub #22).** The device
+  editors send the coordinates back on every save, which marked the location manual even when nothing
+  about it changed, so a simple rename stopped the SNMP location from ever moving the device again. Only
+  an actual change of coordinates counts as a manual pin now.
 - **Restricted operators no longer receive live updates for devices outside their maps.** The live
   map's websocket channel carried the whole fleet and let any signed-in user subscribe, so a
   map-restricted operator (per-user or through a group) was sent live status, traffic and metrics for
