@@ -44,10 +44,12 @@ use App\Http\Controllers\Api\TraceController;
 use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserGroupController;
+use App\Http\Controllers\Api\WallEmbedSettingController;
 use App\Http\Middleware\EnsurePasskeyVerified;
 use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 // --- Public ---------------------------------------------------------------
 // Ops health probe (DB + Redis) - 200 healthy / 503 degraded. Stays
@@ -61,7 +63,11 @@ Route::post('contact', [ContactController::class, 'store'])->middleware('throttl
 // Public wallboard (GitHub #15): an unguessable per-map share token grants a read-only,
 // no-login view of one map. Token-gated, read-only, and rate-limited. The payload is a
 // whitelist - no addresses or credentials cross this boundary (see PublicWallController).
-Route::middleware('throttle:120,1')->prefix('public/wall/{token}')
+// No Sanctum stateful layer here: these never need a session, and inside a third-party iframe the
+// browser won't send the (SameSite=lax) session cookie anyway, so each 5s poll would otherwise
+// mint a fresh throwaway session in Redis.
+Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAreStateful::class)
+    ->prefix('public/wall/{token}')
     ->where(['token' => '[A-Za-z0-9]+'])->group(function (): void {
         Route::get('map', [PublicWallController::class, 'map'])->name('public.wall.map');
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
@@ -93,6 +99,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::middleware('admin')->group(function (): void {
         Route::get('settings/security', [SecuritySettingController::class, 'show'])->name('settings.security.show');
         Route::put('settings/security', [SecuritySettingController::class, 'update'])->name('settings.security.update');
+        // Origins allowed to embed the public wallboard in an iframe (GitHub #15).
+        Route::get('settings/wall-embed', [WallEmbedSettingController::class, 'show'])->name('settings.wall-embed.show');
+        Route::put('settings/wall-embed', [WallEmbedSettingController::class, 'update'])->name('settings.wall-embed.update');
     });
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).

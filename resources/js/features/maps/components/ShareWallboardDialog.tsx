@@ -104,6 +104,11 @@ export function ShareWallboardDialog({ mapId, mapName, onClose }: { mapId: numbe
                 >
                     <Plus weight="bold" className="h-4 w-4" /> Create a link
                 </button>
+
+                <p className="mt-3 text-[11px] leading-relaxed text-white/40">
+                    Want it inside an intranet page or dashboard? Add that site under Settings, Security, Wallboard
+                    embedding, then put the link in an iframe there. Links can't be framed anywhere else.
+                </p>
             </div>
         </div>
     );

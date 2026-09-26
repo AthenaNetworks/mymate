@@ -178,6 +178,14 @@ return [
         'geocoder_url' => env('MYMATE_MAP_GEOCODER_URL', 'https://nominatim.openstreetmap.org/search'),
     ],
 
+    // Public wallboard embedding (GitHub #15). Default origins allowed to frame /wall/{token} in an
+    // iframe, space or comma separated (eg "https://intranet.example.com https://*.example.org").
+    // Empty = no embedding. Admins override this in Settings > Security (App\Support\WallEmbedSettings);
+    // App\Support\FrameAncestors documents what's accepted. Never affects any other page.
+    'wall' => [
+        'frame_ancestors' => env('MYMATE_WALL_FRAME_ANCESTORS', ''),
+    ],
+
     // Update check: compare this install's version against the latest GitHub release so
     // the console can flag when a newer version is out. The version comes from
     // MYMATE_VERSION (stamped by the packaged build) or the repo-root VERSION file.

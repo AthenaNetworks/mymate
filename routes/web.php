@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 // Auth - on the web group so the session + CSRF are always
 // present (the SPA fetches /sanctum/csrf-cookie first). Login is rate-limited.
@@ -31,7 +34,11 @@ Route::get('/wall/{token}', function (string $token) {
 
     return response(view('app', ['wallToken' => $token, 'wallMapId' => $share->map->id]))
         ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
-})->where('token', '[A-Za-z0-9]+')->name('wall.show');
+})->where('token', '[A-Za-z0-9]+')->name('wall.show')
+    // Anonymous and read-only: no session, no CSRF cookie. It can be embedded in a third-party
+    // iframe (SecurityHeaders), where the browser won't store a SameSite=lax cookie anyway, so
+    // starting one would only leave a dead session behind on every load.
+    ->withoutMiddleware([StartSession::class, ShareErrorsFromSession::class, PreventRequestForgery::class]);
 
 // Public API reference (Scalar). Surfaced only on the sales/demo instance - a real monitoring
 // instance 404s both the page and the spec. The spec lives outside public/ and is streamed here
