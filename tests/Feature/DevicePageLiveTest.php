@@ -19,6 +19,7 @@ use App\Services\Polling\DeviceMetrics;
 use App\Services\Polling\DeviceMetricsDriver;
 use App\Services\Polling\DeviceMetricsDriverFactory;
 use App\Services\Polling\InterfaceSample;
+use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\PortStatsDriver;
 use App\Services\Polling\StorageReading;
 use App\Services\Polling\ThroughputDriver;
@@ -384,5 +385,22 @@ class DevicePageLiveTest extends TestCase
             ->assertJsonPath('data.cpu_loads', [['index' => 1, 'load_pct' => 12.5]]);
         // not on list rows, a map of many-core routers would bloat every page for nothing
         $this->assertArrayNotHasKey('cpu_loads', $this->getJson('/api/devices')->json('data.0'));
+    }
+
+    public function test_a_rate_that_goes_away_is_sent_as_null_and_a_steady_one_not_at_all(): void
+    {
+        $iface = NetworkInterface::factory()->create(['errors_in' => 3.5, 'pkts_in' => 1200.0, 'pkts_out' => 900.0]);
+
+        // counters read this tick: errors_in had no rate (reset), pkts_in unchanged, pkts_out moved
+        $frame = LiveInterfaceFrame::extras($iface, null, ['pkts_in' => 1200.0, 'pkts_out' => 950.0], true);
+
+        $this->assertArrayHasKey('errors_in', $frame);
+        $this->assertNull($frame['errors_in']);
+        $this->assertArrayNotHasKey('pkts_in', $frame);
+        $this->assertSame(950, $frame['pkts_out']);
+        $this->assertArrayNotHasKey('discards_in', $frame); // was null, still null - nothing to say
+
+        // a tick that didn't read counters says nothing about them
+        $this->assertSame([], LiveInterfaceFrame::extras($iface, null, [], false));
     }
 }

@@ -1,14 +1,12 @@
 import { useMemo, useState } from 'react';
 import { CaretRight, MagnifyingGlass } from '@phosphor-icons/react';
-import { useQuery } from '@tanstack/react-query';
 import { useDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
 import { linkColor } from '../../topology/lib/linkColor';
 import { formatRate } from '../../../lib/formatRate';
-import { devicePageKeys, fetchHistory, useHistoryCatalog } from '../api/devicePage';
 import { openDevicePage } from '../lib/location';
 import { fmtValue } from '../lib/format';
 import { Empty } from './ui';
-import type { Device } from '../../../types';
+import type { Device, NetworkInterface } from '../../../types';
 
 function speedLabel(mbps: number | null): string {
     if (!mbps) return '-';
@@ -16,35 +14,18 @@ function speedLabel(mbps: number | null): string {
 }
 
 /**
- * Port error counts over the last hour, when the backend records an error/discard family keyed by
- * interface. Until then this is just an empty map and the column stays hidden.
+ * Errors plus discards per second on a port right now, from the rates on the interface row. The
+ * live stream patches those rows, so the column moves as the port does. Null when the port has
+ * never reported any of them (copper on a box that doesn't expose the counters, a ping-only end).
  */
-function usePortErrors(deviceId: number) {
-    const { data: catalog } = useHistoryCatalog(deviceId);
-    const fam = catalog?.families.find((f) => f.owner === 'interfaces' && f.metrics.some((m) => m.group === 'port_errors' && /error|discard/.test(m.metric)));
-    const metrics = fam?.metrics.filter((m) => /error|discard/.test(m.metric)).map((m) => m.metric) ?? [];
-    const to = Math.floor(Date.now() / 300_000) * 300;
-    const q = { family: fam?.family ?? '', metrics, from: to - 3600, to, points: 12 };
-    return useQuery({
-        queryKey: devicePageKeys.history(deviceId, q),
-        queryFn: () => fetchHistory(deviceId, q),
-        enabled: !!fam && metrics.length > 0,
-        select: (r) => {
-            const out = new Map<string, { value: number; unit: string | null }>();
-            for (const s of r.series) {
-                if (s.key === null || s.stats.last === null) continue;
-                const prev = out.get(s.key);
-                out.set(s.key, { value: (prev?.value ?? 0) + s.stats.last, unit: s.unit });
-            }
-            return out;
-        },
-    });
+function portErrors(i: NetworkInterface): number | null {
+    const vals = [i.errors_in, i.errors_out, i.discards_in, i.discards_out].filter((v): v is number => v != null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
 }
 
 /** Every interface with its state and current load. Click through to the port page. */
 export function PortsTab({ device, params }: { device: Device; params: URLSearchParams }) {
     const { data: ifaces, isLoading } = useDeviceInterfaces(device.id);
-    const { data: errors } = usePortErrors(device.id);
     const [query, setQuery] = useState('');
 
     const rows = useMemo(() => {
@@ -52,7 +33,7 @@ export function PortsTab({ device, params }: { device: Device; params: URLSearch
         return (ifaces ?? []).filter((i) => !q || i.name.toLowerCase().includes(q) || (i.description ?? '').toLowerCase().includes(q));
     }, [ifaces, query]);
     const optical = (ifaces ?? []).some((i) => i.optical_rx_dbm !== null || i.optical_tx_dbm !== null);
-    const showErrors = !!errors && errors.size > 0;
+    const showErrors = (ifaces ?? []).some((i) => portErrors(i) !== null);
 
     // keep the graph range when stepping into a port
     const keep = () => {
@@ -92,7 +73,7 @@ export function PortsTab({ device, params }: { device: Device; params: URLSearch
                             <th className={`${th} text-right`}>In</th>
                             <th className={`${th} text-right`}>Out</th>
                             <th className={th}>Util</th>
-                            {showErrors && <th className={`${th} text-right`} title="Errors and discards in the last hour">Errors</th>}
+                            {showErrors && <th className={`${th} text-right`} title="Errors and discards per second, live">Errors</th>}
                             {optical && <th className={`${th} text-right`}>Optical Rx / Tx</th>}
                             <th className={th} />
                         </tr>
@@ -100,7 +81,7 @@ export function PortsTab({ device, params }: { device: Device; params: URLSearch
                     <tbody>
                         {rows.map((i) => {
                             const u = i.util_in !== null || i.util_out !== null ? Math.max(i.util_in ?? 0, i.util_out ?? 0) : null;
-                            const err = errors?.get(String(i.id));
+                            const err = portErrors(i);
                             return (
                                 <tr
                                     key={i.id}
@@ -135,7 +116,7 @@ export function PortsTab({ device, params }: { device: Device; params: URLSearch
                                             </div>
                                         )}
                                     </td>
-                                    {showErrors && <td className={`${td} text-right font-mono tabular-nums ${err && err.value > 0 ? 'text-amber-300' : ''}`}>{err ? fmtValue(err.value, err.unit) : '-'}</td>}
+                                    {showErrors && <td className={`${td} text-right font-mono tabular-nums ${err !== null && err > 0 ? 'text-amber-300' : ''}`}>{err === null ? '-' : fmtValue(err, 'pps')}</td>}
                                     {optical && (
                                         <td className={`${td} text-right font-mono text-[11px] text-sky-200/70`}>
                                             {i.optical_rx_dbm === null && i.optical_tx_dbm === null ? '-' : `${i.optical_rx_dbm?.toFixed(2) ?? '-'} / ${i.optical_tx_dbm?.toFixed(2) ?? '-'}`}

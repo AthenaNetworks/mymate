@@ -19,6 +19,7 @@ use App\Models\NetworkInterface;
 use App\Services\Polling\DeviceMetrics;
 use App\Services\Polling\DeviceMetricsDriver;
 use App\Services\Polling\DeviceMetricsDriverFactory;
+use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\OpticalPowerReader;
 use App\Services\Polling\OpticalReading;
 use App\Services\RouterOs\RouterOsClient;
@@ -140,7 +141,13 @@ class OpticalPowerTest extends TestCase
         $this->assertSame(-18.0, $sfp2->refresh()->optical_rx_dbm);
         $this->assertNull($sfp2->optical_tx_dbm);
         $this->assertNull($gone->refresh()->optical_rx_dbm); // module pulled - cleared
-        $this->assertNull($gone->optical_at);
+        $this->assertNull($gone->optical_tx_dbm);
+        $this->assertNotNull($gone->optical_at); // stamped, so the live frame tells open views it's gone
+
+        // and that frame carries the clear as explicit nulls
+        $frame = LiveInterfaceFrame::extras($gone->forceFill(['updated_at' => now()->subSecond()]), null, [], false);
+        $this->assertArrayHasKey('optical_rx_dbm', $frame);
+        $this->assertNull($frame['optical_rx_dbm']);
     }
 
     public function test_the_metrics_tick_stores_optical_power_and_keeps_it_on_a_failed_read(): void

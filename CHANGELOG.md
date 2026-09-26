@@ -246,6 +246,10 @@ of commit subjects.
   down/up pairs, it has to stay down that long before you hear about it.
 
 ### Fixed
+- **Live views clear values that go away.** A port rate that stops (a counter reset) or an SFP that is
+  pulled now clears on an open device page or inspector straight away, instead of showing the last
+  value until the page is reloaded. The Ports tab's Errors column is also live now (errors plus discards
+  per second), rather than the last hour's history.
 - **No traffic spike when a switch's 64-bit counters drop out for a poll.** A v2c device that briefly
   stopped answering the 64-bit octet counters fell back to the 32-bit ones, and the tick they came back
   compared a 32-bit reading against a 64-bit one and drew a spike of tens of Gbps. The poller now

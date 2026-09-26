@@ -9,7 +9,8 @@ use App\Models\NetworkInterface;
  * throughput tick and agent ingest.
  *
  * This goes out every tick for every link-bound interface on the fleet, so it only carries what's
- * new, and a key that isn't there means "no change, keep what you have":
+ * new, and a key that isn't there means "no change, keep what you have" (a key sent as null means
+ * the value is gone, e.g. an SFP pulled):
  *  - oper_status only when it flipped since the last tick,
  *  - the port rates (pkts / errors / discards) only on a tick that read the counters (over SNMP
  *    that's once a port-stats interval, not every tick), and only the ones that moved,
@@ -37,6 +38,12 @@ final class LiveInterfaceFrame
         if ($ratesRead) {
             foreach (PortStats::RATES as $name) {
                 if (! isset($rates[$name])) {
+                    // Read this tick but no rate (a counter reset, the port stopped answering):
+                    // an explicit null clears what open views show, instead of leaving it stale.
+                    if ($iface->{$name} !== null) {
+                        $out[$name] = null;
+                    }
+
                     continue;
                 }
                 // Errors and discards sit at 0 nearly all the time, so compare with what the row
@@ -52,13 +59,10 @@ final class LiveInterfaceFrame
         // tick does. So optical_at at or after the row's last write means it's news to the frame.
         // Same-second counts, a missed reading is worse than a repeated one.
         $at = $iface->optical_at;
+        // Nulls go out too: a pulled module clears both (RecordOpticalPower stamps optical_at).
         if ($at !== null && ($iface->updated_at === null || $at->gte($iface->updated_at))) {
-            if ($iface->optical_rx_dbm !== null) {
-                $out['optical_rx_dbm'] = round($iface->optical_rx_dbm, 2);
-            }
-            if ($iface->optical_tx_dbm !== null) {
-                $out['optical_tx_dbm'] = round($iface->optical_tx_dbm, 2);
-            }
+            $out['optical_rx_dbm'] = $iface->optical_rx_dbm !== null ? round($iface->optical_rx_dbm, 2) : null;
+            $out['optical_tx_dbm'] = $iface->optical_tx_dbm !== null ? round($iface->optical_tx_dbm, 2) : null;
         }
 
         return $out;

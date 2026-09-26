@@ -66,7 +66,9 @@ class RecordOpticalPower
             ->where('device_id', $deviceId)
             ->whereNotIn('id', array_keys($seen))
             ->where(fn ($q) => $q->whereNotNull('optical_rx_dbm')->orWhereNotNull('optical_tx_dbm'))
-            ->update(['optical_rx_dbm' => null, 'optical_tx_dbm' => null, 'optical_at' => null]);
+            // Stamped rather than nulled, so the next live frame sees it as news and tells open
+            // views the module is gone. Alerts only look at non-null readings, so this can't fire.
+            ->update(['optical_rx_dbm' => null, 'optical_tx_dbm' => null, 'optical_at' => $now]);
 
         return count($seen);
     }
