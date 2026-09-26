@@ -26,9 +26,23 @@ export interface Operator {
     is_admin: boolean;
     restricted?: boolean;
     map_ids?: number[];
+    group_ids?: number[]; // named groups (GitHub #28), admin view only
     passkey_exempt?: boolean; // excluded from a mandatory-passkey rule (wallboard/kiosk)
     email?: string;
     created_at?: string;
+}
+
+/**
+ * A named operator group (GitHub #28). `restricted` means members only see `map_ids` (and their
+ * sub-maps); otherwise it's read-only on everything. Admin-only.
+ */
+export interface OperatorGroup {
+    id: number;
+    name: string;
+    description: string | null;
+    restricted: boolean;
+    map_ids: number[];
+    user_ids: number[];
 }
 
 export type PollMethod = 'snmp' | 'routeros' | 'none';

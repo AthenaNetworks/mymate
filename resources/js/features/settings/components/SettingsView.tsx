@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -16,11 +16,12 @@ import { useGraphStyleDefaults, useUpdateGraphStyleDefaults } from '../../graphs
 import { GRAPH_PALETTE } from '../../graphs/components/GraphChart';
 import { useFactoryReset } from '../api/factoryReset';
 import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
+import { useUserGroups, useSaveUserGroup, useDeleteUserGroup, type UserGroupInput } from '../api/userGroups';
 import { useMaps } from '../../maps/api/maps';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
-import type { Credential, GraphColorMode, Operator } from '../../../types';
+import type { Credential, GraphColorMode, Operator, OperatorGroup } from '../../../types';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -661,6 +662,31 @@ function generatePassword(length = 16): string {
     return chars.join('');
 }
 
+/** Per-map access picker (GitHub #28), shared by the operator and group forms. */
+function MapChecklist({ value, onChange }: { value: number[]; onChange: (ids: number[]) => void }) {
+    const { data: allMaps } = useMaps();
+    return (
+        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-black/20 p-2 ring-1 ring-white/10">
+            {(allMaps ?? []).length === 0 && <p className="px-1 text-xs text-white/35">No maps yet.</p>}
+            {(allMaps ?? []).map((m) => {
+                const on = value.includes(m.id);
+                return (
+                    <label key={m.id} className="flex cursor-pointer items-center gap-2 px-1 py-0.5 text-xs text-white/70">
+                        <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) => onChange(e.target.checked ? [...value, m.id] : value.filter((id) => id !== m.id))}
+                            className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                        />
+                        {m.parent_map_id ? '- ' : ''}{m.name}
+                    </label>
+                );
+            })}
+            <p className="px-1 pt-1 text-[10px] text-white/35">Granting a parent map includes its sub-maps.</p>
+        </div>
+    );
+}
+
 function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void }) {
     const save = useSaveUser();
     const [form, setForm] = useState<UserInput>({
@@ -671,8 +697,9 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         restricted: initial?.restricted ?? false,
         passkey_exempt: initial?.passkey_exempt ?? false,
         map_ids: initial?.map_ids ?? [],
+        group_ids: initial?.group_ids ?? [],
     });
-    const { data: allMaps } = useMaps(); // for the per-map access picker (GitHub #28)
+    const { data: groups } = useUserGroups(); // UserForm is admin-only, so this is always allowed
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -769,28 +796,26 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                         />
                         <span>Restrict to specific maps - only sees the maps and devices below</span>
                     </label>
-                    {form.restricted && (
-                        <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg bg-black/20 p-2 ring-1 ring-white/10">
-                            {(allMaps ?? []).length === 0 && <p className="px-1 text-xs text-white/35">No maps yet.</p>}
-                            {(allMaps ?? []).map((m) => {
-                                const on = (form.map_ids ?? []).includes(m.id);
-                                return (
-                                    <label key={m.id} className="flex cursor-pointer items-center gap-2 px-1 py-0.5 text-xs text-white/70">
-                                        <input
-                                            type="checkbox"
-                                            checked={on}
-                                            onChange={(e) =>
-                                                set('map_ids', e.target.checked
-                                                    ? [...(form.map_ids ?? []), m.id]
-                                                    : (form.map_ids ?? []).filter((id) => id !== m.id))
-                                            }
-                                            className="h-3.5 w-3.5 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
-                                        />
-                                        {m.parent_map_id ? '- ' : ''}{m.name}
-                                    </label>
-                                );
-                            })}
-                            <p className="px-1 pt-1 text-[10px] text-white/35">Granting a parent map includes its sub-maps.</p>
+                    {form.restricted && <MapChecklist value={form.map_ids ?? []} onChange={(ids) => set('map_ids', ids)} />}
+                    {(groups ?? []).length > 0 && (
+                        <div className="space-y-1 px-1">
+                            <p className="text-xs text-white/45">Groups - their access applies too, the most restrictive wins</p>
+                            <div className="flex flex-wrap gap-1.5">
+                                {(groups ?? []).map((g) => {
+                                    const on = (form.group_ids ?? []).includes(g.id);
+                                    return (
+                                        <button
+                                            key={g.id}
+                                            type="button"
+                                            onClick={() => set('group_ids', on ? (form.group_ids ?? []).filter((id) => id !== g.id) : [...(form.group_ids ?? []), g.id])}
+                                            title={g.restricted ? 'Restricted to the group\'s maps' : 'Read-only, all maps'}
+                                            className={`rounded-full px-2.5 py-1 text-xs ring-1 transition ${on ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30' : 'bg-white/[0.03] text-white/55 ring-white/10 hover:text-white/80'}`}
+                                        >
+                                            {g.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                     )}
                 </>
@@ -834,6 +859,8 @@ function UsersSection() {
     const { data: users } = useUsers();
     const del = useDeleteUser();
     const isAdmin = me?.is_admin ?? false;
+    const { data: groups } = useUserGroups(isAdmin);
+    const groupName = new Map((groups ?? []).map((g) => [g.id, g.name]));
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<number | null>(null);
     const [deleting, setDeleting] = useState<Operator | null>(null);
@@ -885,6 +912,16 @@ function UsersSection() {
                                     <ShieldCheck weight="bold" className="h-3 w-3" /> Admin
                                 </span>
                             )}
+                            {u.restricted && (
+                                <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300/90 ring-1 ring-amber-400/20">
+                                    Restricted
+                                </span>
+                            )}
+                            {(u.group_ids ?? []).map((id) => (
+                                <span key={id} className="hidden shrink-0 rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/55 ring-1 ring-white/10 sm:inline">
+                                    {groupName.get(id) ?? 'Group'}
+                                </span>
+                            ))}
                             {isAdmin && (
                                 <>
                                     <button
@@ -930,6 +967,198 @@ function UsersSection() {
                             onSuccess: () => setDeleting(null),
                             onError: (e) => {
                                 pushToast({ title: validationError(e, ['user']) ?? 'Couldn\'t delete the operator', tone: 'down' });
+                                setDeleting(null);
+                            },
+                        })
+                    }
+                    onClose={() => setDeleting(null)}
+                />
+            )}
+        </section>
+    );
+}
+
+function GroupForm({ initial, onDone }: { initial?: OperatorGroup; onDone: () => void }) {
+    const save = useSaveUserGroup();
+    const { data: users } = useUsers();
+    const [form, setForm] = useState<UserGroupInput>({
+        id: initial?.id,
+        name: initial?.name ?? '',
+        description: initial?.description ?? '',
+        restricted: initial?.restricted ?? true,
+        map_ids: initial?.map_ids ?? [],
+        user_ids: initial?.user_ids ?? [],
+    });
+    const [error, setError] = useState<string | null>(null);
+    const set = <K extends keyof UserGroupInput>(k: K, v: UserGroupInput[K]) => setForm((f) => ({ ...f, [k]: v }));
+    // Admins see everything and the server won't take them as members, so don't offer them.
+    const candidates = (users ?? []).filter((u) => !u.is_admin);
+
+    function submit() {
+        if (save.isPending) return;
+        setError(null);
+        save.mutate(form, {
+            onSuccess: () => {
+                pushToast({ title: initial ? 'Group updated' : 'Group added', tone: 'up' });
+                onDone();
+            },
+            onError: (e) => setError(validationError(e, ['name', 'user_ids', 'map_ids']) ?? 'Couldn\'t save the group.'),
+        });
+    }
+
+    return (
+        <div className="space-y-2.5 rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/10">
+            <input className={field} placeholder="Name - eg NOC, Field techs - North" value={form.name} onChange={(e) => set('name', e.target.value)} />
+            <input
+                className={field}
+                placeholder="Description (optional)"
+                value={form.description ?? ''}
+                onChange={(e) => set('description', e.target.value)}
+            />
+            <div className="flex flex-wrap gap-1.5 px-1">
+                {[
+                    { restricted: true, label: 'Read-only, only these maps' },
+                    { restricted: false, label: 'Read-only, all maps' },
+                ].map((o) => (
+                    <button
+                        key={String(o.restricted)}
+                        type="button"
+                        onClick={() => set('restricted', o.restricted)}
+                        className={`rounded-full px-3 py-1 text-xs ring-1 transition ${form.restricted === o.restricted ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30' : 'bg-white/[0.03] text-white/55 ring-white/10 hover:text-white/80'}`}
+                    >
+                        {o.label}
+                    </button>
+                ))}
+            </div>
+            {form.restricted && <MapChecklist value={form.map_ids} onChange={(ids) => set('map_ids', ids)} />}
+            <div className="space-y-1 px-1">
+                <p className="text-xs text-white/45">Members</p>
+                {candidates.length === 0 && <p className="text-xs text-white/35">No non-admin operators yet.</p>}
+                <div className="flex flex-wrap gap-1.5">
+                    {candidates.map((u) => {
+                        const on = form.user_ids.includes(u.id);
+                        return (
+                            <button
+                                key={u.id}
+                                type="button"
+                                onClick={() => set('user_ids', on ? form.user_ids.filter((id) => id !== u.id) : [...form.user_ids, u.id])}
+                                className={`rounded-full px-2.5 py-1 text-xs ring-1 transition ${on ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30' : 'bg-white/[0.03] text-white/55 ring-white/10 hover:text-white/80'}`}
+                            >
+                                {u.name}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+            {error && <p className="text-xs text-rose-400/90">{error}</p>}
+            <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-white/55 hover:text-white/90">
+                    Cancel
+                </button>
+                <button
+                    onClick={submit}
+                    disabled={save.isPending || form.name.trim() === ''}
+                    className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
+                >
+                    {save.isPending ? 'Saving...' : 'Save'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Operator groups (GitHub #28), admin only. A group carries the access so it's set once for
+ * everyone in it. An operator's own restriction still applies, and if any of their groups is
+ * restricted they're restricted - the most restrictive setting always wins.
+ */
+function GroupsSection() {
+    const { data: groups } = useUserGroups();
+    const del = useDeleteUserGroup();
+    const [adding, setAdding] = useState(false);
+    const [editing, setEditing] = useState<number | null>(null);
+    const [deleting, setDeleting] = useState<OperatorGroup | null>(null);
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <UsersFour weight="light" className="h-4 w-4 text-white/40" />
+                    <div>
+                        <h2 className="text-sm font-bold text-white">Groups</h2>
+                        <p className="text-xs text-white/40">Set map access once and put operators in it. The most restrictive setting wins.</p>
+                    </div>
+                </div>
+                {!adding && (
+                    <button
+                        onClick={() => {
+                            setAdding(true);
+                            setEditing(null);
+                        }}
+                        className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 transition hover:text-white"
+                    >
+                        <Plus weight="bold" className="h-3.5 w-3.5" /> Add
+                    </button>
+                )}
+            </div>
+
+            {adding && <GroupForm onDone={() => setAdding(false)} />}
+
+            <div className="mt-3 space-y-2">
+                {groups?.length === 0 && !adding && <p className="px-1 text-xs text-white/35">No groups yet.</p>}
+                {groups?.map((g) =>
+                    editing === g.id ? (
+                        <GroupForm key={g.id} initial={g} onDone={() => setEditing(null)} />
+                    ) : (
+                        <div key={g.id} className="flex items-center gap-3 rounded-xl bg-white/[0.02] px-3 py-2 ring-1 ring-white/[0.06]">
+                            <span className="min-w-0 flex-1 truncate text-sm text-white/85">
+                                {g.name}
+                                {g.description && <span className="text-white/35"> - {g.description}</span>}
+                            </span>
+                            <span className="shrink-0 text-[11px] text-white/40">
+                                {g.restricted ? `${g.map_ids.length} map${g.map_ids.length === 1 ? '' : 's'}` : 'All maps'}, {g.user_ids.length} member
+                                {g.user_ids.length === 1 ? '' : 's'}
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setEditing(g.id);
+                                    setAdding(false);
+                                }}
+                                title="Edit"
+                                className="rounded-md p-1 text-white/40 hover:bg-white/5 hover:text-white/80"
+                            >
+                                <PencilSimple weight="bold" className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                                onClick={() => setDeleting(g)}
+                                title="Delete"
+                                className="rounded-md p-1 text-white/40 hover:bg-rose-500/10 hover:text-rose-300"
+                            >
+                                <Trash weight="bold" className="h-3.5 w-3.5" />
+                            </button>
+                        </div>
+                    ),
+                )}
+            </div>
+
+            {deleting && (
+                <ConfirmDialog
+                    title="Delete group"
+                    icon={<Trash weight="light" className="h-5 w-5" />}
+                    message={
+                        <>
+                            Delete the group <span className="font-semibold text-white/85">{deleting.name}</span>? A group that still has operators in it
+                            can&apos;t be deleted, move them out first.
+                        </>
+                    }
+                    confirmLabel="Delete"
+                    tone="danger"
+                    busy={del.isPending}
+                    onConfirm={() =>
+                        del.mutate(deleting.id, {
+                            onSuccess: () => setDeleting(null),
+                            onError: (e) => {
+                                pushToast({ title: validationError(e, ['group']) ?? 'Couldn\'t delete the group', tone: 'down' });
                                 setDeleting(null);
                             },
                         })
@@ -1710,7 +1939,17 @@ const TABS: Tab[] = [
     { id: 'credentials', label: 'Credentials', icon: Key, adminOnly: true, render: () => <CredentialsSection /> },
     { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
     { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },
-    { id: 'operators', label: 'Operators', icon: UsersThree, render: () => <UsersSection /> },
+    {
+        id: 'operators',
+        label: 'Operators',
+        icon: UsersThree,
+        render: (isAdmin) => (
+            <div className="space-y-6">
+                <UsersSection />
+                {isAdmin && <GroupsSection />}
+            </div>
+        ),
+    },
     { id: 'agents', label: 'Agents', icon: Broadcast, render: () => <AgentsSection /> },
     {
         id: 'system',
