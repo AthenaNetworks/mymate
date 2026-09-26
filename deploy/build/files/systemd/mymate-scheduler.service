@@ -1,6 +1,9 @@
 [Unit]
 Description=My Mate - scheduler (history-partition retention + maintenance)
 After=network.target postgresql.service redis-server.service
+# Never give up restarting. With the default start limit (5 starts in 10s) a fast crash
+# loop, eg the DB not up yet, leaves the unit failed until someone notices (see #48).
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

@@ -2,6 +2,9 @@
 Description=My Mate - remote-agent WebSocket hub (probes connect here)
 After=network.target postgresql.service redis-server.service
 Requires=redis-server.service
+# Never give up restarting. With the default start limit (5 starts in 10s) a fast crash
+# loop, eg the DB not up yet, leaves the unit failed until someone notices (see #48).
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple

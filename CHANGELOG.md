@@ -60,6 +60,13 @@ of commit subjects.
   can now watch interfaces instead, picked with the same Interfaces setting (by pattern like `vlan*`, by
   hand, or linked ports). It fires when the interface's busier direction drops under the floor while
   its device is up. It won't let you pick every port, that would alert on every idle port you have.
+- **Run the remote agent on a MikroTik router (GitHub #38, #49).** Releases now include a small
+  agent-only container image (about 7 MB) for amd64, arm64 and armv7, attached as `docker save`
+  tarballs that RouterOS 7 can import with `/container/add file=...`. A site's own router can host the
+  agent Dude-style, no extra box needed. It's configured with the usual `MYMATE_*` env vars and keeps
+  no state, so there's nothing to mount. Step by step setup is in `agent/ROUTEROS.md`. The RouterOS
+  steps follow MikroTik's container docs and haven't been tried on real router hardware yet, so
+  feedback is welcome. The same image runs on any Docker or podman host.
 
 ### Changed
 - **"Sustained for" is on every alert condition it applies to (GitHub #22).** The delay was only in the
@@ -109,6 +116,21 @@ of commit subjects.
 - **The map no longer draws a deleted device's links (GitHub #45).** Deleting a device removes its links
   and map placements in the database, but the map kept its edges and inter-map portals on screen until
   the next refresh. Both caches now refresh with the delete.
+- **Remote agents running as root no longer mark down hosts as up.** When the agent can't get an
+  unprivileged ping socket (typical as root in a container, or when `ping_group_range` excludes it) it
+  falls back to a raw ICMP socket, and a raw socket sees every echo reply on the box. Any reply was
+  taken as "mine", so while one host answered, every other ping running at the same time counted as
+  up too, which also made discovery sweeps report phantom devices. Replies are now matched on sender,
+  id and sequence. If the agent can't open any ICMP socket at all it now says so once in its log
+  instead of quietly showing everything down.
+- **Services no longer give up after a few fast crashes.** Supervisor's defaults (3 retries, 1s to
+  count as started) turned a short startup failure, like the database not being ready yet, into a
+  permanent FATAL until someone restarted it by hand. That's how the demo simulator stayed dead for
+  five weeks (GitHub #48). The supervisor configs (`deploy/supervisor/` and the Docker image) now use
+  `startsecs=10` and `startretries=1000`, so they keep retrying with a growing backoff. The packaged
+  systemd units get `StartLimitIntervalSec=0` for the same reason. If you copied
+  `deploy/supervisor/mymate.conf` into `/etc/supervisor/conf.d/`, copy it again and run
+  `supervisorctl reread && supervisorctl update`.
 
 ## [1.8.0] - 2026-09-10
 

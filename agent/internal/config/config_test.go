@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"log/slog"
+	"testing"
+)
 
 func TestToWebSocketURL(t *testing.T) {
 	cases := map[string]string{
@@ -77,5 +80,23 @@ func TestEnvWinsOverTheConfigFile(t *testing.T) {
 	}
 	if cfg.ServerURL != "wss://env.example.com/agent" || cfg.Token != "env_tok" {
 		t.Errorf("env should win, got %+v", cfg)
+	}
+}
+
+// Containers (RouterOS, docker) are configured purely through env, with no config file at all.
+func TestLoadOptionalEnvForContainers(t *testing.T) {
+	t.Setenv("MYMATE_AGENT_CONFIG", t.TempDir()+"/does-not-exist.env")
+	t.Setenv("MYMATE_URL", "https://app.example.com")
+	t.Setenv("MYMATE_AGENT_TOKEN", "mma_abc")
+	t.Setenv("MYMATE_AGENT_NAME", "Site A router")
+	t.Setenv("MYMATE_AGENT_LOG", "debug")
+	t.Setenv("MYMATE_AGENT_INSECURE", "yes")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Name != "Site A router" || cfg.LogLevel != slog.LevelDebug || !cfg.InsecureTLS {
+		t.Errorf("optional env not applied, got %+v", cfg)
 	}
 }
