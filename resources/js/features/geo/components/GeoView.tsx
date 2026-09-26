@@ -10,23 +10,22 @@ import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { MagnifyingGlass, MapPin, X } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDeviceList } from '../../devices/api/getDevices';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMapConfig, useGeocode } from '../api/geo';
-import { useBackhauls } from '../api/sites';
+import { useBackhauls, useGeoDevices } from '../api/sites';
 import { LayerToggle, loadLayerPrefs, persistLayerPrefs, type LayerPrefs } from './geoLayers';
 import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceStatus } from '../../../types';
 
 const STATUS_COLOR: Record<DeviceStatus, string> = { up: '#34d399', down: '#f43f5e', unknown: '#52525b' };
 
-// What a device draws at: its own pin when it has one, otherwise its site's coordinates (the
-// backend resolves this into geo_latitude/geo_longitude). A device sitting at a placed site is
-// therefore "placed" here without an own pin, so it shows on the map and drops out of the
-// unplaced list. Dragging it still writes its own latitude/longitude (an explicit override).
-const geoLat = (d: Device): number | null => d.geo_latitude;
-const geoLng = (d: Device): number | null => d.geo_longitude;
+// Pins come from the compact geo feed (GitHub #22), not the full device list: id, name, status
+// and the effective coordinates the backend resolves (own pin, else site, else uplink). A device
+// sitting at a placed site is therefore "placed" without an own pin, so it shows on the map and
+// is left out of the unplaced list. Dragging it still writes its own latitude/longitude.
+const UNPLACED_PAGE = 200;
 
 /** A status-coloured pin as an HTML div icon (no external marker images -> CSP-clean). */
 function pinIcon(status: DeviceStatus): L.DivIcon {
@@ -47,7 +46,7 @@ function pinIcon(status: DeviceStatus): L.DivIcon {
 export function GeoView() {
     const isAdmin = useIsAdmin();
     const { data: config } = useMapConfig();
-    const { data: devices } = useDevices();
+    const { data: geoDevices } = useGeoDevices();
     const { data: backhauls } = useBackhauls();
     const update = useUpdateDevice();
     const geocode = useGeocode();
@@ -72,11 +71,15 @@ export function GeoView() {
     const markersRef = useRef<Map<number, L.Marker>>(new Map());
     const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
     const backhaulLayerRef = useRef<L.LayerGroup | null>(null);
-    const [placingId, setPlacingId] = useState<number | null>(null); // device awaiting a click-to-place
+    const [placing, setPlacing] = useState<Device | null>(null); // device awaiting a click-to-place
+    const placingId = placing?.id ?? null;
     const [address, setAddress] = useState('');
 
-    const placed = useMemo(() => (devices ?? []).filter((d) => geoLat(d) != null && geoLng(d) != null), [devices]);
-    const unplaced = useMemo(() => (devices ?? []).filter((d) => geoLat(d) == null || geoLng(d) == null), [devices]);
+    const placed = useMemo(() => geoDevices ?? [], [geoDevices]);
+    // Devices with no coordinates anywhere up their chain, a page at a time from the server.
+    const { data: unplacedPage } = useDeviceList({ geo: 'unplaced', per_page: UNPLACED_PAGE, fields: 'summary' }, { enabled: isAdmin });
+    const unplaced = unplacedPage?.data ?? [];
+    const unplacedTotal = unplacedPage?.meta.total ?? 0;
     const placingRef = useRef<number | null>(null);
     placingRef.current = placingId;
 
@@ -107,7 +110,7 @@ export function GeoView() {
             const id = placingRef.current;
             if (id != null) {
                 save(id, e.latlng.lat, e.latlng.lng);
-                setPlacingId(null);
+                setPlacing(null);
             }
         });
 
@@ -132,7 +135,7 @@ export function GeoView() {
 
         for (const d of placed) {
             seen.add(d.id);
-            const pos: L.LatLngExpression = [geoLat(d) as number, geoLng(d) as number];
+            const pos: L.LatLngExpression = [d.lat, d.lng];
             let marker = markersRef.current.get(d.id);
             if (!marker) {
                 marker = L.marker(pos, { icon: pinIcon(d.status), draggable: isAdmin, title: d.name });
@@ -196,7 +199,7 @@ export function GeoView() {
         const map = mapRef.current;
         if (!map || fittedRef.current || placed.length === 0) return;
         fittedRef.current = true;
-        const bounds = L.latLngBounds(placed.map((d) => [geoLat(d) as number, geoLng(d) as number] as L.LatLngExpression));
+        const bounds = L.latLngBounds(placed.map((d) => [d.lat, d.lng] as L.LatLngExpression));
         map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
     }, [placed, mapReady]);
 
@@ -205,7 +208,7 @@ export function GeoView() {
         const hit = await geocode.mutateAsync(address.trim());
         if (!hit) { pushToast({ title: 'No match for that address', tone: 'down' }); return; }
         save(device.id, hit.lat, hit.lng);
-        setPlacingId(null);
+        setPlacing(null);
         setAddress('');
         mapRef.current?.flyTo([hit.lat, hit.lng], 14);
     }
@@ -237,12 +240,12 @@ export function GeoView() {
                 <div className="absolute right-3 top-3 z-[500] w-72 rounded-2xl bg-surface/95 p-3 ring-1 ring-white/10 backdrop-blur-xl">
                     <div className="flex items-center justify-between px-1">
                         <span className="text-xs font-semibold text-white/80">Place devices</span>
-                        <span className="text-[11px] text-white/40">{unplaced.length} unplaced</span>
+                        <span className="text-[11px] text-white/40">{unplacedTotal} unplaced</span>
                     </div>
                     {placingId != null ? (
                         <div className="mt-2 space-y-2">
                             <p className="px-1 text-[11px] leading-snug text-emerald-300/90">
-                                Click the map to drop <span className="font-semibold">{devices?.find((d) => d.id === placingId)?.name}</span>, or find an address:
+                                Click the map to drop <span className="font-semibold">{placing?.name}</span>, or find an address:
                             </p>
                             {config?.geocoder_enabled && (
                                 <div className="flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-1.5 ring-1 ring-white/10">
@@ -251,13 +254,13 @@ export function GeoView() {
                                         autoFocus
                                         value={address}
                                         onChange={(e) => setAddress(e.target.value)}
-                                        onKeyDown={(e) => { if (e.key === 'Enter') { const d = devices?.find((x) => x.id === placingId); if (d) placeByAddress(d); } }}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') { if (placing) placeByAddress(placing); } }}
                                         placeholder="Address or place"
                                         className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
                                     />
                                 </div>
                             )}
-                            <button onClick={() => { setPlacingId(null); setAddress(''); }} className="flex items-center gap-1 px-1 text-[11px] text-white/45 hover:text-white/80">
+                            <button onClick={() => { setPlacing(null); setAddress(''); }} className="flex items-center gap-1 px-1 text-[11px] text-white/45 hover:text-white/80">
                                 <X weight="bold" className="h-3 w-3" /> Cancel
                             </button>
                         </div>
@@ -266,10 +269,10 @@ export function GeoView() {
                             {unplaced.length === 0 ? (
                                 <li className="px-2 py-3 text-center text-[11px] text-white/35">Every device is placed.</li>
                             ) : (
-                                unplaced.slice(0, 200).map((d) => (
+                                unplaced.map((d) => (
                                     <li key={d.id}>
                                         <button
-                                            onClick={() => setPlacingId(d.id)}
+                                            onClick={() => setPlacing(d)}
                                             className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-white/80 transition-colors hover:bg-white/5"
                                         >
                                             <MapPin weight="bold" className="h-3.5 w-3.5 shrink-0 text-emerald-300" />

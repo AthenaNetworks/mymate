@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { Broadcast, CheckCircle, Plus, PencilSimple, Trash, WarningCircle } from '@phosphor-icons/react';
 import { useSensors, useSaveSensor, useDeleteSensor, useTestSensor, type SensorInput } from '../api/sensors';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDeviceList } from '../../devices/api/getDevices';
 import { ScopeEditor } from '../../../components/ScopeEditor';
+import { DevicePicker } from '../../../components/DevicePicker';
 import { pushToast } from '../../../lib/toast';
-import type { AlertScope, Sensor } from '../../../types';
+import type { AlertScope, Device, Sensor } from '../../../types';
 
 const card = 'rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.06]';
 const field =
@@ -40,15 +41,15 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
     const set = <K extends keyof SensorInput>(k: K, v: SensorInput[K]) => setForm((f) => ({ ...f, [k]: v }));
 
     // Test-an-OID (GitHub #40): pick an SNMP device and read the OID without saving.
-    const { data: devices } = useDevices();
-    const snmpDevices = (devices ?? []).filter((d) => d.poll_method === 'snmp');
+    // Typeahead over SNMP devices (GitHub #22); the first one is picked by default like before.
+    const { data: firstSnmp } = useDeviceList({ poll_method: 'snmp', per_page: 1, fields: 'summary' });
     const test = useTestSensor();
-    const [testDeviceId, setTestDeviceId] = useState<number | null>(null);
+    const [testDevice, setTestDevice] = useState<Device | null>(null);
+    const target = testDevice ?? firstSnmp?.data[0] ?? null;
+    const noSnmp = firstSnmp !== undefined && firstSnmp.meta.total === 0;
     function runTest() {
-        const deviceId = testDeviceId ?? snmpDevices[0]?.id ?? null;
-        if (deviceId == null || form.oid.trim() === '') return;
-        setTestDeviceId(deviceId);
-        test.mutate({ device_id: deviceId, oid: form.oid.trim(), mode: form.mode, agg: form.agg, divisor: form.divisor });
+        if (target == null || form.oid.trim() === '') return;
+        test.mutate({ device_id: target.id, oid: form.oid.trim(), mode: form.mode, agg: form.agg, divisor: form.divisor });
     }
 
     function submit() {
@@ -96,18 +97,19 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
             {/* Test the OID against a device before saving (GitHub #40). */}
             <div className="space-y-2 rounded-xl bg-white/[0.02] p-2.5 ring-1 ring-white/[0.06]">
                 <div className="flex gap-2">
-                    <select
-                        className={`${field} min-w-0 flex-1`}
-                        value={testDeviceId ?? snmpDevices[0]?.id ?? ''}
-                        onChange={(e) => setTestDeviceId(Number(e.target.value) || null)}
-                        disabled={snmpDevices.length === 0}
-                    >
-                        {snmpDevices.length === 0 && <option value="">No SNMP devices</option>}
-                        {snmpDevices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                    </select>
+                    <div className="min-w-0 flex-1">
+                        <DevicePicker
+                            value={target}
+                            onChange={setTestDevice}
+                            params={{ poll_method: 'snmp' }}
+                            placeholder={noSnmp ? 'No SNMP devices' : 'Pick an SNMP device'}
+                            disabled={noSnmp}
+                            className={field}
+                        />
+                    </div>
                     <button
                         onClick={runTest}
-                        disabled={test.isPending || form.oid.trim() === '' || snmpDevices.length === 0}
+                        disabled={test.isPending || form.oid.trim() === '' || target == null}
                         className="shrink-0 rounded-xl bg-white/5 px-3 py-2 text-sm font-medium text-white/80 ring-1 ring-white/10 transition hover:bg-white/10 disabled:opacity-40"
                     >
                         {test.isPending ? 'Testing...' : 'Test OID'}

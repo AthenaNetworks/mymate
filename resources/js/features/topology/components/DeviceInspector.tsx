@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowsOut, CaretDown, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
@@ -12,7 +12,7 @@ import {
     setInspectorOpen,
     type IfaceFilter,
 } from '../../../lib/shellStore';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDevice, useDeviceStats, useDevicesByIds, useMapDevices } from '../../devices/api/getDevices';
 import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
 import { useDiscoverDevice } from '../api/discoverDevice';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
@@ -197,7 +197,7 @@ function CredentialPicker({ device }: { device: Device }) {
 // until now - it drives dependency-aware alert suppression, downstream-first upgrade ordering,
 // geo coordinate inheritance and the tree layouts, so a wrong one is worth fixing on the spot.
 // Opens the same picker the map's node menu does.
-function ParentPicker({ device, devices }: { device: Device; devices: Device[] }) {
+function ParentPicker({ device }: { device: Device }) {
     const [picking, setPicking] = useState(false);
 
     return (
@@ -212,7 +212,7 @@ function ParentPicker({ device, devices }: { device: Device; devices: Device[] }
                 <span className="min-w-0 flex-1 truncate">{device.parent_name ?? 'None'}</span>
                 <CaretDown weight="bold" className="h-3 w-3 shrink-0 text-white/35" />
             </button>
-            {picking && <SetParentDialog device={device} devices={devices} onClose={() => setPicking(false)} />}
+            {picking && <SetParentDialog device={device} onClose={() => setPicking(false)} />}
         </div>
     );
 }
@@ -534,7 +534,13 @@ export function DeviceInspector() {
     const id = useSelectedDeviceId();
     const chartMode = useDeviceChartMode(id ?? 0); // per-device chart toggle
     const inspectorOpen = useInspectorOpen(); // mobile slide-over open state
-    const { data: devices } = useDevices();
+    const activeMapId = useActiveMapId();
+    // Just the selected device (GitHub #22) - it used to be looked up in the whole fleet, which
+    // at 25k devices never arrived. Seeded from the map's rows, so a click paints straight away.
+    const { data: device, error: deviceError } = useDevice(id);
+    const deviceGone = (deviceError as { response?: { status?: number } } | null)?.response?.status === 404;
+    const { data: mapDevices } = useMapDevices(activeMapId);
+    const { data: stats } = useDeviceStats();
     const { data: interfaces } = useDeviceInterfaces(id);
     const { data: links } = useLinks();
     const upgrade = useUpgradeDevices();
@@ -549,11 +555,9 @@ export function DeviceInspector() {
     const [chartExpanded, setChartExpanded] = useState(false);
     const [healthExpanded, setHealthExpanded] = useState(false);
     const [tracing, setTracing] = useState(false);
-    const activeMapId = useActiveMapId();
     const { data: mapDetail } = useMap(activeMapId);
     const addToMap = useAddDeviceToMap();
     const removeFromMap = useRemoveDeviceFromMap();
-    const device = devices?.find((d) => d.id === id);
 
     // Default the selection to the upstream/root device ON THE CURRENT MAP on the *first* load
     // (prefer an `internet`/uplink node, else a parentless one) - but only among devices actually
@@ -562,19 +566,32 @@ export function DeviceInspector() {
     // (clicking the empty canvas) also leaves the tools showing. A module flag (autoHomedOnce)
     // survives remounts within the session; only a deleted selection re-homes after that.
     useEffect(() => {
-        if (!devices || devices.length === 0 || !mapDetail) return;
-        const deleted = id !== null && !devices.some((d) => d.id === id);
+        if (!mapDevices || !mapDetail) return;
+        // A selection that 404s was deleted (or is out of this operator's reach).
+        const deleted = id !== null && deviceGone;
         if (deleted || (id === null && !autoHomedOnce)) {
             const onMap = new Set((mapDetail.positions ?? []).map((p) => p.device_id));
-            const here = devices.filter((d) => onMap.has(d.id));
+            const here = mapDevices.filter((d) => onMap.has(d.id));
             const root =
                 here.find((d) => d.device_type === 'internet') ??
                 here.find((d) => d.parent_device_id === null) ??
                 here[0];
-            if (root) selectDevice(root.id); // nothing on the map -> stay deselected (show tools)
+            if (root) selectDevice(root.id);
+            else if (deleted) selectDevice(null); // nothing on the map -> deselect (show tools)
         }
         autoHomedOnce = true; // after devices first load, a plain deselect no longer re-homes
-    }, [id, devices, mapDetail]);
+    }, [id, deviceGone, mapDevices, mapDetail]);
+
+    // Names for the far end of each of this device's links - those peers can be on any map.
+    const peerIds = useMemo(
+        () =>
+            id === null
+                ? []
+                : (links ?? []).flatMap((l) => (l.a_device_id === id ? [l.b_device_id] : l.b_device_id === id ? [l.a_device_id] : [])),
+        [links, id],
+    );
+    const { data: peers } = useDevicesByIds(peerIds);
+    const peerNameById = useMemo(() => new Map((peers ?? []).map((d) => [d.id, d.name])), [peers]);
 
     const ifaces = interfaces ?? [];
     // Device total throughput (sum of every interface\'s latest bps) - shown instead of
@@ -587,7 +604,7 @@ export function DeviceInspector() {
     if (!device) {
         return (
             <InspectorShell open={inspectorOpen}>
-                {devices && devices.length === 0 ? (
+                {stats?.total === 0 ? (
                     <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
                         No devices yet - add one to see its details here.
                     </div>
@@ -628,7 +645,7 @@ export function DeviceInspector() {
         const l = (links ?? []).find((x) => x.a_interface_id === ifaceId || x.b_interface_id === ifaceId);
         if (!l) return null;
         const peerDev = l.a_interface_id === ifaceId ? l.b_device_id : l.a_device_id;
-        return devices?.find((d) => d.id === peerDev)?.name ?? null;
+        return peerNameById.get(peerDev) ?? null;
     };
 
     // This device\'s links - surfaced here so editing/removing a link is discoverable
@@ -753,7 +770,7 @@ export function DeviceInspector() {
                 )}
                 {isAdmin && !pingOnly && <CredentialPicker device={device} />}
                 {isAdmin ? (
-                    <ParentPicker device={device} devices={devices ?? []} />
+                    <ParentPicker device={device} />
                 ) : (
                     <Detail label="Parent" value={device.parent_name ?? '-'} />
                 )}
@@ -855,7 +872,7 @@ export function DeviceInspector() {
                             const localIf = mine ? l.a_interface : l.b_interface;
                             const peerIf = mine ? l.b_interface : l.a_interface;
                             const peerDevId = mine ? l.b_device_id : l.a_device_id;
-                            const peerNm = devices?.find((d) => d.id === peerDevId)?.name ?? `device ${peerDevId}`;
+                            const peerNm = peerNameById.get(peerDevId) ?? `device ${peerDevId}`;
                             return (
                                 <div key={l.id} className="flex items-center gap-1.5 text-xs">
                                     <span className="min-w-0 flex-1 truncate text-white/80">
@@ -959,18 +976,11 @@ export function DeviceInspector() {
 
             {/* Edit a link straight from the inspector (opens the existing dialog on its Edit tab). */}
             {editingLink && (
-                <LinkHistoryDialog
-                    link={editingLink}
-                    devices={devices ?? []}
-                    defaultTab="edit"
-                    onClose={() => setEditingLink(null)}
-                />
+                <LinkHistoryDialog link={editingLink} defaultTab="edit" onClose={() => setEditingLink(null)} />
             )}
 
             {/* Add a link from this device to any other - including one on a different map. */}
-            {addingLink && (
-                <AddLinkDialog aDevice={device} devices={devices ?? []} onClose={() => setAddingLink(false)} />
-            )}
+            {addingLink && <AddLinkDialog aDevice={device} onClose={() => setAddingLink(false)} />}
 
             {/* Delete this device outright - shares the map's confirmation, counts + all. */}
             {deletingDevice && <DeleteDeviceDialog device={device} onClose={() => setDeletingDevice(false)} />}

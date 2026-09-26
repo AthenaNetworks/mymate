@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Archive, ArrowClockwise, CircleNotch, Clock, GitCommit } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
+import { useInfiniteDeviceList } from '../../devices/api/getDevices';
 import {
     useBackupSchedule,
     useUpdateBackupSchedule,
@@ -237,10 +237,11 @@ function VersionPanel({ device }: { device: Device }) {
  *  version history with diffs. */
 export function BackupsView() {
     const isAdmin = useIsAdmin();
-    const { data: devices } = useDevices();
+    // Backup-enabled devices only, a page at a time (GitHub #22).
+    const list = useInfiniteDeviceList({ backup_enabled: true, per_page: 100 });
+    const backupDevices = list.data?.pages.flatMap((p) => p.data) ?? [];
+    const total = list.data?.pages[0]?.meta.total ?? 0;
     const [selectedId, setSelectedId] = useState<number | null>(null);
-
-    const backupDevices = (devices ?? []).filter((d) => d.backup_enabled);
     const selected = backupDevices.find((d) => d.id === selectedId) ?? null;
 
     return (
@@ -253,7 +254,7 @@ export function BackupsView() {
                     </span>
                     <div>
                         <h1 className="text-base font-bold tracking-tight text-white">Backups</h1>
-                        <p className="text-[11px] text-white/40">{backupDevices.length} device(s)</p>
+                        <p className="text-[11px] text-white/40">{total} device(s)</p>
                     </div>
                 </header>
 
@@ -287,6 +288,15 @@ export function BackupsView() {
                                 {d.backup_status === 'failed' && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400" title={d.backup_message ?? 'Last backup failed'} />}
                             </button>
                         ))
+                    )}
+                    {list.hasNextPage && (
+                        <button
+                            onClick={() => list.fetchNextPage()}
+                            disabled={list.isFetchingNextPage}
+                            className="w-full rounded-xl px-3 py-2 text-xs text-white/50 ring-1 ring-white/[0.06] hover:bg-white/[0.04] hover:text-white/80 disabled:opacity-50"
+                        >
+                            {list.isFetchingNextPage ? 'Loading...' : `Show more (${total - backupDevices.length} left)`}
+                        </button>
                     )}
                 </div>
             </div>

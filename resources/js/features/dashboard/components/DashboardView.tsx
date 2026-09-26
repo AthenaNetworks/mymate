@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CaretLeft, CaretRight, MagnifyingGlass, Pause, Play, SlidersHorizontal, SquaresFour } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDebounced, useDeviceList, useDevicesByIds } from '../../devices/api/getDevices';
 import { useMapChannel } from '../../topology/hooks/useMapChannel';
 import {
     setDashboardAll,
@@ -12,31 +12,29 @@ import {
 } from '../../../lib/shellStore';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceCard } from './DeviceCard';
-import type { Device, DeviceStatus } from '../../../types';
 
 // Card footprint (px) used to compute how many fit per page. Keep in step with DeviceCard.
 const CARD_W = 248;
 const CARD_H = 132;
 const GAP = 16;
 
-// Down first (never hidden behind the rotation), then unknown, then up; name within.
-const STATUS_RANK: Record<DeviceStatus, number> = { down: 0, unknown: 1, up: 2 };
-
-function chunk<T>(items: T[], size: number): T[][] {
-    if (size <= 0) return items.length ? [items] : [];
-    const out: T[][] = [];
-    for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-    return out;
-}
+// The list endpoint's caps: cards per page, and ids per request for a hand-picked selection.
+const MAX_PAGE = 200;
+const MAX_IDS = 500;
 
 /** The searchable selection editor (which devices the grid shows). */
-function SelectionPanel({ devices }: { devices: Device[] }) {
+function SelectionPanel({ total }: { total: number | null }) {
     const all = useDashboardAll();
     const ids = useDashboardIds();
     const cycleS = useDashboardCycleS();
     const [q, setQ] = useState('');
-    const query = q.trim().toLowerCase();
-    const list = query ? devices.filter((d) => d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query)) : devices;
+    const query = useDebounced(q.trim());
+    // Server-side search (GitHub #22). With no search the ticked devices lead the list.
+    const { data: page } = useDeviceList({ q: query || undefined, per_page: 100, fields: 'summary' });
+    const { data: chosen } = useDevicesByIds(query ? [] : ids.slice(0, MAX_IDS));
+    const lead = query ? [] : (chosen ?? []);
+    const leadIds = new Set(lead.map((d) => d.id));
+    const list = [...lead, ...(page?.data ?? []).filter((d) => !leadIds.has(d.id))];
 
     return (
         <div className="space-y-3 rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10">
@@ -76,7 +74,7 @@ function SelectionPanel({ devices }: { devices: Device[] }) {
 
             <p className="px-1 text-[11px] text-white/35">
                 {all
-                    ? `Showing all ${devices.length} devices. Turn "All devices" off to use the ticked selection below.`
+                    ? `Showing all ${total ?? 0} devices. Turn "All devices" off to use the ticked selection below.`
                     : `${ids.length} selected.`}
             </p>
 
@@ -104,8 +102,7 @@ function SelectionPanel({ devices }: { devices: Device[] }) {
 }
 
 export function DashboardView() {
-    const { data: devices } = useDevices();
-    // Live status: the handler folds DeviceStatusChanged into the useDevices() cache, so
+    // Live status: the handler folds DeviceStatusChanged into every cached device query, so
     // cards re-render the moment a device flips up/down (resyncs on reconnect).
     useMapChannel();
 
@@ -118,14 +115,6 @@ export function DashboardView() {
     const [paused, setPaused] = useState(false);
     const [dims, setDims] = useState({ cols: 1, rows: 1 });
     const gridRef = useRef<HTMLDivElement>(null);
-
-    // Reconcile the selection against the live list (drop ids that no longer exist),
-    // then order down-first so outages are never hidden behind the rotation.
-    const ordered = useMemo(() => {
-        const list = devices ?? [];
-        const picked = all ? list : list.filter((d) => ids.includes(d.id));
-        return [...picked].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || a.name.localeCompare(b.name));
-    }, [devices, all, ids]);
 
     // Measure the grid to learn how many cards fit -> page size.
     useEffect(() => {
@@ -142,23 +131,29 @@ export function DashboardView() {
         return () => ro.disconnect();
     }, []);
 
-    const pageSize = Math.max(1, dims.cols * dims.rows);
-    const pages = useMemo(() => chunk(ordered, pageSize), [ordered, pageSize]);
+    // The grid pages on the server (GitHub #22): one request per screenful, sorted down-first
+    // (then unknown, then up, by name) so outages are never hidden behind the rotation.
+    const pageSize = Math.min(MAX_PAGE, Math.max(1, dims.cols * dims.rows));
+    const nothingPicked = !all && ids.length === 0;
+    const scope = all ? {} : { ids: ids.slice(0, MAX_IDS) };
+    const { data } = useDeviceList({ ...scope, sort: 'status', page: page + 1, per_page: pageSize }, { enabled: !nothingPicked, refetchInterval: 30_000 });
+    const { data: downPage } = useDeviceList({ ...scope, status: 'down', per_page: 1, fields: 'summary' }, { enabled: !nothingPicked, refetchInterval: 30_000 });
+    const total = nothingPicked ? 0 : (data?.meta.total ?? 0);
+    const pageCount = nothingPicked ? 0 : (data?.meta.last_page ?? 0);
+    const current = nothingPicked ? [] : (data?.data ?? []);
+    const downCount = nothingPicked ? 0 : (downPage?.meta.total ?? 0);
 
     // Keep the page index in range when the set / fit changes.
     useEffect(() => {
-        setPage((p) => (p >= pages.length ? 0 : p));
-    }, [pages.length]);
+        setPage((p) => (p >= pageCount ? 0 : p));
+    }, [pageCount]);
 
     // Auto-cycle pages (paused on hover/focus or when only one page).
     useEffect(() => {
-        if (pages.length <= 1 || paused) return;
-        const id = setInterval(() => setPage((p) => (p + 1) % pages.length), cycleS * 1000);
+        if (pageCount <= 1 || paused) return;
+        const id = setInterval(() => setPage((p) => (p + 1) % pageCount), cycleS * 1000);
         return () => clearInterval(id);
-    }, [pages.length, paused, cycleS]);
-
-    const current = pages[Math.min(page, Math.max(0, pages.length - 1))] ?? [];
-    const downCount = ordered.filter((d) => d.status === 'down').length;
+    }, [pageCount, paused, cycleS]);
 
     return (
         <div className="flex h-full flex-col gap-3 p-4">
@@ -170,27 +165,27 @@ export function DashboardView() {
                     <div>
                         <h1 className="text-base font-bold tracking-tight text-white">Dashboard</h1>
                         <p className="text-xs text-white/40">
-                            {ordered.length} device{ordered.length === 1 ? '' : 's'}
+                            {total} device{total === 1 ? '' : 's'}
                             {downCount > 0 ? <span className="text-rose-300"> - {downCount} down</span> : null}
                         </p>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {pages.length > 1 && (
+                    {pageCount > 1 && (
                         <div className="flex items-center gap-1 rounded-lg ring-1 ring-white/10">
                             <button
-                                onClick={() => setPage((p) => (p - 1 + pages.length) % pages.length)}
+                                onClick={() => setPage((p) => (p - 1 + pageCount) % pageCount)}
                                 title="Previous page"
                                 className="rounded-l-lg p-2 text-white/55 transition-colors duration-200 hover:bg-white/5 hover:text-white"
                             >
                                 <CaretLeft weight="bold" className="h-4 w-4" />
                             </button>
                             <span className="px-0.5 font-mono text-[11px] tabular-nums text-white/40">
-                                {page + 1}/{pages.length}
+                                {page + 1}/{pageCount}
                             </span>
                             <button
-                                onClick={() => setPage((p) => (p + 1) % pages.length)}
+                                onClick={() => setPage((p) => (p + 1) % pageCount)}
                                 title="Next page"
                                 className="rounded-r-lg p-2 text-white/55 transition-colors duration-200 hover:bg-white/5 hover:text-white"
                             >
@@ -198,7 +193,7 @@ export function DashboardView() {
                             </button>
                         </div>
                     )}
-                    {pages.length > 1 && (
+                    {pageCount > 1 && (
                         <button
                             onClick={() => setPaused((p) => !p)}
                             title={paused ? 'Resume rotation' : 'Pause rotation'}
@@ -219,7 +214,7 @@ export function DashboardView() {
                 </div>
             </div>
 
-            {editing && <SelectionPanel devices={devices ?? []} />}
+            {editing && <SelectionPanel total={all ? total : null} />}
 
             {/* The card grid - its measured size drives the page size. */}
             <div
@@ -228,7 +223,7 @@ export function DashboardView() {
                 onMouseLeave={() => setPaused(false)}
                 className="min-h-0 flex-1"
             >
-                {ordered.length === 0 ? (
+                {total === 0 ? (
                     <div className="grid h-full place-items-center text-center">
                         <div className="max-w-xs">
                             <p className="text-sm font-medium text-white/70">No devices selected</p>
@@ -251,11 +246,11 @@ export function DashboardView() {
             </div>
 
             {/* Page indicator - dots for a few pages, a counter for many. */}
-            {pages.length > 1 && (
+            {pageCount > 1 && (
                 <div className="flex shrink-0 items-center justify-center gap-2 text-[11px] text-white/40">
-                    {pages.length <= 12 ? (
+                    {pageCount <= 12 ? (
                         <div className="flex items-center gap-1.5">
-                            {pages.map((_, i) => (
+                            {Array.from({ length: pageCount }, (_, i) => (
                                 <button
                                     key={i}
                                     onClick={() => setPage(i)}
@@ -268,7 +263,7 @@ export function DashboardView() {
                         </div>
                     ) : (
                         <span className="font-mono tabular-nums">
-                            {page + 1} / {pages.length}
+                            {page + 1} / {pageCount}
                         </span>
                     )}
                     {paused && <span className="uppercase tracking-wide text-white/30">paused</span>}

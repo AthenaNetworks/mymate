@@ -2,21 +2,27 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { echo } from '../../../lib/echo';
 import { useCurrentUser } from '../../auth/api/auth';
-import { deviceKeys } from '../../devices/api/getDevices';
+import { deviceKeys, findCachedDevice, patchCachedDevices, type DeviceStats } from '../../devices/api/getDevices';
+import type { GeoDevice } from '../../geo/api/sites';
 import { outageKeys } from '../../outages/api/getOutages';
 import { linkKeys } from '../api/getLinks';
 import { deviceInterfaceKeys } from '../api/getDeviceInterfaces';
-import type { AlertStateChangedPayload, Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import type { AlertStateChangedPayload, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
 type DeviceStatusChangedPayload = {
     id: number;
     status: DeviceStatus;
     last_change: string | null;
+    // Newer servers only; older ones leave these out and we fall back to the cache.
+    name?: string;
+    previous_status?: DeviceStatus | null;
+    monitored?: boolean;
 };
 
 /**
  * Single subscription to the private `map` channel:
- *  - `DeviceStatusChanged` -> folded into the devices query cache (sidebar + node dots).
+ *  - `DeviceStatusChanged` -> folded into every cached copy of the device (map nodes, inspector,
+ *    list pages), the geo feed and the header counts.
  *  - `InterfaceUtilUpdated` -> handed to `onUtil` so the caller can recolour edges live.
  *
  * On (re)connect it resyncs the device + link snapshot to fill any missed events.
@@ -59,20 +65,29 @@ export function useMapChannel(
 
         // Custom broadcastAs() names -> leading dot so Echo doesn\'t prepend a namespace.
         channel.listen('.DeviceStatusChanged', (e: DeviceStatusChangedPayload) => {
-            const before = qc.getQueryData<Device[]>(deviceKeys.list())?.find((d) => d.id === e.id);
+            // The payload carries the name and the old status, so this works for devices that
+            // aren't in any cached query (most of a big fleet, now there's no full list).
+            const cached = findCachedDevice(qc, e.id);
+            const prevStatus = e.previous_status ?? cached?.status ?? null;
+            const name = e.name ?? cached?.name ?? `device ${e.id}`;
 
-            qc.setQueryData<Device[]>(
-                deviceKeys.list(),
-                (prev) =>
-                    prev?.map((d) => (d.id === e.id ? { ...d, status: e.status, last_change: e.last_change } : d)) ??
-                    prev,
+            patchCachedDevices(qc, (id) => (id === e.id ? { status: e.status, last_change: e.last_change } : null));
+            qc.setQueryData<GeoDevice[]>(['geo', 'devices'], (prev) =>
+                prev?.some((d) => d.id === e.id) ? prev.map((d) => (d.id === e.id ? { ...d, status: e.status } : d)) : prev,
             );
+
+            // Move the device between the header tallies. Paused devices aren't counted there.
+            if (prevStatus && prevStatus !== e.status && e.monitored !== false) {
+                qc.setQueryData<DeviceStats>(deviceKeys.stats(), (s) =>
+                    s ? { ...s, [prevStatus]: Math.max(0, s[prevStatus] - 1), [e.status]: s[e.status] + 1 } : s,
+                );
+            }
 
             // Notify only on a real up<->down flip. Skip the settle out of `unknown` (a fresh
             // device, or the first sweep after a restart), which on a large fleet would fire a
             // notification for every device at once.
-            if (before && before.status !== e.status && before.status !== 'unknown') {
-                onStatus?.({ id: e.id, name: before.name, status: e.status });
+            if (prevStatus && prevStatus !== e.status && prevStatus !== 'unknown') {
+                onStatus?.({ id: e.id, name, status: e.status });
                 refreshOutagesSoon();
             }
         });
@@ -96,40 +111,31 @@ export function useMapChannel(
         // frame is cheap). Coalesced across devices in one event.
         channel.listen('.DeviceMetricsUpdated', (e: DeviceMetricsUpdatedPayload) => {
             const byId = new Map(e.devices.map((f) => [f.device_id, f]));
-            qc.setQueryData<Device[]>(
-                deviceKeys.list(),
-                (prev) =>
-                    prev?.map((d) => {
-                        const f = byId.get(d.id);
-                        return f
-                            ? {
-                                  ...d,
-                                  cpu_pct: f.cpu_pct,
-                                  mem_used_pct: f.mem_used_pct,
-                                  temp_c: f.temp_c,
-                                  signal_dbm: f.signal_dbm,
-                                  snr_db: f.snr_db,
-                                  ccq_pct: f.ccq_pct,
-                                  wireless_clients: f.wireless_clients,
-                                  ospf_neighbors: f.ospf_neighbors,
-                              }
-                            : d;
-                    }) ?? prev,
-            );
+            patchCachedDevices(qc, (id) => {
+                const f = byId.get(id);
+                return f
+                    ? {
+                          cpu_pct: f.cpu_pct,
+                          mem_used_pct: f.mem_used_pct,
+                          temp_c: f.temp_c,
+                          signal_dbm: f.signal_dbm,
+                          snr_db: f.snr_db,
+                          ccq_pct: f.ccq_pct,
+                          wireless_clients: f.wireless_clients,
+                          ospf_neighbors: f.ospf_neighbors,
+                      }
+                    : null;
+            });
         });
 
         // Live ping latency/loss -> folded into the devices cache so the internet/upstream
         // card reflects current rtt without a refetch. Same coalesced shape as metrics.
         channel.listen('.DeviceLatencyUpdated', (e: DeviceLatencyUpdatedPayload) => {
             const byId = new Map(e.devices.map((f) => [f.device_id, f]));
-            qc.setQueryData<Device[]>(
-                deviceKeys.list(),
-                (prev) =>
-                    prev?.map((d) => {
-                        const f = byId.get(d.id);
-                        return f ? { ...d, rtt_ms: f.rtt_ms, loss_pct: f.loss_pct } : d;
-                    }) ?? prev,
-            );
+            patchCachedDevices(qc, (id) => {
+                const f = byId.get(id);
+                return f ? { rtt_ms: f.rtt_ms, loss_pct: f.loss_pct } : null;
+            });
         });
 
         const connection = (

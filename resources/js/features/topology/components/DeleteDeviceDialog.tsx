@@ -1,7 +1,7 @@
 import { TrashSimple } from '@phosphor-icons/react';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { useDeleteDevice } from '../../devices/api/deleteDevice';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDeviceList } from '../../devices/api/getDevices';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useLinks } from '../api/getLinks';
 import { selectDevice } from '../../../lib/shellStore';
@@ -19,12 +19,13 @@ import type { Device } from '../../../types';
 export function DeleteDeviceDialog({ device, onClose }: { device: Device; onClose: () => void }) {
     const isAdmin = useIsAdmin();
     const del = useDeleteDevice();
-    const { data: devices } = useDevices();
+    // Only the count matters, so ask for one row and read the total.
+    const { data: childPage } = useDeviceList({ parent_id: device.id, per_page: 1, fields: 'summary' });
     const { data: links } = useLinks();
 
     if (!isAdmin) return null;
 
-    const children = (devices ?? []).filter((d) => d.parent_device_id === device.id).length;
+    const children = childPage?.meta.total ?? 0;
     const linkCount = (links ?? []).filter((l) => l.a_device_id === device.id || l.b_device_id === device.id).length;
     const maps = device.maps_count ?? 0;
 

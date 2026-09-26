@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { MagnifyingGlass, Plus, Stack } from '@phosphor-icons/react';
-import { useDevices } from '../../devices/api/getDevices';
-import { useMap, useAddDeviceToMap } from '../../maps/api/maps';
+import { useDebounced, useDeviceList } from '../../devices/api/getDevices';
+import { useAddDeviceToMap } from '../../maps/api/maps';
 import { useActiveMapId, selectDevice } from '../../../lib/shellStore';
 import { useIsAdmin } from '../../auth/api/auth';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
+
+const RESULTS = 100;
 
 /**
  * The map-tools panel shown in the inspector when nothing is selected: a searchable list of
@@ -15,20 +17,21 @@ import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
 export function MapDevicePalette() {
     const isAdmin = useIsAdmin();
     const activeMapId = useActiveMapId();
-    const { data: devices } = useDevices();
-    const { data: mapDetail } = useMap(activeMapId);
     const addToMap = useAddDeviceToMap();
     const [q, setQ] = useState('');
+    const query = useDebounced(q.trim());
+    // Searched server-side (GitHub #22); a page is plenty for a drag-and-drop palette.
+    const { data } = useDeviceList(
+        { q: query || undefined, not_on_map: activeMapId ?? undefined, per_page: RESULTS, fields: 'summary' },
+        { enabled: isAdmin && activeMapId !== null },
+    );
 
     if (!isAdmin) {
         return <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">Select a device on the map.</div>;
     }
 
-    const placed = new Set((mapDetail?.positions ?? []).map((p) => p.device_id));
-    const query = q.trim().toLowerCase();
-    const offMap = (devices ?? [])
-        .filter((d) => !placed.has(d.id))
-        .filter((d) => !query || d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query));
+    const offMap = data?.data ?? [];
+    const more = (data?.meta.total ?? 0) - offMap.length;
 
     function place(deviceId: number) {
         if (activeMapId === null) return;
@@ -84,6 +87,7 @@ export function MapDevicePalette() {
                             <Plus weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/25 transition group-hover:text-emerald-300" />
                         </li>
                     ))}
+                    {more > 0 && <li className="px-2 py-1.5 text-[11px] text-white/30">{more} more - search to narrow it down.</li>}
                 </ul>
             )}
         </div>

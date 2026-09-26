@@ -7,6 +7,7 @@ use App\Actions\Maps\ImportMap;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Map\StoreMapRequest;
 use App\Http\Requests\Map\UpdateMapRequest;
+use App\Http\Resources\DeviceResource;
 use App\Http\Resources\MapLinkResource;
 use App\Http\Resources\MapResource;
 use App\Models\Device;
@@ -17,6 +18,7 @@ use App\Models\MapLayoutSnapshot;
 use App\Models\MapLink;
 use App\Models\MapLinkPosition;
 use App\Models\MapNote;
+use App\Support\DeviceGeo;
 use App\Support\MapDetail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,6 +70,24 @@ class MapController extends Controller
     public function show(Map $map): JsonResponse
     {
         return response()->json(['data' => MapDetail::build($map)]);
+    }
+
+    /**
+     * The devices placed on this map, as full rows. The canvas used to filter these out of the
+     * whole fleet (GitHub #22); now it only pulls what it draws. Not paged on purpose: a map
+     * renders every node it has. Device visibility still applies on top of the map's own.
+     */
+    public function devices(Map $map): AnonymousResourceCollection
+    {
+        $devices = Device::query()
+            ->whereIn('devices.id', $map->positions()->select('device_id'))
+            ->with(['parent:id,name', 'site'])
+            ->withCount('mapPositions')
+            ->orderBy('name')
+            ->get();
+        DeviceGeo::apply($devices, loadAncestors: true);
+
+        return DeviceResource::collection($devices);
     }
 
     /** Save a device's position on this map. */

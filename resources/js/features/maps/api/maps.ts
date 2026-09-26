@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
 import { pushToast } from '../../../lib/toast';
+import { deviceKeys } from '../../devices/api/getDevices';
 import type { LinkMediaType, MapDetail, MapLink, MapNote, MapNoteSize, NetworkMap } from '../../../types';
 
 export const mapKeys = {
@@ -162,6 +163,8 @@ export function useAddDeviceToMap() {
         onSuccess: (_d, { mapId }) => {
             qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
             qc.invalidateQueries({ queryKey: mapKeys.all });
+            // The canvas's device set and every row's maps_count just changed.
+            qc.invalidateQueries({ queryKey: deviceKeys.all });
         },
     });
 }
@@ -175,6 +178,7 @@ export function useRemoveDeviceFromMap() {
         onSuccess: (_d, { mapId }) => {
             qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
             qc.invalidateQueries({ queryKey: mapKeys.all });
+            qc.invalidateQueries({ queryKey: deviceKeys.all });
         },
     });
 }
@@ -288,7 +292,10 @@ export function useImportMap() {
             const { data } = await apiClient.post<{ data: { id: number; name: string } }>('/maps/import', payload);
             return data.data;
         },
-        onSuccess: () => qc.invalidateQueries({ queryKey: mapKeys.all }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: mapKeys.all });
+            qc.invalidateQueries({ queryKey: deviceKeys.all }); // an import can create devices
+        },
     });
 }
 

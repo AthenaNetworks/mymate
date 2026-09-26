@@ -6,6 +6,7 @@ import { useDiscoverDevice } from '../api/discoverDevice';
 import { useCreateLink } from '../api/createLink';
 import { useIsAdmin } from '../../auth/api/auth';
 import { MediaTypePicker } from './MediaTypePicker';
+import { DevicePicker } from '../../../components/DevicePicker';
 import type { Device, LinkMediaType, NetworkInterface } from '../../../types';
 
 export type PendingLink = { aDeviceId: number; bDeviceId: number; aHandle?: string | null; bHandle?: string | null };
@@ -134,105 +135,27 @@ export function EndPicker({
     );
 }
 
-/** Searchable device picker for the far end of a link. Lists every device except the
- *  near end (and any already linked to it), so a peer on a *different map* can be chosen -
- *  the resulting link renders as a portal on each map. */
-function PeerPicker({
-    devices,
-    value,
-    onChange,
-}: {
-    devices: Device[];
-    value: Device | null;
-    onChange: (d: Device) => void;
-}) {
-    const [open, setOpen] = useState(false);
-    const [q, setQ] = useState('');
-    const needle = q.trim().toLowerCase();
-    const matches = needle
-        ? devices.filter((d) => d.name.toLowerCase().includes(needle) || (d.mgmt_ip ?? '').includes(needle))
-        : devices;
-
+/** Far end of a link: any device except the near end, searched server-side, so a peer on a
+ *  *different map* can be chosen - the resulting link renders as a portal on each map. */
+function PeerPicker({ excludeId, value, onChange }: { excludeId: number; value: Device | null; onChange: (d: Device) => void }) {
     return (
-        <label className="block space-y-1.5">
+        <div className="block space-y-1.5">
             <span className="px-1 text-[11px] font-medium text-white/55">Far-end device</span>
-            <div className="relative">
-                <button
-                    type="button"
-                    onClick={() => setOpen((o) => !o)}
-                    className={`${field} flex items-center justify-between gap-2 text-left`}
-                >
-                    <span className={`truncate ${value ? 'text-white' : 'text-white/45'}`}>
-                        {value ? value.name : 'Select a device on any map'}
-                    </span>
-                    <CaretDown weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/40" />
-                </button>
-
-                {open && (
-                    <>
-                        <button
-                            type="button"
-                            aria-hidden
-                            tabIndex={-1}
-                            className="fixed inset-0 z-10 cursor-default"
-                            onClick={() => setOpen(false)}
-                        />
-                        <div className="absolute z-20 mt-1.5 w-full rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
-                            <div className="flex items-center gap-2 px-2 py-1.5">
-                                <MagnifyingGlass weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/40" />
-                                <input
-                                    autoFocus
-                                    value={q}
-                                    onChange={(e) => setQ(e.target.value)}
-                                    placeholder="Search name or IP"
-                                    className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
-                                />
-                            </div>
-                            <ul className="max-h-56 overflow-auto">
-                                {matches.length === 0 ? (
-                                    <li className="px-3 py-2 text-xs text-white/35">No matching devices</li>
-                                ) : (
-                                    matches.slice(0, 60).map((d) => (
-                                        <li key={d.id}>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    onChange(d);
-                                                    setOpen(false);
-                                                }}
-                                                className={`w-full rounded-lg px-3 py-2 text-left transition-colors duration-200 ease-fluid hover:bg-white/5 ${
-                                                    value?.id === d.id ? 'bg-emerald-500/10 ring-1 ring-emerald-400/20' : ''
-                                                }`}
-                                            >
-                                                <span className="flex items-baseline justify-between gap-2">
-                                                    <span className="truncate text-sm text-white/90">{d.name}</span>
-                                                    <span className="shrink-0 font-mono text-[11px] text-white/40">{d.mgmt_ip}</span>
-                                                </span>
-                                            </button>
-                                        </li>
-                                    ))
-                                )}
-                            </ul>
-                        </div>
-                    </>
-                )}
-            </div>
-        </label>
+            <DevicePicker
+                value={value}
+                onChange={(d) => d && onChange(d)}
+                excludeId={excludeId}
+                placeholder="Select a device on any map"
+                className={field}
+            />
+        </div>
     );
 }
 
 /** Create a link starting from one fixed device (the inspector's selection), choosing the
  *  far end from any device - including one on a different map. Same create endpoint as the
  *  drag binder; only the far-end selection differs. */
-export function AddLinkDialog({
-    aDevice,
-    devices,
-    onClose,
-}: {
-    aDevice: Device;
-    devices: Device[];
-    onClose: () => void;
-}) {
+export function AddLinkDialog({ aDevice, onClose }: { aDevice: Device; onClose: () => void }) {
     const isAdmin = useIsAdmin();
     const [bDev, setBDev] = useState<Device | null>(null);
     const [aIf, setAIf] = useState('');
@@ -244,10 +167,6 @@ export function AddLinkDialog({
     const aPingOnly = aDevice.poll_method === 'none';
     const bPingOnly = bDev?.poll_method === 'none';
     const ready = bDev !== null && (aPingOnly || aIf !== '') && (bPingOnly || bIf !== '') && !busy;
-
-    // Every device except the near end - a peer already linked here just fails the
-    // duplicate check on submit, which is friendlier than silently hiding it.
-    const candidates = devices.filter((d) => d.id !== aDevice.id);
 
     if (!isAdmin) return null;
 
@@ -294,7 +213,9 @@ export function AddLinkDialog({
 
                     <div className="space-y-3.5">
                         <EndPicker device={aDevice} value={aIf} onChange={setAIf} />
-                        <PeerPicker devices={candidates} value={bDev} onChange={setBDev} />
+                        {/* Every device except the near end - a peer already linked here just fails
+                            the duplicate check on submit, which is friendlier than hiding it. */}
+                        <PeerPicker excludeId={aDevice.id} value={bDev} onChange={(d) => { setBDev(d); setBIf(''); }} />
                         {bDev && <EndPicker device={bDev} value={bIf} onChange={setBIf} />}
                         <MediaTypePicker value={media} onChange={setMedia} />
                     </div>

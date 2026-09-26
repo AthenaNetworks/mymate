@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { useDevices } from '../features/devices/api/getDevices';
+import { useDebounced, useDeviceList, useDevicesByIds } from '../features/devices/api/getDevices';
 import { useMaps } from '../features/maps/api/maps';
 import type { AlertScope, DeviceType } from '../types';
+
+const RESULTS = 50;
 
 const DEVICE_TYPES: DeviceType[] = ['router', 'switch', 'ap', 'server', 'internet', 'unknown'];
 
@@ -15,12 +17,19 @@ const field =
  * matches the backend targeting bag (App\Support\DeviceScope).
  */
 export function ScopeEditor({ scope, onChange }: { scope: AlertScope; onChange: (s: AlertScope) => void }) {
-    const { data: devices } = useDevices();
     const { data: maps } = useMaps();
     const [q, setQ] = useState('');
     const ids = scope.device_ids ?? [];
-    const query = q.trim().toLowerCase();
-    const list = (devices ?? []).filter((d) => !query || d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query));
+    const query = useDebounced(q.trim());
+    const picking = scope.type === 'devices';
+    // Server-side search (GitHub #22) plus the already-picked rows, which lead the list so the
+    // current selection is always visible whatever the search shows.
+    const { data: page } = useDeviceList({ q: query || undefined, per_page: RESULTS, fields: 'summary' }, { enabled: picking });
+    const { data: chosen } = useDevicesByIds(picking ? ids : []);
+    const lead = query ? [] : (chosen ?? []);
+    const leadIds = new Set(lead.map((d) => d.id));
+    const list = [...lead, ...(page?.data ?? []).filter((d) => !leadIds.has(d.id))];
+    const more = (page?.meta.total ?? 0) > RESULTS;
     const toggle = (id: number) =>
         onChange({ ...scope, device_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] });
 
@@ -83,6 +92,7 @@ export function ScopeEditor({ scope, onChange }: { scope: AlertScope; onChange: 
                             </label>
                         ))}
                         {list.length === 0 && <p className="px-2 py-2 text-center text-xs text-white/35">No devices match.</p>}
+                        {more && <p className="px-2 py-1 text-[11px] text-white/30">Showing the first {RESULTS} - search to find others.</p>}
                     </div>
                 </div>
             )}

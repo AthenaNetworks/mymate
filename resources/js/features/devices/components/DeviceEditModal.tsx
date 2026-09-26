@@ -5,7 +5,7 @@ import { useUpdateDevice } from '../api/updateDevice';
 import { Toggle } from '../../../components/Toggle';
 import { UseSnmpLocationButton } from './UseSnmpLocationButton';
 import { useCredentials } from '../../settings/api/credentials';
-import { useDevices } from '../api/getDevices';
+import { DevicePicker, type PickedDevice } from '../../../components/DevicePicker';
 import { useGeocode, useMapConfig } from '../../geo/api/geo';
 import { pushToast } from '../../../lib/toast';
 import type { Device, DeviceType, PollMethod } from '../../../types';
@@ -30,7 +30,6 @@ const label = 'block text-[11px] font-medium uppercase tracking-wide text-white/
 export function DeviceEditModal({ device, onClose }: { device: Device; onClose: () => void }) {
     const update = useUpdateDevice();
     const { data: credentials } = useCredentials();
-    const { data: devices } = useDevices();
 
     const [name, setName] = useState(device.name);
     const [mgmtIp, setMgmtIp] = useState(device.mgmt_ip ?? '');
@@ -39,7 +38,9 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const [credentialId, setCredentialId] = useState<string>(device.credential_id != null ? String(device.credential_id) : '');
     const [sshCredentialId, setSshCredentialId] = useState<string>(device.ssh_credential_id != null ? String(device.ssh_credential_id) : '');
     const [routerosCredentialId, setRouterosCredentialId] = useState<string>(device.routeros_credential_id != null ? String(device.routeros_credential_id) : '');
-    const [parentId, setParentId] = useState<string>(device.parent_device_id != null ? String(device.parent_device_id) : '');
+    const [parent, setParent] = useState<PickedDevice | null>(
+        device.parent_device_id != null ? { id: device.parent_device_id, name: device.parent_name ?? `device ${device.parent_device_id}` } : null,
+    );
     const [monitored, setMonitored] = useState<boolean>(device.monitored);
     const [lat, setLat] = useState<string>(device.latitude != null ? String(device.latitude) : '');
     const [lng, setLng] = useState<string>(device.longitude != null ? String(device.longitude) : '');
@@ -51,7 +52,6 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const matchingCreds = (credentials ?? []).filter((c) => c.type === pollMethod);
     const sshCreds = (credentials ?? []).filter((c) => c.type === 'ssh');
     const routerosCreds = (credentials ?? []).filter((c) => c.type === 'routeros');
-    const parentOptions = (devices ?? []).filter((d) => d.id !== device.id); // a device can't be its own parent
 
     function changePollMethod(m: PollMethod) {
         setPollMethod(m);
@@ -77,7 +77,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                 credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
                 ssh_credential_id: sshCredentialId === '' ? null : Number(sshCredentialId),
                 routeros_credential_id: routerosCredentialId === '' ? null : Number(routerosCredentialId),
-                parent_device_id: parentId === '' ? null : Number(parentId),
+                parent_device_id: parent?.id ?? null,
                 latitude: lat.trim() === '' ? null : Number(lat),
                 longitude: lng.trim() === '' ? null : Number(lng),
             },
@@ -184,15 +184,11 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                             <p className="px-1 text-[11px] text-white/35">Reads OSPF neighbours over the API on an SNMP-polled MikroTik (RouterOS doesn't expose OSPF over SNMP).</p>
                         </label>
 
-                        <label className="space-y-1 block">
+                        <div className="space-y-1 block">
                             <span className={label}>Parent (upstream device)</span>
-                            <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={field}>
-                                <option value="">None</option>
-                                {parentOptions.map((d) => (
-                                    <option key={d.id} value={d.id}>{d.name}</option>
-                                ))}
-                            </select>
-                        </label>
+                            {/* Searched server-side; the device and anything below it are left out. */}
+                            <DevicePicker value={parent} onChange={setParent} params={{ not_under: device.id }} noneLabel="None" className={field} />
+                        </div>
 
                         {/* Enable/disable monitoring. */}
                         <div className="flex items-center justify-between rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">

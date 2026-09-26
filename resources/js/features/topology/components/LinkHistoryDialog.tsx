@@ -7,6 +7,7 @@ import { InterfaceChart } from './InterfaceChart';
 import { EndPicker } from './LinkBinderDialog';
 import { MediaTypePicker } from './MediaTypePicker';
 import { useIsAdmin } from '../../auth/api/auth';
+import { useDevicesByIds } from '../../devices/api/getDevices';
 import { pushToast } from '../../../lib/toast';
 import { formatRate } from '../../../lib/formatRate';
 import type { ChartMode } from '../../../lib/shellStore';
@@ -235,16 +236,19 @@ function EditPanel({ link, devices, onSaved }: { link: Link; devices: Device[]; 
 
 export function LinkHistoryDialog({
     link,
-    devices,
+    devices: known,
     onClose,
     defaultTab = 'history',
 }: {
     link: Link;
-    devices: Device[];
+    devices?: Device[]; // rows the caller already has; the two ends are fetched either way
     onClose: () => void;
     defaultTab?: 'history' | 'edit';
 }) {
     const isAdmin = useIsAdmin();
+    // An end can sit on another map (or none), so don't rely on the caller having it.
+    const { data: ends } = useDevicesByIds([link.a_device_id, link.b_device_id]);
+    const devices = useMemo(() => [...(ends ?? []), ...(known ?? [])], [ends, known]);
     const [windowSec, setWindowSec] = useState<number>(3600);
     // Read-only viewers only ever see the history chart - the Edit tab is a write tool.
     const [tab, setTab] = useState<'history' | 'edit'>(isAdmin ? defaultTab : 'history');

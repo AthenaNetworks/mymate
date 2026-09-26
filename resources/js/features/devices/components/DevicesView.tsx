@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold } from '@phosphor-icons/react';
-import { useDevices } from '../api/getDevices';
+import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold, CaretLeft, CaretRight } from '@phosphor-icons/react';
+import { useDebounced, useDeviceList, useDeviceStats, type DeviceListParams } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
 import { useUnplaceDevice } from '../api/unplaceDevice';
 import { useUpdateDevice } from '../api/updateDevice';
@@ -19,12 +19,21 @@ import type { Device } from '../../../types';
 type PendingUpgrade = { ids: number[]; willUpgrade: UpgradePlanRow[]; skipped: UpgradePlanRow[] };
 
 const DEVICE_TYPES: Device['device_type'][] = ['router', 'switch', 'ap', 'server', 'internet', 'unknown'];
+const PAGE_SIZE = 50;
+const SORTS: { value: NonNullable<DeviceListParams['sort']>; label: string }[] = [
+    { value: 'name', label: 'Name A-Z' },
+    { value: '-name', label: 'Name Z-A' },
+    { value: 'status', label: 'Down first' },
+    { value: 'mgmt_ip', label: 'IP' },
+    { value: '-last_change', label: 'Last change' },
+    { value: 'vendor', label: 'Vendor' },
+    { value: 'model', label: 'Model' },
+];
 const selectCls = 'rounded-lg bg-white/[0.04] px-2 py-1.5 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40';
 
 /** Full-page device management - add form on the left, the device list on the right. */
 export function DevicesView() {
     const isAdmin = useIsAdmin();
-    const { data: devices, isLoading } = useDevices();
     const del = useDeleteDevice();
     const unplace = useUnplaceDevice();
     const update = useUpdateDevice();
@@ -45,27 +54,36 @@ export function DevicesView() {
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
     const [confirmBulkUnplace, setConfirmBulkUnplace] = useState(false);
 
-    // Search + filters.
+    // Search, filters, sort and paging all happen on the server (GitHub #22) - the list only ever
+    // holds one page, so it stays quick at 25k devices.
     const [query, setQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
     const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
     const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
     const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced'>('all'); // on a map / hidden from every map
-    const q = query.trim().toLowerCase();
-    const filtered = (devices ?? []).filter(
-        (d) =>
-            (statusFilter === 'all' || d.status === statusFilter) &&
-            (typeFilter === 'all' || d.device_type === typeFilter) &&
-            (monitoredFilter === 'all' || (monitoredFilter === 'live') === d.monitored) &&
-            // A payload without the count (older API) is treated as placed so nothing vanishes.
-            (mapFilter === 'all' || (mapFilter === 'placed') === ((d.maps_count ?? 1) > 0)) &&
-            (!q ||
-                d.name.toLowerCase().includes(q) ||
-                (d.mgmt_ip ?? '').includes(q) ||
-                (d.model ?? '').toLowerCase().includes(q) ||
-                (d.vendor ?? '').toLowerCase().includes(q)),
-    );
-    const filtersActive = q !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all';
+    const [sort, setSort] = useState<NonNullable<DeviceListParams['sort']>>('name');
+    const q = useDebounced(query.trim());
+    const params: DeviceListParams = {
+        q: q || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        device_type: typeFilter === 'all' ? undefined : typeFilter,
+        monitored: monitoredFilter === 'all' ? undefined : monitoredFilter === 'live',
+        placed: mapFilter === 'all' ? undefined : mapFilter === 'placed',
+        sort,
+    };
+    // The page belongs to the query it was picked for; change the search, a filter or the sort
+    // and it's back to page 1.
+    const filterKey = JSON.stringify(params);
+    const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+    const page = paging.key === filterKey ? paging.page : 1;
+    const setPage = (p: number) => setPaging({ key: filterKey, page: p });
+    const { data, isLoading, isFetching } = useDeviceList({ ...params, page, per_page: PAGE_SIZE });
+    const { data: stats } = useDeviceStats();
+    const filtered = data?.data ?? [];
+    const matching = data?.meta.total ?? 0;
+    const lastPage = data?.meta.last_page ?? 1;
+    const fleetTotal = stats?.total ?? matching;
+    const filtersActive = query.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all';
     const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
 
     function open(id: number) {
@@ -164,7 +182,7 @@ export function DevicesView() {
                             <p className="truncate text-xs text-white/40">Add, inspect, and manage monitored devices</p>
                         </div>
                     </div>
-                    <span className="shrink-0 text-xs tabular-nums text-white/35">{devices?.length ?? 0} total</span>
+                    <span className="shrink-0 text-xs tabular-nums text-white/35">{fleetTotal} total</span>
                 </header>
 
                 <div className={`grid min-w-0 items-start gap-6 ${isAdmin ? 'lg:grid-cols-[21rem_1fr]' : ''}`}>
@@ -179,7 +197,7 @@ export function DevicesView() {
                         <div className="mb-3 space-y-2">
                             <div className="flex flex-wrap items-center justify-between gap-2 px-1">
                                 <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">
-                                    All devices <span className="text-white/25">({filtered.length})</span>
+                                    {filtersActive ? 'Matching' : 'All devices'} <span className="text-white/25">({matching})</span>
                                 </p>
                                 {isAdmin && selected.size > 0 && (
                                     <div className="flex flex-wrap items-center gap-2.5">
@@ -256,6 +274,13 @@ export function DevicesView() {
                                     <option value="placed">On a map</option>
                                     <option value="unplaced">Not on any map</option>
                                 </select>
+                                <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} title="Sort" className={selectCls}>
+                                    {SORTS.map((s) => (
+                                        <option key={s.value} value={s.value}>
+                                            {s.label}
+                                        </option>
+                                    ))}
+                                </select>
                                 {filtersActive && (
                                     <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
                                         Clear
@@ -264,7 +289,7 @@ export function DevicesView() {
                                 {isAdmin && filtered.length > 0 && (
                                     <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-white/45">
                                         <input type="checkbox" checked={allSelected} onChange={toggleAll} className="h-3.5 w-3.5 cursor-pointer accent-amber-400" />
-                                        Select all
+                                        {lastPage > 1 ? 'Select page' : 'Select all'}
                                     </label>
                                 )}
                             </div>
@@ -281,19 +306,19 @@ export function DevicesView() {
                             </ul>
                         )}
 
-                        {!isLoading && (devices?.length ?? 0) === 0 && (
+                        {!isLoading && fleetTotal === 0 && (
                             <p className="rounded-xl bg-white/[0.02] px-3 py-3 text-xs text-white/40 ring-1 ring-white/[0.06]">
                                 No devices yet - add one on the left, or use <span className="text-white/60">Discover</span> to scan a subnet.
                             </p>
                         )}
 
-                        {!isLoading && (devices?.length ?? 0) > 0 && filtered.length === 0 && (
+                        {!isLoading && fleetTotal > 0 && filtered.length === 0 && (
                             <p className="rounded-xl bg-white/[0.02] px-3 py-3 text-xs text-white/40 ring-1 ring-white/[0.06]">
                                 No devices match your search or filters.
                             </p>
                         )}
 
-                        <ul className="min-w-0 space-y-0.5">
+                        <ul className={`min-w-0 space-y-0.5 transition-opacity ${isFetching && !isLoading ? 'opacity-60' : ''}`}>
                             {filtered.map((d) => {
                                 const upgradable = d.poll_method === 'routeros'; // only RouterOS can be upgraded
                                 return (
@@ -406,6 +431,35 @@ export function DevicesView() {
                                 );
                             })}
                         </ul>
+
+                        {lastPage > 1 && (
+                            <div className="mt-3 flex items-center justify-between gap-2 px-1 text-xs text-white/45">
+                                <span className="tabular-nums">
+                                    {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, matching)} of {matching}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => setPage(page - 1)}
+                                        disabled={page <= 1}
+                                        title="Previous page"
+                                        className="rounded-lg p-1.5 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/80 disabled:opacity-30"
+                                    >
+                                        <CaretLeft weight="bold" className="h-3.5 w-3.5" />
+                                    </button>
+                                    <span className="px-1.5 font-mono tabular-nums">
+                                        {page} / {lastPage}
+                                    </span>
+                                    <button
+                                        onClick={() => setPage(page + 1)}
+                                        disabled={page >= lastPage}
+                                        title="Next page"
+                                        className="rounded-lg p-1.5 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/80 disabled:opacity-30"
+                                    >
+                                        <CaretRight weight="bold" className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

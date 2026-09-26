@@ -1,5 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../../lib/apiClient';
+import { deviceKeys } from './getDevices';
 
 /**
  * Queue a firmware upgrade for one or many devices. Destructive (reboots gear) -
@@ -17,7 +18,11 @@ export interface UpgradeDevicesInput {
 }
 
 export function useUpgradeDevices() {
+    const qc = useQueryClient();
     return useMutation({
+        // The server marks them queued straight away; refetch so the spinners show and the
+        // queries start polling (they poll while any row they hold is mid-upgrade).
+        onSuccess: () => qc.invalidateQueries({ queryKey: deviceKeys.all }),
         mutationFn: async ({ deviceIds, ordered, explicitOrder, version, source }: UpgradeDevicesInput): Promise<{ queued: number; ordered: boolean }> => {
             const { data } = await apiClient.post<{ queued: number; ordered: boolean }>('/devices/upgrade', {
                 device_ids: deviceIds,
