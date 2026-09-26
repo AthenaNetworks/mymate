@@ -200,6 +200,7 @@ export interface NetworkInterface {
     if_index: number;
     name: string;
     description: string | null;
+    oper_status: 'up' | 'down' | null; // link state from the last poll; null = not reported yet
     speed_mbps: number | null; // physical port capacity, read-only from SNMP
     ospf_cost: number | null; // OSPF outbound metric (RouterOS API), null if not OSPF
     util_in: number | null; // per-port utilisation % (vs speed_mbps) - inspector only
@@ -621,6 +622,17 @@ export interface InterfaceUtilFrame {
     bps_in: number | null;
     bps_out: number | null;
     status: DeviceStatus;
+}
+
+// An alert started firing or a firing one resolved (GitHub #22) - drives the map-screen popup for a
+// port going down and the live count on the Alerts nav item.
+export interface AlertStateChangedPayload {
+    id: number;
+    state: 'firing' | 'resolved';
+    condition: AlertConditionType | null;
+    message: string;
+    device_id: number | null;
+    interface_id: number | null; // set for a port-level alert (interface down, optical, per-port throughput)
 }
 
 export interface InterfaceUtilUpdatedPayload {

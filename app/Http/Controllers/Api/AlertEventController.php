@@ -11,11 +11,19 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 /** Recent fired/resolved alerts, newest first. */
 class AlertEventController extends Controller
 {
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
+        // ?status=firing lists only what's firing right now (the nav badge), so a long-firing alert
+        // can't fall out of the 200 most recent rows.
+        $status = $request->query('status');
+
         return AlertEventResource::collection(
             AlertEvent::with(['policy:id,name,condition', 'acknowledgedBy:id,name'])
-                ->where('status', '!=', 'pending') // hide breaches that haven't fired yet
+                ->when(
+                    $status === 'firing' || $status === 'resolved',
+                    fn ($q) => $q->where('status', $status),
+                    fn ($q) => $q->where('status', '!=', 'pending'), // hide breaches that haven't fired yet
+                )
                 ->latest('fired_at')
                 ->limit(200)
                 ->get(),

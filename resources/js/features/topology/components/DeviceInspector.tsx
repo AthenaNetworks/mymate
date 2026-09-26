@@ -351,6 +351,11 @@ function InterfacesList({
                                         {i.name}
                                         {peer ? <span className="text-white/35"> → {peer}</span> : null}
                                     </span>
+                                    {i.oper_status === 'down' ? (
+                                        <span className="shrink-0 rounded bg-rose-500/15 px-1 text-[9px] font-semibold uppercase text-rose-300 ring-1 ring-rose-400/25">
+                                            down
+                                        </span>
+                                    ) : null}
                                     <SpeedTag iface={i} />
                                     <span className="w-10 shrink-0 text-right font-mono text-[11px] text-white/75">{compactRate(load)}</span>
                                 </div>

@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Port alerts show up on the map screen (GitHub #22).** When an alert starts firing or a firing one
+  clears, the map now pops it up live the way it does a device outage, so a port going down on a core
+  link gets noticed without anyone sitting on the Alerts page. Only port-level alerts toast (device
+  down already has its own popup), and it follows your alert policies, so if you only alert on uplinks
+  that's all you'll see. The Alerts item in the nav has a red count of what's firing right now, and a
+  port that's operationally down is marked "down" in the device panel's interface list. Restricted
+  operators only hear about devices on their own maps.
 - **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
   building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
   elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet

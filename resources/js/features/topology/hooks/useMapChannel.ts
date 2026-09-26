@@ -5,7 +5,8 @@ import { useCurrentUser } from '../../auth/api/auth';
 import { deviceKeys } from '../../devices/api/getDevices';
 import { outageKeys } from '../../outages/api/getOutages';
 import { linkKeys } from '../api/getLinks';
-import type { Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
+import { deviceInterfaceKeys } from '../api/getDeviceInterfaces';
+import type { AlertStateChangedPayload, Device, DeviceLatencyUpdatedPayload, DeviceMetricsUpdatedPayload, DeviceStatus, InterfaceUtilUpdatedPayload } from '../../../types';
 
 type DeviceStatusChangedPayload = {
     id: number;
@@ -25,6 +26,7 @@ type DeviceStatusChangedPayload = {
 export function useMapChannel(
     onUtil?: (payload: InterfaceUtilUpdatedPayload) => void,
     onStatus?: (e: { id: number; name: string; status: DeviceStatus }) => void,
+    onAlert?: (e: AlertStateChangedPayload) => void,
 ) {
     const qc = useQueryClient();
     // An unrestricted operator hears the whole fleet on the shared `map` channel. A restricted one
@@ -73,6 +75,16 @@ export function useMapChannel(
                 onStatus?.({ id: e.id, name: before.name, status: e.status });
                 refreshOutagesSoon();
             }
+        });
+
+        // An alert fired or resolved: refresh the Alerts views + the nav count, and for a port alert
+        // the device's interface list so the inspector shows the port's new state straight away.
+        channel.listen('.AlertStateChanged', (e: AlertStateChangedPayload) => {
+            void qc.invalidateQueries({ queryKey: ['alert-events'] });
+            if (e.interface_id !== null && e.device_id !== null) {
+                void qc.invalidateQueries({ queryKey: deviceInterfaceKeys(e.device_id) });
+            }
+            onAlert?.(e);
         });
 
         channel.listen('.InterfaceUtilUpdated', (e: InterfaceUtilUpdatedPayload) => {
@@ -134,5 +146,5 @@ export function useMapChannel(
             if (outageTimer !== null) clearTimeout(outageTimer);
             echo.leave(channelName);
         };
-    }, [qc, onUtil, onStatus, channelName]);
+    }, [qc, onUtil, onStatus, onAlert, channelName]);
 }

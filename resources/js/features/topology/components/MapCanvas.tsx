@@ -50,7 +50,7 @@ import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from 
 import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
-import type { Device, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
+import type { AlertStateChangedPayload, Device, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
 
 /** Compare two devices' face-sensor label sets by value, so a routine refetch that returns the
  *  same readings doesn't re-render the card (GitHub #40). */
@@ -261,7 +261,40 @@ export function MapCanvas() {
             statusFlush.current = null;
         }, 3000);
     }, []);
-    useMapChannel(handleUtil, handleStatus);
+    // Port alerts on the map screen (GitHub #22): a port going down (or a per-port optical / throughput
+    // alert) pops up like a device outage does. Only port-level alerts - device up/down already has
+    // its own toast above. Coalesced the same way, so a switch reboot taking 24 ports down is one
+    // summary, not 24 toasts. Which ports count is whatever the alert policy watches.
+    const alertBuf = useRef<{ down: number; up: number; last: AlertStateChangedPayload | null }>({ down: 0, up: 0, last: null });
+    const alertFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const handleAlert = useCallback((e: AlertStateChangedPayload) => {
+        if (e.interface_id === null) return;
+        const b = alertBuf.current;
+        if (e.state === 'firing') b.down++;
+        else b.up++;
+        b.last = e;
+        if (alertFlush.current) return;
+        alertFlush.current = setTimeout(() => {
+            const a = alertBuf.current;
+            if (a.down + a.up === 1 && a.last) {
+                pushToast({
+                    title: a.last.state === 'firing' ? 'Port alert' : 'Port alert cleared',
+                    detail: a.last.message,
+                    tone: a.last.state === 'firing' ? 'down' : 'up',
+                    key: `port-alert-${a.last.interface_id}`,
+                }, 10000);
+            } else {
+                const parts: string[] = [];
+                if (a.down) parts.push(`${a.down} port alert${a.down === 1 ? '' : 's'}`);
+                if (a.up) parts.push(`${a.up} cleared`);
+                pushToast({ title: parts.join(', '), detail: 'See the Alerts page for the list', tone: a.down >= a.up ? 'down' : 'up', key: 'port-alert-summary' }, 10000);
+            }
+            alertBuf.current = { down: 0, up: 0, last: null };
+            alertFlush.current = null;
+        }, 3000);
+    }, []);
+    useEffect(() => () => { if (alertFlush.current) clearTimeout(alertFlush.current); }, []);
+    useMapChannel(handleUtil, handleStatus, handleAlert);
 
     const statusById = useMemo<Record<number, DeviceStatus>>(
         () => Object.fromEntries((devices ?? []).map((d) => [d.id, d.status])),

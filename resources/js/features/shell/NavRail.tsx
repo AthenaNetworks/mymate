@@ -21,7 +21,7 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
 
 /** The nav body - shared by the desktop rail and the mobile drawer so the two stay
  *  in lock-step. Tapping an item navigates and closes the drawer (a no-op at lg+). */
-function NavContent({ outageCount }: { outageCount: number }) {
+function NavContent({ outageCount, alertCount }: { outageCount: number; alertCount: number }) {
     const view = useView();
     // This install's version, from the update-check endpoint (VERSION file / MYMATE_VERSION).
     const { data: update } = useUpdateCheck();
@@ -58,6 +58,11 @@ function NavContent({ outageCount }: { outageCount: number }) {
                                         {outageCount}
                                     </span>
                                 ) : null}
+                                {it.id === 'alerts' && alertCount > 0 ? (
+                                    <span title="Alerts firing now" className="rounded-full bg-rose-500/20 px-1.5 text-[10px] font-semibold tabular-nums text-rose-300 ring-1 ring-rose-400/20">
+                                        {alertCount}
+                                    </span>
+                                ) : null}
                             </button>
                         </li>
                     );
@@ -78,15 +83,16 @@ function NavContent({ outageCount }: { outageCount: number }) {
 
 /** Left workspace rail - switches the active view; legend + engine footer pinned to the bottom.
  *  Responsive: a static column at `lg`+, a hamburger-triggered off-canvas drawer below.
- *  `outageCount` is the live number of ongoing outages (badge), passed from AppShell. */
-export function NavRail({ outageCount = 0 }: { outageCount?: number }) {
+ *  `outageCount` is the live number of ongoing outages (badge), `alertCount` the alerts firing now,
+ *  both passed from AppShell. */
+export function NavRail({ outageCount = 0, alertCount = 0 }: { outageCount?: number; alertCount?: number }) {
     const navOpen = useNavOpen();
 
     return (
         <>
             {/* Desktop / large screens: a static column in the shell row. */}
             <nav className="z-10 hidden w-52 shrink-0 flex-col gap-6 border-r border-white/10 bg-white/[0.02] p-3 backdrop-blur-2xl lg:flex">
-                <NavContent outageCount={outageCount} />
+                <NavContent outageCount={outageCount} alertCount={alertCount} />
             </nav>
 
             {/* Phone / tablet: an off-canvas drawer (below lg) that slides in over the map.
@@ -113,7 +119,7 @@ export function NavRail({ outageCount = 0 }: { outageCount?: number }) {
                     >
                         <X weight="bold" className="h-4 w-4" />
                     </button>
-                    <NavContent outageCount={outageCount} />
+                    <NavContent outageCount={outageCount} alertCount={alertCount} />
                 </nav>
             </div>
         </>
