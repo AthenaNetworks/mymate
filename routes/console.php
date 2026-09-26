@@ -16,6 +16,13 @@ Artisan::command('inspire', function () {
 // is the standard scheduler path for deployments running `schedule:work`.
 Schedule::job(new ManageHistoryPartitionsJob)->daily()->name('history-partitions')->withoutOverlapping();
 
+// Long-term history (GitHub #28): roll closed raw buckets up into the 5m / 1h tiers. Each run
+// is time-boxed and picks up where the last stopped, which is also how an upgrade backfills the
+// raw history it already has. Its own process so a long catch-up never holds up the scheduler;
+// the overlap lock expires after 15 min so a killed run can't wedge it for a day.
+Schedule::command('mymate:history:rollup')->everyFiveMinutes()->name('history-rollup')
+    ->withoutOverlapping(15)->runInBackground();
+
 // Device config backups: nightly, fan out one backup job per
 // backup-enabled device onto the isolated `backup` queue (the SSH capture runs in the
 // Rusted sidecar). Off-peak so a slow fleet-wide sweep doesn't compete with the day.

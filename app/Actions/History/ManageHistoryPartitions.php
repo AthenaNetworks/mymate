@@ -8,11 +8,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Roll the daily history partitions forward and drop expired ones for every
- * RANGE-partitioned samples table (interface_samples + device_metric_samples).
- * Idempotent - safe to run repeatedly (loop cadence, scheduler, or
- * `mymate:loop --partitions`). Retention = drop partitions whose day is older than
- * `history.retention_days`.
+ * Roll the history partitions forward and drop expired ones, for the daily-partitioned raw
+ * samples tables and for the rollup tiers (GitHub #28): 5m rollups are daily partitions too,
+ * 1h rollups monthly. Idempotent - safe to run repeatedly (loop cadence, scheduler, or
+ * `mymate:loop --partitions`). Each tier has its own retention, see HistoryTiers.
  */
 class ManageHistoryPartitions
 {
@@ -26,6 +25,7 @@ class ManageHistoryPartitions
         // Retention is operator-editable - read the live Settings value.
         $retentionDays = max(1, app(Settings::class)->getInt('history.retention_days', 14));
         $cutoff = now()->startOfDay()->subDays($retentionDays);
+        $tiers = app(HistoryTiers::class);
 
         $created = 0;
         $dropped = 0;
@@ -33,26 +33,47 @@ class ManageHistoryPartitions
             // Ensure [yesterday .. today+ahead] exist (yesterday covers writes that land
             // just after a UTC-midnight rollover).
             for ($i = -1; $i <= $ahead; $i++) {
-                if ($this->ensureDailyPartition($table, now()->startOfDay()->addDays($i))) {
+                if ($this->ensure($table, 'day', now()->startOfDay()->addDays($i))) {
                     $created++;
                 }
             }
-            $dropped += $this->dropPartitionsBefore($table, $cutoff);
+            $dropped += $this->dropPartitionsBefore($table, 'day', $cutoff);
+        }
+
+        foreach (array_keys(HistoryFamilies::FAMILIES) as $family) {
+            foreach (HistoryTiers::ROLLUPS as $tier => $meta) {
+                $table = HistoryFamilies::rollupTable($family, $tier);
+                if ($meta['grain'] === 'day') {
+                    for ($i = -1; $i <= $ahead; $i++) {
+                        $created += (int) $this->ensure($table, 'day', now()->startOfDay()->addDays($i));
+                    }
+                } else {
+                    // this month and next, so the rollover at month end never finds a gap
+                    $created += (int) $this->ensure($table, 'month', now()->startOfMonth());
+                    $created += (int) $this->ensure($table, 'month', now()->startOfMonth()->addMonthNoOverflow());
+                }
+                $dropped += $this->dropPartitionsBefore($table, $meta['grain'], $tiers->cutoff($tier));
+            }
         }
 
         return ['created' => $created, 'dropped' => $dropped];
     }
 
-    /** Create the daily partition for $day if absent. Returns true if it created one. */
-    private function ensureDailyPartition(string $table, Carbon $day): bool
+    /**
+     * Create the partition of $table holding $at if it's absent ("{table}_YYYYMMDD" for a day
+     * grain, "{table}_YYYYMM" for a month). Returns true if it created one.
+     */
+    public function ensure(string $table, string $grain, Carbon $at): bool
     {
-        $name = $table.'_'.$day->format('Ymd');
+        $start = $grain === 'month' ? $at->copy()->startOfMonth() : $at->copy()->startOfDay();
+        $end = $grain === 'month' ? $start->copy()->addMonthNoOverflow() : $start->copy()->addDay();
+        $name = $table.'_'.$start->format($grain === 'month' ? 'Ym' : 'Ymd');
         if (Schema::hasTable($name)) {
             return false;
         }
 
-        $from = $day->format('Y-m-d 00:00:00');
-        $to = $day->copy()->addDay()->format('Y-m-d 00:00:00');
+        $from = $start->format('Y-m-d 00:00:00');
+        $to = $end->format('Y-m-d 00:00:00');
 
         DB::statement(
             "CREATE TABLE IF NOT EXISTS \"{$name}\" PARTITION OF {$table} FOR VALUES FROM ('{$from}') TO ('{$to}')"
@@ -61,19 +82,42 @@ class ManageHistoryPartitions
         return true;
     }
 
-    /** Drop every daily partition of $table whose day is strictly before $cutoffDay. */
-    private function dropPartitionsBefore(string $table, Carbon $cutoffDay): int
+    /** Start of the oldest partition $table has, or null when it has none. */
+    public function oldestPartitionStart(string $table): ?Carbon
     {
-        $cutoff = (int) $cutoffDay->format('Ymd');
+        $prefixLen = strlen($table) + 1;
+        $oldest = null;
+        foreach ($this->partitionNames($table) as $name) {
+            $part = substr($name, $prefixLen);
+            if (! ctype_digit($part) || (strlen($part) !== 8 && strlen($part) !== 6)) {
+                continue;
+            }
+            $start = Carbon::createFromFormat(strlen($part) === 8 ? '!Ymd' : '!Ym', $part);
+            if ($oldest === null || $start->lessThan($oldest)) {
+                $oldest = $start;
+            }
+        }
+
+        return $oldest;
+    }
+
+    /**
+     * Drop every partition of $table that's wholly before $cutoff: a daily one whose day is
+     * strictly before the cutoff day, a monthly one whose month is strictly before the cutoff's.
+     */
+    private function dropPartitionsBefore(string $table, string $grain, Carbon $cutoff): int
+    {
+        $len = $grain === 'month' ? 6 : 8;
+        $limit = (int) $cutoff->format($grain === 'month' ? 'Ym' : 'Ymd');
         $prefixLen = strlen($table) + 1; // "{table}_"
         $dropped = 0;
 
         foreach ($this->partitionNames($table) as $name) {
             $datePart = substr($name, $prefixLen);
-            if (strlen($datePart) !== 8 || ! ctype_digit($datePart)) {
-                continue; // not a YYYYMMDD daily partition - leave it alone
+            if (strlen($datePart) !== $len || ! ctype_digit($datePart)) {
+                continue; // not one of our partitions - leave it alone
             }
-            if ((int) $datePart < $cutoff) {
+            if ((int) $datePart < $limit) {
                 DB::statement("DROP TABLE IF EXISTS \"{$name}\"");
                 $dropped++;
             }

@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\History\GetGraphData;
+use App\Actions\History\HistoryTiers;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreGraphRequest;
 use App\Http\Resources\GraphResource;
 use App\Models\Graph;
-use App\Support\Settings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -16,8 +16,11 @@ use Illuminate\Http\Response;
 /** Custom graph CRUD plus the multi-interface time series that backs one (GitHub #28). */
 class GraphController extends Controller
 {
-    /** Named time ranges -> seconds back from now. Capped by history retention. */
-    private const RANGES = ['1h' => 3600, '6h' => 21600, '24h' => 86400, '7d' => 604800, '30d' => 2592000];
+    /** Named time ranges -> seconds back from now. Capped by how long any history tier keeps data. */
+    private const RANGES = [
+        '1h' => 3600, '6h' => 21600, '24h' => 86400, '7d' => 604800, '30d' => 2592000,
+        '90d' => 7776000, '180d' => 15552000, '365d' => 31536000,
+    ];
 
     public function index(): AnonymousResourceCollection
     {
@@ -46,12 +49,12 @@ class GraphController extends Controller
     }
 
     /** The aligned per-series (and optional total) data for one graph over the chosen range. */
-    public function data(Request $request, Graph $graph, GetGraphData $get): JsonResponse
+    public function data(Request $request, Graph $graph, GetGraphData $get, HistoryTiers $tiers): JsonResponse
     {
         $seconds = self::RANGES[$request->query('range', '24h')] ?? 86400;
         // Don't ask for more history than we keep, or the chart just shows empty leading space.
-        $retentionDays = max(1, app(Settings::class)->getInt('history.retention_days', 14));
-        $seconds = min($seconds, $retentionDays * 86400);
+        // The rollup tiers outlive raw (GitHub #28), so the longest kept tier is the limit.
+        $seconds = min($seconds, $tiers->maxDays() * 86400);
 
         $to = now();
         $from = $to->copy()->subSeconds($seconds);

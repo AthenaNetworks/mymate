@@ -20,6 +20,10 @@ class Settings
         'poll.discover_interval' => ['min' => 60, 'max' => 86400, 'label' => 'Interface re-discovery interval (seconds)'],
         'discovery.check_interval' => ['min' => 5, 'max' => 3600, 'label' => 'Discovery scan-check interval (seconds)'],
         'history.retention_days' => ['min' => 1, 'max' => 365, 'label' => 'Recent-history retention (days)'],
+        // Long-term rollups (GitHub #28). 5m is the source the hourly tier is built from, so it
+        // has to outlive a day or two of the rollup job being down.
+        'history.rollup_5m_days' => ['min' => 2, 'max' => 365, 'label' => '5-minute rollup retention (days)'],
+        'history.rollup_1h_days' => ['min' => 1, 'max' => 3650, 'label' => 'Hourly rollup retention (days)'],
     ];
 
     /** DB override if present, else the config/mymate.php default. */

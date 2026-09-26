@@ -56,6 +56,30 @@ of commit subjects.
   are checked by content, not name, and SVGs are cleaned on upload (script, event handlers, embedded
   HTML and anything pointing outside the file are stripped, DOCTYPEs refused) and always served
   sandboxed.
+- **Long-term history, a year of graphs (GitHub #28).** Raw samples still keep full detail for the
+  raw retention (14 days by default), but interface traffic, ping, device metrics, custom sensors and
+  service probes are now also rolled up into 5 minute and hourly aggregates that are kept much longer:
+  30 days of 5 minute and 400 days of hourly by default, each with its own setting in Settings -> Engine.
+  Graphs and the inspector charts get 90 day, 180 day and 1 year ranges, and they pick the right source
+  on their own - short windows read raw, longer ones the rollups, and a window that runs up to now
+  stitches the rollups onto the latest raw samples so nothing goes missing at the join. Long ranges
+  are also much quicker because they read one row per 5 minutes or hour instead of every poll. The
+  rollups keep sums and counts, so averages stay exact at every zoom level, and they keep the peak too
+  (a short burst still shows as the max in the data even on a year long graph). A new
+  `mymate:history:rollup` command runs every 5 minutes from the scheduler; `--backfill` runs it until
+  it's caught up in one go.
+
+  *Upgrade notes:* the migration adds a BRIN index on `ts` to every raw samples table, built one
+  partition at a time with `CREATE INDEX CONCURRENTLY` so polling isn't blocked, it takes about as long
+  as reading the history tables once. After that the scheduler starts rolling up the raw history you
+  already have, oldest first, a few minutes of work per run, so existing installs get their first
+  weeks of long-term history without doing anything. As a guide, 1000 interfaces at a 60s poll backfill
+  14 days in a minute or two; a 100k-interface install at 12s polls needs a couple of hours of
+  background runs. Run `php artisan mymate:history:rollup --backfill` if you'd rather do it in one go.
+  Disk: roughly 1.4 GB per 1000 interfaces for the 5 minute tier and 1.6 GB per 1000 interfaces for
+  a full 400 days of hourly, growing to that over the retention period (see REQUIREMENTS.md). The
+  scheduler (`schedule:work`, already part of every install) has to be running for rollups to happen;
+  without it everything still reads raw like before.
 - **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
   building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
   elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet
@@ -146,6 +170,10 @@ of commit subjects.
   editors send the coordinates back on every save, which marked the location manual even when nothing
   about it changed, so a simple rename stopped the SNMP location from ever moving the device again. Only
   an actual change of coordinates counts as a manual pin now.
+- **Device total throughput on 24h and longer charts was inflated.** The inspector's device-wide chart
+  summed every sample in a bucket, so once a bucket held several polls per interface (anything past
+  about an hour) the total was multiplied by the number of polls in it. It now averages each interface
+  over the bucket and then adds them up.
 - **Restricted operators no longer receive live updates for devices outside their maps.** The live
   map's websocket channel carried the whole fleet and let any signed-in user subscribe, so a
   map-restricted operator (per-user or through a group) was sent live status, traffic and metrics for

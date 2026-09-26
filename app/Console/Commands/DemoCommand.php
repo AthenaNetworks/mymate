@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Actions\Alerts\EvaluateAlerts;
 use App\Actions\History\ManageHistoryPartitions;
+use App\Actions\History\RollupHistory;
 use App\Actions\Outages\RecordOutage;
 use App\Enums\AlertCondition;
 use App\Enums\DeviceStatus;
@@ -12,11 +13,11 @@ use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\AlertPolicy;
 use App\Models\Device;
-use App\Support\LiveBroadcast;
 use App\Models\Link;
 use App\Models\Map;
 use App\Models\Outage;
 use App\Models\User;
+use App\Support\LiveBroadcast;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
@@ -191,6 +192,9 @@ class DemoCommand extends Command
         foreach (array_chunk($ping, 1000) as $chunk) {
             DB::table('ping_samples')->insert($chunk);
         }
+
+        // The window was rewritten under any rollups already made, recompute them from raw.
+        RollupHistory::rewind(['interface', 'device_metric', 'ping']);
 
         $this->info('Backfilled 24h of demo history ('.count($iface).' throughput, '.count($metric).' metric, '.count($ping).' ping samples).');
     }
@@ -457,7 +461,7 @@ class DemoCommand extends Command
      * outlives the start-of-run create-ahead window) roll the partitions forward and
      * retry once. Still best-effort overall: history must never break a tick.
      *
-     * @param list<array<string,mixed>> $rows
+     * @param  list<array<string,mixed>>  $rows
      */
     private function insertSamples(string $table, array $rows): void
     {

@@ -14,6 +14,9 @@ const RANGES: { key: string; label: string }[] = [
     { key: '24h', label: '24h' },
     { key: '7d', label: '7d' },
     { key: '30d', label: '30d' },
+    { key: '90d', label: '90d' },
+    { key: '180d', label: '180d' },
+    { key: '365d', label: '1y' },
 ];
 
 const pill = (active: boolean) =>

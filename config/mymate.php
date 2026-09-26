@@ -397,6 +397,25 @@ return [
         'max_points' => (int) env('MYMATE_HISTORY_MAX_POINTS', 240),
         // History API: default lookback window (s) when from/to aren't given.
         'default_window' => (int) env('MYMATE_HISTORY_DEFAULT_WINDOW', 3600),
+        // Long-term rollups (GitHub #28): 5 minute and hourly aggregates kept far longer than
+        // raw, filled by `mymate:history:rollup` (scheduled every 5 minutes). Retention per
+        // tier is editable in Settings; these are the defaults. 400 days of hourly covers a
+        // year of graphs with room to spare.
+        'rollup_5m_days' => (int) env('MYMATE_HISTORY_ROLLUP_5M_DAYS', 30),
+        'rollup_1h_days' => (int) env('MYMATE_HISTORY_ROLLUP_1H_DAYS', 400),
+        'rollup' => [
+            // A bucket only counts as closed this many seconds after it ends, so a slow poll
+            // whose rows land a bit after their ts still makes it in. Readers stitch raw on
+            // for the tail, so a bigger grace costs nothing visible.
+            'grace' => (int) env('MYMATE_HISTORY_ROLLUP_GRACE', 300),
+            // Raw seconds rolled into 5m per statement, and 5m/raw seconds into 1h. Keeps each
+            // INSERT ... SELECT short on big fleets; lower slice_5m if one hour of raw is huge.
+            'slice_5m' => (int) env('MYMATE_HISTORY_ROLLUP_SLICE_5M', 3600),
+            'slice_1h' => (int) env('MYMATE_HISTORY_ROLLUP_SLICE_1H', 86400),
+            // Seconds one scheduled run may spend before handing over to the next. A backfill
+            // after an upgrade or downtime simply continues on the following runs.
+            'budget' => (int) env('MYMATE_HISTORY_ROLLUP_BUDGET', 240),
+        ],
     ],
 
     // Device config backups. My Mate is the control plane for the

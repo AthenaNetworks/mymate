@@ -2,6 +2,7 @@
 
 namespace App\Actions\Import;
 
+use App\Actions\History\RollupHistory;
 use App\Enums\DeviceType;
 use App\Enums\ImportMode;
 use App\Enums\PollMethod;
@@ -111,7 +112,8 @@ class ImportDudeDatabase
         DB::table('devices')->delete();         // cascades interfaces, positions, outages
         DB::table('credentials')->delete();
         Map::query()->delete();
-        DB::statement('TRUNCATE TABLE interface_samples');
+        DB::statement('TRUNCATE TABLE interface_samples, interface_rollup_5m, interface_rollup_1h');
+        RollupHistory::rewind(['interface']);
         $this->summary['wiped'] = true;
     }
 
@@ -815,6 +817,12 @@ class ImportDudeDatabase
                 $this->settings->set('history.retention_days', $spanDays);
                 $this->summary['history_retention_days'] = $spanDays;
             }
+        }
+
+        // The imported samples mostly predate what the rollups have covered, so have the rollup
+        // job start over from the oldest raw partition and fold them into the long-term tiers.
+        if ($total > 0) {
+            RollupHistory::rewind(['interface']);
         }
 
         $this->summary['history'] = ['samples' => $total, 'seeded_util' => $seeded];

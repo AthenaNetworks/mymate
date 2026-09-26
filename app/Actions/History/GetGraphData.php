@@ -7,7 +7,6 @@ use App\Models\NetworkInterface;
 use App\Models\Probe;
 use App\Models\Sensor;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Resolve a graph's series from every source it can plot (GitHub #28), aligned to one shared time
@@ -18,10 +17,13 @@ use Illuminate\Support\Facades\DB;
  *  - probe      : an HTTP/TCP service probe's response time (ms)
  *
  * Each source is batch-fetched in one bucketed query, so a graph with many series is still a
- * handful of queries regardless of how many interfaces/sensors/probes it references.
+ * handful of queries regardless of how many interfaces/sensors/probes it references. The query
+ * reads raw samples or rollups depending on the window, see HistoryQuery.
  */
 class GetGraphData
 {
+    public function __construct(private readonly HistoryQuery $history) {}
+
     /**
      * @param  list<array<string,mixed>>  $configSeries
      * @return array{buckets:list<string>, series:list<array<string,mixed>>, total:?list<?float>}
@@ -36,17 +38,21 @@ class GetGraphData
         $interfaceIds = $sensorIds = $sensorDeviceIds = $pingDeviceIds = $probeIds = [];
         foreach ($configSeries as $s) {
             switch ($s['source'] ?? 'interface') {
-                case 'sensor': $sensorIds[] = (int) ($s['sensor_id'] ?? 0); $sensorDeviceIds[] = (int) ($s['device_id'] ?? 0); break;
-                case 'ping': $pingDeviceIds[] = (int) ($s['device_id'] ?? 0); break;
-                case 'probe': $probeIds[] = (int) ($s['probe_id'] ?? 0); break;
+                case 'sensor': $sensorIds[] = (int) ($s['sensor_id'] ?? 0);
+                    $sensorDeviceIds[] = (int) ($s['device_id'] ?? 0);
+                    break;
+                case 'ping': $pingDeviceIds[] = (int) ($s['device_id'] ?? 0);
+                    break;
+                case 'probe': $probeIds[] = (int) ($s['probe_id'] ?? 0);
+                    break;
                 default: $interfaceIds[] = (int) ($s['interface_id'] ?? 0);
             }
         }
 
-        $ifaceData = $this->interfaces(array_unique($interfaceIds), $grid, $from, $to);
-        $sensorData = $this->sensors(array_unique($sensorIds), array_unique($sensorDeviceIds), $grid, $from, $to);
-        $pingData = $this->ping(array_unique($pingDeviceIds), $grid, $from, $to);
-        $probeData = $this->probes(array_unique($probeIds), $grid, $from, $to);
+        $ifaceData = $this->interfaces(array_unique($interfaceIds), $grid, $to);
+        $sensorData = $this->sensors(array_unique($sensorIds), array_unique($sensorDeviceIds), $grid, $to);
+        $pingData = $this->ping(array_unique($pingDeviceIds), $grid, $to);
+        $probeData = $this->probes(array_unique($probeIds), $grid, $to);
 
         // Label lookups.
         $ifaces = NetworkInterface::whereIn('id', $interfaceIds)->with('device:id,name')->get(['id', 'device_id', 'name'])->keyBy('id');
@@ -84,19 +90,16 @@ class GetGraphData
     }
 
     /** @return array<int, array{bps_in:list<?float>,bps_out:list<?float>,util_in:list<?float>,util_out:list<?float>}> */
-    private function interfaces(array $ids, array $grid, Carbon $from, Carbon $to): array
+    private function interfaces(array $ids, array $grid, Carbon $to): array
     {
         $ids = array_values(array_filter($ids));
         if ($ids === []) {
             return [];
         }
-        $ph = implode(',', array_fill(0, count($ids), '?'));
-        $rows = DB::select(
-            "SELECT interface_id, to_char(date_bin(?::interval, ts, ?::timestamp), 'YYYY-MM-DD HH24:MI:SS') AS bucket,
-                    avg(bps_in) AS bps_in, avg(bps_out) AS bps_out, avg(util_in) AS util_in, avg(util_out) AS util_out
-             FROM interface_samples WHERE interface_id IN ({$ph}) AND ts >= ?::timestamp AND ts < ?::timestamp
-             GROUP BY interface_id, bucket",
-            ["{$grid['bucketSeconds']} seconds", $from->format('Y-m-d H:i:s'), ...$ids, $from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')],
+        $rows = $this->history->rows(
+            'interface', $grid, $to,
+            ['bps_in' => ['avg'], 'bps_out' => ['avg'], 'util_in' => ['avg'], 'util_out' => ['avg']],
+            'interface_id IN ('.self::placeholders($ids).')', $ids,
         );
         $n = count($grid['buckets']);
         $out = [];
@@ -118,59 +121,49 @@ class GetGraphData
     }
 
     /** @return array<string, list<?float>> keyed "sensorId:deviceId" */
-    private function sensors(array $sensorIds, array $deviceIds, array $grid, Carbon $from, Carbon $to): array
+    private function sensors(array $sensorIds, array $deviceIds, array $grid, Carbon $to): array
     {
         $sensorIds = array_values(array_filter($sensorIds));
         $deviceIds = array_values(array_filter($deviceIds));
         if ($sensorIds === [] || $deviceIds === []) {
             return [];
         }
-        $sp = implode(',', array_fill(0, count($sensorIds), '?'));
-        $dp = implode(',', array_fill(0, count($deviceIds), '?'));
-        $rows = DB::select(
-            "SELECT sensor_id, device_id, to_char(date_bin(?::interval, ts, ?::timestamp), 'YYYY-MM-DD HH24:MI:SS') AS bucket, avg(value) AS value
-             FROM sensor_samples WHERE sensor_id IN ({$sp}) AND device_id IN ({$dp}) AND ts >= ?::timestamp AND ts < ?::timestamp
-             GROUP BY sensor_id, device_id, bucket",
-            ["{$grid['bucketSeconds']} seconds", $from->format('Y-m-d H:i:s'), ...$sensorIds, ...$deviceIds, $from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')],
+        $rows = $this->history->rows(
+            'sensor', $grid, $to, ['value' => ['avg']],
+            'sensor_id IN ('.self::placeholders($sensorIds).') AND device_id IN ('.self::placeholders($deviceIds).')',
+            [...$sensorIds, ...$deviceIds],
         );
 
         return $this->keyed($rows, fn ($r) => "{$r->sensor_id}:{$r->device_id}", 'value', $grid, 3);
     }
 
     /** @return array<int, list<?float>> device_id => rtt series */
-    private function ping(array $deviceIds, array $grid, Carbon $from, Carbon $to): array
+    private function ping(array $deviceIds, array $grid, Carbon $to): array
     {
         $deviceIds = array_values(array_filter($deviceIds));
         if ($deviceIds === []) {
             return [];
         }
-        $ph = implode(',', array_fill(0, count($deviceIds), '?'));
-        $rows = DB::select(
-            "SELECT device_id, to_char(date_bin(?::interval, ts, ?::timestamp), 'YYYY-MM-DD HH24:MI:SS') AS bucket, avg(rtt_ms) AS value
-             FROM ping_samples WHERE device_id IN ({$ph}) AND ts >= ?::timestamp AND ts < ?::timestamp
-             GROUP BY device_id, bucket",
-            ["{$grid['bucketSeconds']} seconds", $from->format('Y-m-d H:i:s'), ...$deviceIds, $from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')],
-        );
+        $rows = $this->history->rows('ping', $grid, $to, ['rtt_ms' => ['avg']], 'device_id IN ('.self::placeholders($deviceIds).')', $deviceIds);
 
-        return $this->keyed($rows, fn ($r) => (int) $r->device_id, 'value', $grid, 2);
+        return $this->keyed($rows, fn ($r) => (int) $r->device_id, 'rtt_ms', $grid, 2);
     }
 
     /** @return array<int, list<?float>> probe_id => latency series */
-    private function probes(array $probeIds, array $grid, Carbon $from, Carbon $to): array
+    private function probes(array $probeIds, array $grid, Carbon $to): array
     {
         $probeIds = array_values(array_filter($probeIds));
         if ($probeIds === []) {
             return [];
         }
-        $ph = implode(',', array_fill(0, count($probeIds), '?'));
-        $rows = DB::select(
-            "SELECT probe_id, to_char(date_bin(?::interval, ts, ?::timestamp), 'YYYY-MM-DD HH24:MI:SS') AS bucket, avg(latency_ms) AS value
-             FROM probe_samples WHERE probe_id IN ({$ph}) AND ts >= ?::timestamp AND ts < ?::timestamp
-             GROUP BY probe_id, bucket",
-            ["{$grid['bucketSeconds']} seconds", $from->format('Y-m-d H:i:s'), ...$probeIds, $from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s')],
-        );
+        $rows = $this->history->rows('probe', $grid, $to, ['latency_ms' => ['avg']], 'probe_id IN ('.self::placeholders($probeIds).')', $probeIds);
 
-        return $this->keyed($rows, fn ($r) => (int) $r->probe_id, 'value', $grid, 2);
+        return $this->keyed($rows, fn ($r) => (int) $r->probe_id, 'latency_ms', $grid, 2);
+    }
+
+    private static function placeholders(array $ids): string
+    {
+        return implode(',', array_fill(0, count($ids), '?'));
     }
 
     /** Map single-value bucketed rows into grid-aligned arrays, keyed by the given closure. */

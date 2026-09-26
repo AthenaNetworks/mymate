@@ -6,38 +6,33 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Bucketed history for a whole DEVICE - its total throughput over [from, to). Sums
- * bps across all the device's interfaces per time bucket (and averages util, which is
- * only meaningful when every interface has a speed). Mirrors {@see GetInterfaceSamples}
- * but device-wide, so the inspector can show total throughput rather than one
- * interface's.
+ * Bucketed history for a whole DEVICE - its total throughput over [from, to). Each
+ * interface is averaged per time bucket first, then bps is summed across the device's
+ * interfaces (and util averaged, which is only meaningful when every interface has a
+ * speed). Mirrors {@see GetInterfaceSamples} but device-wide, so the inspector can show
+ * total throughput rather than one interface's. Raw or rollups by window, see HistoryQuery.
  */
 class GetDeviceSamples
 {
+    public function __construct(private readonly HistoryQuery $history) {}
+
     /** @return list<array{ts:string, util_in:?float, util_out:?float, bps_in:?float, bps_out:?float}> */
     public function __invoke(int $deviceId, Carbon $from, Carbon $to): array
     {
-        $maxPoints = max(1, (int) config('mymate.history.max_points', 240));
-        $span = max(1, $from->diffInSeconds($to));
-        $bucketSeconds = max(10, (int) ceil($span / $maxPoints));
-
-        $fromStr = $from->format('Y-m-d H:i:s');
-        $toStr = $to->format('Y-m-d H:i:s');
+        // Average per interface first: summing raw samples straight across a bucket would
+        // count each interface once per poll that landed in it, not once.
+        [$inner, $bindings] = $this->history->sql(
+            'interface', HistoryGrid::build($from, $to), $to,
+            ['util_in' => ['avg'], 'util_out' => ['avg'], 'bps_in' => ['avg'], 'bps_out' => ['avg']],
+            'interface_id IN (SELECT id FROM interfaces WHERE device_id = ?)', [$deviceId],
+        );
 
         $rows = DB::select(
-            <<<'SQL'
-                SELECT date_bin(?::interval, s.ts, ?::timestamp) AS bucket,
-                       avg(s.util_in)  AS util_in,
-                       avg(s.util_out) AS util_out,
-                       sum(s.bps_in)   AS bps_in,
-                       sum(s.bps_out)  AS bps_out
-                FROM interface_samples s
-                JOIN interfaces i ON i.id = s.interface_id
-                WHERE i.device_id = ? AND s.ts >= ?::timestamp AND s.ts < ?::timestamp
-                GROUP BY bucket
-                ORDER BY bucket
-            SQL,
-            ["{$bucketSeconds} seconds", $fromStr, $deviceId, $fromStr, $toStr],
+            "SELECT bucket, avg(util_in) AS util_in, avg(util_out) AS util_out, sum(bps_in) AS bps_in, sum(bps_out) AS bps_out
+             FROM ({$inner}) per_iface
+             GROUP BY bucket
+             ORDER BY bucket",
+            $bindings,
         );
 
         return array_map(static fn ($r): array => [
