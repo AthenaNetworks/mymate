@@ -17,6 +17,8 @@ use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Models\Probe;
 use App\Services\Polling\DeviceMetrics;
+use App\Services\Polling\LiveDeviceFrame;
+use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\OpticalReading;
 use App\Services\Polling\PortStats;
 use App\Services\Polling\RateCalculator;
@@ -284,16 +286,18 @@ class IngestAgentResults
                 'ccq_pct' => $device->ccq_pct, 'wireless_clients' => $device->wireless_clients,
             ];
 
+            $attrs = RecordDeviceResources::deviceAttributes($device, $extras, $now);
             $device->forceFill([
                 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp, 'metrics_at' => $now,
                 ...($rf ?? []),
-                ...RecordDeviceResources::deviceAttributes($device, $extras, $now),
+                ...$attrs,
             ])->save();
             $resources[] = [$device, $extras];
 
             $frames[] = [
                 'device_id' => $device->id, 'cpu_pct' => $cpu, 'mem_used_pct' => $mem, 'temp_c' => $temp,
                 ...$rfAttrs,
+                ...LiveDeviceFrame::resources($attrs, $extras),
             ];
             $sampleRows[] = [
                 'device_id' => $device->id, 'ts' => $now,
@@ -316,7 +320,7 @@ class IngestAgentResults
         }
 
         if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
-            LiveBroadcast::send(new DeviceMetricsUpdated($frames));
+            LiveBroadcast::sendFrames(static fn (array $chunk) => new DeviceMetricsUpdated($chunk), $frames);
         }
     }
 
@@ -530,10 +534,12 @@ class IngestAgentResults
                 ...$port,
                 'oper_up' => $operUp,
             ];
-            $frames[$iface->device_id][] = [
+            $frames[$iface->device_id][] = LiveInterfaceFrame::compact([
                 'interface_id' => $iface->id, 'util_in' => $utilIn, 'util_out' => $utilOut,
-                'speed_mbps' => $iface->speed_mbps, 'bps_in' => $inBps, 'bps_out' => $outBps, 'status' => 'up',
-            ];
+                'speed_mbps' => $iface->speed_mbps, 'bps_in' => $inBps, 'bps_out' => $outBps,
+                // $iface is the row from before the update above, so these are the changes
+                ...LiveInterfaceFrame::extras($iface, $operUp, $read, $read !== []),
+            ]);
         }
 
         $this->recordHistory($sampleRows);
@@ -543,7 +549,9 @@ class IngestAgentResults
             foreach ($frames as $deviceId => $ifaceFrames) {
                 $devices[] = ['device_id' => $deviceId, 'status' => DeviceStatus::Up->value, 'interfaces' => $ifaceFrames];
             }
-            LiveBroadcast::send(new InterfaceUtilUpdated($devices));
+            // Split by bytes: an agent's report isn't narrowed to link ends like the central
+            // tick, so a site's worth of ports in one message could be over Reverb's limit.
+            LiveBroadcast::sendFrames(static fn (array $chunk) => new InterfaceUtilUpdated($chunk), $devices);
         }
     }
 

@@ -4,6 +4,7 @@ import { useHistoryCatalog, type BillingResult } from '../api/devicePage';
 import { useDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
 import { formatRate } from '../../../lib/formatRate';
 import { portSections } from '../lib/specs';
+import { fmtValue } from '../lib/format';
 import { useGraphRange } from '../lib/range';
 import { openDevicePage } from '../lib/location';
 import { HistoryGraph } from './HistoryGraph';
@@ -12,6 +13,9 @@ import { BillingSection } from './BillingSection';
 import type { ChartRefLine } from './TimeChart';
 import { Card, Detail, Empty } from './ui';
 import type { Device } from '../../../types';
+
+/** A per-second port rate from the last counter read (live), '-' until two reads have landed. */
+const fmtRate = (v: number | null | undefined) => (v === null || v === undefined ? '-' : `${fmtValue(v, null)}/s`);
 
 const BILL_IN = '#e0a526';
 const BILL_OUT = '#d9689a';
@@ -45,6 +49,7 @@ export function PortPage({ device, portId, params }: { device: Device; portId: n
 
     if (isLoading) return <p className="text-sm text-white/35">Loading...</p>;
     if (!iface) return <Empty>That port isn't on this device.</Empty>;
+    const hasRates = [iface.pkts_in, iface.pkts_out, iface.errors_in, iface.errors_out, iface.discards_in, iface.discards_out].some((v) => v !== null && v !== undefined);
 
     return (
         <div className="space-y-4">
@@ -69,6 +74,13 @@ export function PortPage({ device, portId, params }: { device: Device; portId: n
                         value={iface.optical_rx_dbm === null && iface.optical_tx_dbm === null ? '-' : `${iface.optical_rx_dbm?.toFixed(2) ?? '-'} / ${iface.optical_tx_dbm?.toFixed(2) ?? '-'} dBm`}
                         mono
                     />
+                    {hasRates && (
+                        <>
+                            <Detail label="Packets in / out" value={`${fmtRate(iface.pkts_in)} / ${fmtRate(iface.pkts_out)}`} mono />
+                            <Detail label="Errors in / out" value={`${fmtRate(iface.errors_in)} / ${fmtRate(iface.errors_out)}`} mono />
+                            <Detail label="Discards in / out" value={`${fmtRate(iface.discards_in)} / ${fmtRate(iface.discards_out)}`} mono />
+                        </>
+                    )}
                 </div>
             </Card>
 

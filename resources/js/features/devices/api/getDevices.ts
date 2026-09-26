@@ -1,7 +1,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../../lib/apiClient';
-import { BACKUP_IN_PROGRESS, UPGRADE_IN_PROGRESS, type Device, type DeviceStatus, type DeviceType, type PollMethod } from '../../../types';
+import { BACKUP_IN_PROGRESS, UPGRADE_IN_PROGRESS, type Device, type DeviceMetricsFrame, type DeviceStatus, type DeviceType, type PollMethod } from '../../../types';
 
 // There's no "whole fleet" query any more (GitHub #22). At 25k devices that one payload ran the
 // server out of memory, so each screen asks for the slice it draws:
@@ -270,4 +270,19 @@ export function patchCachedDevices(qc: QueryClient, patch: (id: number) => Parti
         }
         if (next !== data) qc.setQueryData(key, next);
     }
+}
+
+/**
+ * The device-page fields of a metrics frame as a device patch. Only what the frame has: a poll that
+ * didn't read uptime or per-CPU leaves the cached values alone. uptime_at is stamped here, on
+ * arrival, so the ticking uptime doesn't care whether this clock agrees with the server's.
+ */
+export function deviceExtras(f: DeviceMetricsFrame): Partial<Device> {
+    const p: Partial<Device> = {};
+    if (f.uptime_seconds !== undefined) {
+        p.uptime_seconds = f.uptime_seconds;
+        p.uptime_at = new Date().toISOString();
+    }
+    if (f.cpu_loads !== undefined) p.cpu_loads = f.cpu_loads;
+    return p;
 }

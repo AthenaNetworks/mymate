@@ -14,7 +14,34 @@ export const devicePageKeys = {
     history: (id: number, q: HistoryParams) => ['device-page', id, 'history', q] as const,
     billing: (id: number, q: BillingParams) => ['device-page', id, 'billing', q] as const,
     events: (id: number, page: number, types: string[]) => ['device-page', id, 'events', page, types] as const,
+    storage: (id: number) => ['device-page', id, 'storage'] as const,
 };
+
+export interface DeviceStorageEntry {
+    id: number; // storage_id key of the storage history family
+    key: string;
+    descr: string;
+    type: string; // ram | virtual_memory | fixed_disk | flash | ...
+    size_bytes: number | null;
+    used_bytes: number | null;
+    used_pct: number | null;
+    updated_at: string | null;
+}
+
+/**
+ * The device's storage entries (disks, RAM, swap) as of the last metrics poll. The live metrics
+ * frame only flags that storage was read, and useDeviceLive invalidates this when it does.
+ */
+export function useDeviceStorage(id: number) {
+    return useQuery({
+        queryKey: devicePageKeys.storage(id),
+        queryFn: async (): Promise<DeviceStorageEntry[]> => {
+            const { data } = await apiClient.get<{ data: DeviceStorageEntry[] }>(`/devices/${id}/storage`);
+            return data.data;
+        },
+        staleTime: 30_000,
+    });
+}
 
 /**
  * The page's device. Shares the inspector's cache entry (deviceKeys.detail) so an edit, a live

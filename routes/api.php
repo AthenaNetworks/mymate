@@ -257,6 +257,11 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->name('devices.storage');
     Route::get('devices/{device}/processors', [DeviceHealthController::class, 'processors'])
         ->name('devices.processors');
+    // "I have this device open": the device page / inspector ping it every minute so the live util
+    // stream carries all of the device's ports, not just link ends (App\Support\LiveWatch).
+    // Operator-safe, it only widens what they're already allowed to see.
+    Route::post('devices/{device}/live', [DeviceHealthController::class, 'watch'])
+        ->middleware('throttle:30,1')->name('devices.live.watch');
     // Custom SNMP sensors: current readings for a device + one sensor's history series.
     Route::get('devices/{device}/sensors', [SensorController::class, 'forDevice'])
         ->name('devices.sensors');

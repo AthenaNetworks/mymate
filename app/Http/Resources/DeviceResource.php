@@ -78,6 +78,12 @@ class DeviceResource extends JsonResource
             'mem_used_pct' => $this->mem_used_pct,
             'temp_c' => $this->temp_c,
             'metrics_at' => $this->metrics_at,
+            // Per-processor load [{index, load_pct}] for the device page. Single device reads only,
+            // a map's worth of 64 core routers would make every list payload fat for nothing.
+            'cpu_loads' => $this->when(
+                $request->routeIs('devices.show'),
+                fn () => array_values(array_filter((array) ($this->cpu_loads ?? []), 'is_array')),
+            ),
             'signal_dbm' => $this->signal_dbm,
             'snr_db' => $this->snr_db,
             'ccq_pct' => $this->ccq_pct,

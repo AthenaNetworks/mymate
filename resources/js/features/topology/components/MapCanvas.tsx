@@ -51,7 +51,8 @@ import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from 
 import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
-import type { AlertStateChangedPayload, Device, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
+import { fmtDuration } from '../../device-page/lib/format';
+import type { AlertStateChangedPayload, Device, DeviceRebootedPayload, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
 
 /** Compare two devices' face-sensor label sets by value, so a routine refetch that returns the
  *  same readings doesn't re-render the card (GitHub #40). */
@@ -192,9 +193,12 @@ export function MapCanvas() {
             }
             return next;
         });
+        // A frame can carry only `ports` (the rest of a device someone has open, split off to fit),
+        // those aren't link ends and say nothing about the tile, so skip them rather than null it.
         setDeviceUtil((prev) => {
             const next = { ...prev };
             for (const dev of payload.devices) {
+                if (dev.interfaces.length === 0) continue;
                 let max: number | null = null;
                 for (const f of dev.interfaces) {
                     for (const v of [f.util_in, f.util_out]) {
@@ -210,6 +214,7 @@ export function MapCanvas() {
         setDeviceLoad((prev) => {
             const next = { ...prev };
             for (const dev of payload.devices) {
+                if (dev.interfaces.length === 0) continue;
                 let max: number | null = null;
                 for (const f of dev.interfaces) {
                     for (const v of [f.bps_in, f.bps_out]) {
@@ -297,7 +302,29 @@ export function MapCanvas() {
         }, 3000);
     }, []);
     useEffect(() => () => { if (alertFlush.current) clearTimeout(alertFlush.current); }, []);
-    useMapChannel(handleUtil, handleStatus, handleAlert);
+    // Reboots (uptime went backwards on the metrics poll), coalesced the same way: a power blip
+    // restarting a whole site is one "12 devices rebooted", not a toast each.
+    const rebootBuf = useRef<{ n: number; last: DeviceRebootedPayload | null }>({ n: 0, last: null });
+    const rebootFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const handleReboot = useCallback((e: DeviceRebootedPayload) => {
+        const b = rebootBuf.current;
+        b.n++;
+        b.last = e;
+        if (rebootFlush.current) return;
+        rebootFlush.current = setTimeout(() => {
+            const r = rebootBuf.current;
+            if (r.n === 1 && r.last) {
+                const was = r.last.previous_uptime_s !== null ? ` (was up ${fmtDuration(r.last.previous_uptime_s)})` : '';
+                pushToast({ title: `${r.last.name} rebooted${was}`, detail: 'Uptime went backwards on the last poll', tone: 'info', key: `device-reboot-${r.last.device_id}` }, 10000);
+            } else {
+                pushToast({ title: `${r.n} devices rebooted`, detail: 'See each device page Events tab', tone: 'info', key: 'device-reboot-summary' }, 10000);
+            }
+            rebootBuf.current = { n: 0, last: null };
+            rebootFlush.current = null;
+        }, 3000);
+    }, []);
+    useEffect(() => () => { if (rebootFlush.current) clearTimeout(rebootFlush.current); }, []);
+    useMapChannel(handleUtil, handleStatus, handleAlert, handleReboot);
 
     const statusById = useMemo<Record<number, DeviceStatus>>(
         () => Object.fromEntries((devices ?? []).map((d) => [d.id, d.status])),

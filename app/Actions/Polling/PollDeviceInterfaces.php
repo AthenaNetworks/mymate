@@ -5,6 +5,7 @@ namespace App\Actions\Polling;
 use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Services\Polling\DevicePollResult;
+use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\PortStats;
 use App\Services\Polling\PortStatsDriver;
 use App\Services\Polling\RateCalculator;
@@ -137,6 +138,8 @@ class PollDeviceInterfaces
                 'bps_in' => $bpsIn,
                 'bps_out' => $bpsOut,
                 'status' => $device->status->value,
+                // port list extras (oper status flip, fresh port rates, new optical), only what changed
+                ...LiveInterfaceFrame::extras($iface, $sample->operUp, $port, $portFresh),
             ];
         }
 
