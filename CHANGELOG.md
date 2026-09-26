@@ -14,6 +14,24 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Embed a public wallboard in an iframe (GitHub #15).** Settings -> Security has a new "Wallboard
+  embedding" card where an admin lists the sites allowed to frame a shared wallboard link, eg your
+  intranet or a Grafana/dashboard host, one `https://host[:port]` per line (a leading `*.` covers
+  subdomains). It's empty by default so nothing changes until you add a site, and it can also be
+  preset with `MYMATE_WALL_FRAME_ANCESTORS`. Only the `/wall/...` page itself gets relaxed; the
+  console, the API and everything else still refuse to be framed. The list is global rather than per
+  link on purpose: the link is already the key, and one list is easier to check and to empty fast.
+  The public wallboard also no longer starts a session or sets any cookie, so it behaves the same
+  in a third-party iframe and doesn't leave a throwaway session behind on every poll.
+- **Custom background image on a map (GitHub #37).** Put a floor plan, site photo or rack diagram
+  behind a map's devices: map menu -> "Background image", upload a PNG, JPEG, WebP or SVG (10 MB max
+  by default, `MYMATE_MAP_BACKGROUND_MAX_KB`), then set its position, scale and opacity. It pans and
+  zooms with the map, stays behind the devices and links, and shows on that map's public wallboard
+  too. Replacing the image keeps your placement; Remove deletes it. Admin only to change, and it
+  follows map permissions, so an operator who can't see a map can't fetch its image either. Files
+  are checked by content, not name, and SVGs are cleaned on upload (script, event handlers, embedded
+  HTML and anything pointing outside the file are stripped, DOCTYPEs refused) and always served
+  sandboxed.
 - **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
   building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
   elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet
