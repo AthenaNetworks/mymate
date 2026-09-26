@@ -2,6 +2,7 @@
 
 namespace App\Actions\Devices;
 
+use App\Actions\Upgrade\RecordUpgradeStatus;
 use App\Enums\UpgradeStatus;
 use App\Models\Device;
 use App\Support\EngineLog;
@@ -22,12 +23,13 @@ class RunBulkUpgrade
     public function __construct(
         private UpgradeDevice $upgrade,
         private UpgradePreflight $preflight,
+        private RecordUpgradeStatus $record = new RecordUpgradeStatus,
     ) {}
 
     /**
-     * @param list<int> $deviceIds
-     * @param bool $preserveOrder keep the given order (operator re-ordered by hand) instead
-     *                            of re-sorting furthest-downstream-first
+     * @param  list<int>  $deviceIds
+     * @param  bool  $preserveOrder  keep the given order (operator re-ordered by hand) instead
+     *                               of re-sorting furthest-downstream-first
      */
     public function __invoke(array $deviceIds, bool $preserveOrder = false, ?string $version = null, string $source = 'mikrotik'): void
     {
@@ -35,14 +37,12 @@ class RunBulkUpgrade
 
         // Mark skipped devices so their queued spinner clears with the reason.
         foreach ($plan['plan'] as $row) {
-            if ($row['action'] === 'skip') {
-                Device::where('id', $row['device_id'])->update([
-                    'upgrade_status' => $row['reason'] === 'already up to date'
-                        ? UpgradeStatus::UpToDate->value
-                        : UpgradeStatus::Failed->value,
-                    'upgrade_message' => ucfirst((string) $row['reason']).'.',
-                    'upgrade_at' => now(),
-                ]);
+            if ($row['action'] === 'skip' && ($skipped = Device::find($row['device_id'])) !== null) {
+                ($this->record)(
+                    $skipped,
+                    $row['reason'] === 'already up to date' ? UpgradeStatus::UpToDate : UpgradeStatus::Failed,
+                    ucfirst((string) $row['reason']).'.',
+                );
             }
         }
 

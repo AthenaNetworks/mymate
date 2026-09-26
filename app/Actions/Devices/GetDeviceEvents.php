@@ -3,9 +3,12 @@
 namespace App\Actions\Devices;
 
 use App\Actions\Backup\RegisterBackupDevice;
+use App\Enums\UpgradeStatus;
 use App\Models\AlertEvent;
 use App\Models\Device;
+use App\Models\DeviceUpgrade;
 use App\Models\Outage;
+use App\Models\User;
 use App\Services\Backup\RustedClient;
 use App\Support\BackupSettings;
 use App\Support\EngineLog;
@@ -20,11 +23,10 @@ use Illuminate\Support\Facades\DB;
  *  - alert events whose dedupe key belongs to the device: fired / resolved
  *  - config backups: each stored version from Rusted (skipped for restricted operators, the
  *    backup endpoints are off limits to them)
- *  - firmware upgrades: the last upgrade outcome recorded on the device
+ *  - firmware upgrades: every attempt from device_upgrades (RecordUpgradeStatus writes them)
  *  - reboots: every one the metrics poller caught (device_reboots, uptime went backwards), plus
  *    the current boot worked out from the last uptime reading
  *
- * There's no history table for upgrades yet, so that's the latest one only.
  * Each source is capped (newest first) before merging, which keeps a noisy device's page cheap.
  */
 class GetDeviceEvents
@@ -85,9 +87,12 @@ class GetDeviceEvents
             }
         }
 
-        if ($want('upgrade') && $device->upgrade_at !== null && $device->upgrade_status !== null) {
-            $status = $device->upgrade_status->value;
-            $events[] = self::event('upgrade-'.$device->upgrade_at->timestamp, 'upgrade', $status, $device->upgrade_at, 'Firmware upgrade: '.str_replace('_', ' ', $status), $device->upgrade_message);
+        if ($want('upgrade')) {
+            $upgrades = DeviceUpgrade::where('device_id', $device->id)->latest('id')->limit(self::CAP)->get();
+            $who = User::whereIn('id', $upgrades->pluck('user_id')->filter()->unique())->pluck('name', 'id');
+            foreach ($upgrades as $u) {
+                $events[] = self::upgradeEvent($u, $u->user_id !== null ? ($who[$u->user_id] ?? null) : null);
+            }
         }
 
         if ($want('reboot')) {
@@ -117,6 +122,45 @@ class GetDeviceEvents
             'data' => array_slice($events, ($page - 1) * $perPage, $perPage),
             'meta' => ['page' => $page, 'per_page' => $perPage, 'total' => $total, 'has_more' => $page * $perPage < $total],
         ];
+    }
+
+    /** One row of device_upgrades, worded for the timeline. Public so the Overview can reuse it. */
+    public static function upgradeEvent(DeviceUpgrade $u, ?string $by = null): array
+    {
+        $status = $u->status;
+        $at = $u->finished_at ?? $u->started_at ?? $u->queued_at ?? $u->created_at;
+        $took = $u->durationSeconds();
+        $took = $took !== null ? ' (took '.self::duration($took).')' : '';
+
+        $title = match ($status) {
+            UpgradeStatus::Done => ($u->from_version !== null && $u->from_version !== $u->to_version
+                ? "Upgraded {$u->from_version} -> ".($u->to_version ?? '?')
+                : 'Upgraded to '.($u->to_version ?? 'the latest release')).$took,
+            UpgradeStatus::Failed => 'Upgrade failed: '.rtrim($u->message ?? 'no reason recorded', '.'),
+            UpgradeStatus::UpToDate => 'Upgrade check: already up to date'.($u->from_version !== null ? " on {$u->from_version}" : ''),
+            default => 'Upgrade in progress: '.str_replace('_', ' ', $status->value),
+        };
+
+        $bits = [];
+        if ($status === UpgradeStatus::Failed && ($u->from_version !== null || $u->to_version !== null)) {
+            $bits[] = ($u->from_version ?? '?').' -> '.($u->to_version ?? 'latest').$took;
+        } elseif ($status->inProgress() && $u->message !== null) {
+            $bits[] = $u->message;
+        }
+        if ($by !== null) {
+            $bits[] = "by {$by}";
+        }
+        if ($u->batch_id !== null) {
+            $bits[] = 'part of a bulk upgrade';
+        }
+
+        return self::event("upgrade-{$u->id}", 'upgrade', $status->value, $at, $title, $bits === [] ? null : implode(', ', $bits), [
+            'from_version' => $u->from_version,
+            'to_version' => $u->to_version,
+            'duration_s' => $u->durationSeconds(),
+            'batch_id' => $u->batch_id,
+            'triggered_by' => $by,
+        ]);
     }
 
     private static function event(string $id, string $type, string $kind, Carbon $at, string $title, ?string $detail, array $extra = []): array

@@ -8,6 +8,7 @@ use App\Actions\Devices\UpdateDevice;
 use App\Actions\Devices\UpdateDevicePosition;
 use App\Actions\Devices\UpgradePreflight;
 use App\Actions\Devices\UseSnmpLocation;
+use App\Actions\Upgrade\RecordUpgradeStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\DeviceType;
 use App\Enums\PollMethod;
@@ -28,6 +29,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class DeviceController extends Controller
@@ -301,19 +303,23 @@ class DeviceController extends Controller
      * BulkUpgradeJob that walks them downstream-first (waiting for each to recover
      * before its parent); otherwise one isolated job per device, in parallel.
      */
-    public function upgrade(UpgradeDevicesRequest $request): JsonResponse
+    public function upgrade(UpgradeDevicesRequest $request, RecordUpgradeStatus $record): JsonResponse
     {
         $data = $request->validated();
         $ids = array_map('intval', $data['device_ids']);
 
-        // Mark queued up front so the UI shows a spinner immediately (before a worker picks it up).
-        Device::whereIn('id', $ids)->update([
-            'upgrade_status' => UpgradeStatus::Queued,
-            'upgrade_message' => 'Queued for upgrade...',
-            'upgrade_at' => now(),
-        ]);
-
         $version = $data['version'] ?? null;
+
+        // Mark queued up front so the UI shows a spinner immediately (before a worker picks it up).
+        // This opens the history row too, which is where who asked and the batch get recorded.
+        // Only devices the caller can see (the visibility scope applies), kept in the order given.
+        $devices = Device::whereIn('id', $ids)->get()->keyBy('id');
+        $ids = array_values(array_filter($ids, fn (int $id) => $devices->has($id)));
+        $batchId = count($ids) > 1 ? (string) Str::uuid() : null;
+        foreach ($ids as $id) {
+            $record($devices[$id], UpgradeStatus::Queued, 'Queued for upgrade...', $version, $request->user()?->id, $batchId);
+        }
+
         $source = $data['source'] ?? 'mikrotik';
 
         if ($data['ordered'] ?? false) {
