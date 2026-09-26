@@ -35,6 +35,7 @@ class FactoryReset
         'device_map_positions',
         'device_metric_samples',
         'device_storages',
+        'device_upgrades',
         'devices',
         'discovery_candidates',
         'import_runs',

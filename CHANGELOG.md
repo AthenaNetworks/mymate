@@ -210,8 +210,18 @@ of commit subjects.
   reboots the map pops "sw1 rebooted (was up 41d 3h)" (a batch of them becomes one "12 devices
   rebooted"), and an open device page adds it to its Events tab. Restricted operators only get their own
   devices, as with everything else live. Graphs on a live range keep refreshing once a minute as before.
+- **Firmware upgrade history.** Every RouterOS upgrade attempt is now kept, not just the last one, with
+  the version it went from and to, how long it took, who started it and whether it was part of a bulk
+  run. The device page Events tab lists each one ("Upgraded 7.14 -> 7.15.2 (took 3m 3s)", "Upgrade
+  failed: Did not come back online after reboot") and the Overview shows the last upgrade. The
+  outcome each device already had is carried over when you update, so the history doesn't start empty.
+  A run that died half way (worker killed mid reboot) gets closed off as interrupted when the next one
+  starts.
 
 ### Changed
+- **Graph PNG export includes the legend.** Exporting a device page graph as PNG now gives you the
+  title, the device and time range, the chart and the min / avg / max / last / 95th table in one image
+  at 2x, instead of just the lines.
 - **Live port updates are smaller.** Each interface in the per-tick util update no longer repeats its
   device id and status, util is sent to two decimal places and bps as whole bits. A 48 port switch's
   frame is about 40% smaller on an ordinary tick (8.9 KB down to 5.4 KB), and the new port fields are

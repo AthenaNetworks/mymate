@@ -155,6 +155,23 @@ export function OverviewTab({ device, summary }: { device: Device; summary: Devi
                         />
                         <Detail label="Hardware" value={[device.cpu, device.arch].filter(Boolean).join(', ') || '-'} />
                         <Detail label="Interfaces" value={summary ? String(summary.interfaces) : '-'} mono />
+                        {summary?.last_upgrade && (
+                            <div className="col-span-2">
+                                <Detail
+                                    label="Last upgrade"
+                                    title={`${summary.last_upgrade.title}${summary.last_upgrade.detail ? `\n${summary.last_upgrade.detail}` : ''}\n${new Date(summary.last_upgrade.at).toLocaleString()}`}
+                                    value={
+                                        <button
+                                            type="button"
+                                            onClick={() => setQuery({ tab: 'events' }, { push: true })}
+                                            className={`block max-w-full truncate text-left hover:underline ${summary.last_upgrade.kind === 'failed' ? 'text-rose-300' : 'text-white/85'}`}
+                                        >
+                                            {summary.last_upgrade.title} <span className="text-white/35">{relativeTime(summary.last_upgrade.at)}</span>
+                                        </button>
+                                    }
+                                />
+                            </div>
+                        )}
                     </div>
                     <div className="mt-4">
                         <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/30">Maps</p>

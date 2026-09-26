@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AlertEvent;
 use App\Models\Device;
 use App\Models\Map;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -135,8 +136,8 @@ class DeviceHistoryController extends Controller
 
     /**
      * GET /api/devices/{device}/summary - facts the Overview needs that the device resource
-     * doesn't carry: the maps it's on (only ones the viewer can see), its agent and the alerts
-     * open against it.
+     * doesn't carry: the maps it's on (only ones the viewer can see), its agent, the alerts
+     * open against it and its last firmware upgrade.
      */
     public function summary(Device $device): JsonResponse
     {
@@ -148,7 +149,11 @@ class DeviceHistoryController extends Controller
             ->whereIn('status', ['firing', 'resolving'])
             ->latest('fired_at')->limit(50)->get();
 
+        $upgrade = $device->upgrades()->latest('id')->first();
+        $upgradeBy = $upgrade?->user_id !== null ? User::whereKey($upgrade->user_id)->value('name') : null;
+
         return response()->json(['data' => [
+            'last_upgrade' => $upgrade !== null ? GetDeviceEvents::upgradeEvent($upgrade, $upgradeBy) : null,
             'maps' => $maps->map(fn ($m) => ['id' => $m->id, 'name' => $m->name])->values(),
             'agent' => $device->agent ? ['id' => $device->agent->id, 'name' => $device->agent->name, 'status' => $device->agent->status] : null,
             'interfaces' => $device->interfaces()->count(),

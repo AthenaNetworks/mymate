@@ -226,6 +226,12 @@ class Device extends Model
         return $this->hasMany(Probe::class);
     }
 
+    /** Firmware upgrade attempts, one row each (Events tab). */
+    public function upgrades(): HasMany
+    {
+        return $this->hasMany(DeviceUpgrade::class);
+    }
+
     /** Every map this device is placed on (one row per map). None = hidden from all maps. */
     public function mapPositions(): HasMany
     {

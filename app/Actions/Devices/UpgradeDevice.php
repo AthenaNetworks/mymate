@@ -2,6 +2,8 @@
 
 namespace App\Actions\Devices;
 
+use App\Actions\Upgrade\FetchRouterosPackage;
+use App\Actions\Upgrade\RecordUpgradeStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\PollMethod;
 use App\Enums\UpgradeStatus;
@@ -11,6 +13,7 @@ use App\Services\RouterOs\RouterOsClientException;
 use App\Services\RouterOs\RouterOsConnection;
 use App\Services\RouterOs\RouterOsTarget;
 use App\Services\Upgrade\DeviceRebootWaiter;
+use App\Services\Upgrade\RouterosReleases;
 use App\Support\EngineLog;
 use Illuminate\Support\Facades\Cache;
 use RuntimeException;
@@ -36,18 +39,18 @@ use Throwable;
  */
 class UpgradeDevice
 {
-    private \App\Services\Upgrade\RouterosReleases $releases;
+    private RouterosReleases $releases;
 
-    private \App\Actions\Upgrade\FetchRouterosPackage $packages;
+    private FetchRouterosPackage $packages;
 
     public function __construct(
         private RouterOsClient $client,
         private DeviceRebootWaiter $waiter,
-        ?\App\Services\Upgrade\RouterosReleases $releases = null,
-        ?\App\Actions\Upgrade\FetchRouterosPackage $packages = null,
+        ?RouterosReleases $releases = null,
+        ?FetchRouterosPackage $packages = null,
     ) {
-        $this->releases = $releases ?? new \App\Services\Upgrade\RouterosReleases;
-        $this->packages = $packages ?? new \App\Actions\Upgrade\FetchRouterosPackage($this->releases);
+        $this->releases = $releases ?? new RouterosReleases;
+        $this->packages = $packages ?? new FetchRouterosPackage($this->releases);
     }
 
     /**
@@ -93,7 +96,7 @@ class UpgradeDevice
             return;
         }
 
-        $this->mark($device, UpgradeStatus::Checking, $version !== null ? "Preparing {$version}..." : 'Checking for updates...');
+        $this->mark($device, UpgradeStatus::Checking, $version !== null ? "Preparing {$version}..." : 'Checking for updates...', $version);
 
         try {
             $rebooted = $version !== null
@@ -148,10 +151,10 @@ class UpgradeDevice
                 return false;
             }
 
-            $this->mark($device, UpgradeStatus::Downloading, "Downloading {$latest}...");
+            $this->mark($device, UpgradeStatus::Downloading, "Downloading {$latest}...", $latest);
             $conn->query('/system/package/update/download');
 
-            $this->mark($device, UpgradeStatus::Rebooting, "Rebooting to apply {$latest}...");
+            $this->mark($device, UpgradeStatus::Rebooting, "Rebooting to apply {$latest}...", $latest);
             $conn->query('/system/reboot');
 
             return true;
@@ -256,12 +259,10 @@ class UpgradeDevice
         }
     }
 
-    private function mark(Device $device, UpgradeStatus $status, ?string $message = null): void
+    /** Every state change goes through the recorder so the history row stays in step. */
+    private function mark(Device $device, UpgradeStatus $status, ?string $message = null, ?string $toVersion = null): void
     {
-        $device->upgrade_status = $status;
-        $device->upgrade_message = $message;
-        $device->upgrade_at = now();
-        $device->save();
+        (new RecordUpgradeStatus)($device, $status, $message, $toVersion);
     }
 
     /** "7.20.8 (stable)" / "7.20.8" -> "7.20.8"; null when nothing version-like is present. */

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowCircleDown, ArrowCircleUp, ArrowClockwise, Bell, BellSlash, CaretLeft, CaretRight, GitCommit, Power, type Icon } from '@phosphor-icons/react';
+import { ArrowCircleDown, ArrowCircleUp, ArrowClockwise, Bell, BellSlash, CaretLeft, CaretRight, CheckCircle, GitCommit, Package, Power, type Icon } from '@phosphor-icons/react';
 import { useDeviceEvents, type DeviceEvent, type DeviceEventType } from '../api/devicePage';
 import { setQuery } from '../lib/location';
 import { relativeTime } from '../../../lib/relativeTime';
@@ -18,7 +18,12 @@ function look(e: DeviceEvent): { icon: Icon; cls: string } {
     if (e.type === 'outage') return e.kind === 'down' ? { icon: ArrowCircleDown, cls: 'text-rose-400' } : { icon: ArrowCircleUp, cls: 'text-emerald-400' };
     if (e.type === 'alert') return e.kind === 'fired' ? { icon: Bell, cls: 'text-amber-300' } : { icon: BellSlash, cls: 'text-white/40' };
     if (e.type === 'backup') return { icon: GitCommit, cls: 'text-sky-300' };
-    if (e.type === 'upgrade') return { icon: ArrowClockwise, cls: e.kind === 'failed' ? 'text-rose-300' : 'text-violet-300' };
+    if (e.type === 'upgrade') {
+        if (e.kind === 'failed') return { icon: Package, cls: 'text-rose-300' };
+        if (e.kind === 'done') return { icon: Package, cls: 'text-violet-300' };
+        if (e.kind === 'up_to_date') return { icon: CheckCircle, cls: 'text-white/40' };
+        return { icon: ArrowClockwise, cls: 'text-violet-300' }; // still going
+    }
     return { icon: Power, cls: 'text-white/50' };
 }
 
@@ -111,7 +116,7 @@ export function EventsTab({ device }: { device: Device }) {
                     </div>
                 </div>
             )}
-            <p className="text-[11px] text-white/30">Upgrades show the latest one recorded on the device. Reboots go back as far as the poller has been reading uptime.</p>
+            <p className="text-[11px] text-white/30">Upgrades list every attempt since upgrade history was added (older ones only kept the last outcome). Reboots go back as far as the poller has been reading uptime.</p>
         </div>
     );
 }

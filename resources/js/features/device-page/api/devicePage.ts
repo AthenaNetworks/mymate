@@ -65,6 +65,8 @@ export interface DeviceSummary {
     agent: { id: number; name: string; status: string | null } | null;
     interfaces: number;
     open_alerts: { id: number; status: string; policy_name: string | null; message: string | null; fired_at: string | null; acknowledged: boolean }[];
+    /** The newest firmware upgrade attempt, worded like its Events tab row. */
+    last_upgrade: DeviceEvent | null;
 }
 
 export function useDeviceSummary(id: number) {
@@ -256,6 +258,12 @@ export interface DeviceEvent {
     title: string;
     detail: string | null;
     commit?: string | null;
+    // upgrade rows only
+    from_version?: string | null;
+    to_version?: string | null;
+    duration_s?: number | null;
+    batch_id?: string | null;
+    triggered_by?: string | null;
 }
 
 export interface DeviceEventsPage {

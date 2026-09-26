@@ -2,6 +2,7 @@ import { memo, useEffect, useId, useMemo, useRef, useState, type PointerEvent as
 import { fmtStamp, fmtTick, fmtValue, niceMax } from '../lib/format';
 import { setHoverTime, useHoverTime } from '../lib/hoverSync';
 import type { SeriesStats } from '../api/devicePage';
+import type { PngLegend } from '../../graphs/lib/exportGraph';
 
 /**
  * The device page's time series chart. Hand-rolled SVG like the rest of the app's graphs
@@ -358,6 +359,33 @@ const Crosshair = memo(function Crosshair({
         </>
     );
 });
+
+/** The legend below as plain rows, for drawing into an exported PNG. Same columns as the table. */
+export function chartLegendRows(lines: ChartLine[], unit: string | null): PngLegend {
+    const withP95 = lines.some((l) => l.stats?.p95 !== undefined && l.stats?.p95 !== null);
+    const withPeak = lines.some((l) => l.stats?.peak !== null && l.stats?.peak !== undefined && l.stats.peak !== l.stats.max);
+    const columns: PngLegend['columns'] = [
+        { label: 'Min' },
+        { label: 'Avg' },
+        { label: 'Max' },
+        ...(withPeak ? [{ label: 'Peak', tone: 'muted' as const }] : []),
+        { label: 'Last' },
+        ...(withP95 ? [{ label: '95th', tone: 'accent' as const }] : []),
+    ];
+    const rows = lines.map((l) => ({
+        label: l.label,
+        color: l.color,
+        cells: [
+            fmtValue(l.stats?.min ?? null, unit),
+            fmtValue(l.stats?.avg ?? null, unit),
+            fmtValue(l.stats?.max ?? null, unit),
+            ...(withPeak ? [fmtValue(l.stats?.peak ?? null, unit)] : []),
+            fmtValue(l.stats?.last ?? null, unit),
+            ...(withP95 ? [fmtValue(l.stats?.p95 ?? null, unit)] : []),
+        ],
+    }));
+    return { columns, rows };
+}
 
 /** LibreNMS style legend: one row per series with min / avg / max / last (and 95th). */
 export function ChartLegend({ lines, unit }: { lines: ChartLine[]; unit: string | null }) {
