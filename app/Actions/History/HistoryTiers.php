@@ -69,11 +69,14 @@ class HistoryTiers
      * every rollup row lands wholly in one output bucket. On raw nothing changes from how the
      * graphs always bucketed.
      *
+     * $maxPoints overrides `history.max_points` for a caller that wants a denser or sparser
+     * axis (the device page asks for roughly one point per pixel of chart width).
+     *
      * @return array{tier:string, bucketSeconds:int, origin:Carbon}
      */
-    public function plan(Carbon $from, Carbon $to): array
+    public function plan(Carbon $from, Carbon $to, ?int $maxPoints = null): array
     {
-        $maxPoints = max(1, (int) config('mymate.history.max_points', 240));
+        $maxPoints = max(1, $maxPoints ?? (int) config('mymate.history.max_points', 240));
         $span = max(1, $from->diffInSeconds($to));
         $desired = max(10, (int) ceil($span / $maxPoints));
 
