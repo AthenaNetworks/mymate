@@ -293,8 +293,19 @@ return [
                 // Wireless (MIKROTIK-MIB): count the registration table (one row per associated
                 // station) for client count; station signal strength for a CPE. SNR/CCQ over
                 // SNMP aren't standardised on RouterOS - the RouterOS API path fills those in.
-                'clients_walk' => '.1.3.6.1.4.1.14988.1.1.1.2.1.3', // mtxrWlRtabStrength (per client)
+                //
+                // The RouterOS 7 wifi stack (wifi-qcom, 7.13+) isn't in the legacy mtxrWl tables,
+                // it has its own mtxrWifiRegistrationTable (mtxrWifi.4, in the 7.19 MIB). We walk its
+                // signal column for both the row count and the average client signal. It has no
+                // SNR or CCQ columns at all. wifiwave2 (7.12 and older) and wifi CAPsMAN remote
+                // caps aren't reliably in there (the old CAPsMAN mtxrWlCMRtab reads 0 on wifi
+                // CAPsMAN), so for those the RouterOS API poll method is the way to get RF.
+                'clients_walk' => [
+                    '.1.3.6.1.4.1.14988.1.1.1.2.1.3', // mtxrWlRtabStrength (legacy, per client)
+                    '.1.3.6.1.4.1.14988.1.1.21.4.1.6', // mtxrWifiRegistrationSignal (wifi, per client)
+                ],
                 'signal_oids' => ['.1.3.6.1.4.1.14988.1.1.1.1.1.4'], // mtxrWlStatStrength (station mode)
+                'signal_walk' => ['.1.3.6.1.4.1.14988.1.1.21.4.1.6'], // mtxrWifiRegistrationSignal, dBm
                 // SFP optical power (GitHub #11) from mtxrOpticalTable, one row per port with a
                 // module, indexed by ifIndex. Power is in thousandths of a dBm (-5123 -> -5.123).
                 'optical_rx_walk' => '.1.3.6.1.4.1.14988.1.1.19.1.1.10', // mtxrOpticalRxPower

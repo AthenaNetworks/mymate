@@ -20,6 +20,7 @@ const (
 // reconnects). Safe for concurrent use.
 type Poller struct {
 	state *state
+	wl    wlStackCache // which RouterOS wireless menus each device has
 }
 
 func New() *Poller { return &Poller{state: newState()} }

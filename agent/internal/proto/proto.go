@@ -169,6 +169,10 @@ type RouterOSTarget struct {
 	// Discover: also read /interface/print (interfaces) and the /system + /snmp facts this cycle,
 	// so a RouterOS-polled agent device is discovered from the agent, not centrally (#33).
 	Discover bool `json:"discover,omitempty"`
+	// OSVersion is the RouterOS version the server has on record. Only used to key the cache of
+	// which wireless menus the board has, so an upgrade probes again. Older servers don't send it,
+	// then the cache is just keyed by device.
+	OSVersion string `json:"os_version,omitempty"`
 }
 
 // IfaceTarget carries what each poller needs: if_index for SNMP, name for RouterOS.
