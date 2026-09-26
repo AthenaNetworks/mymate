@@ -14,6 +14,12 @@ to the operator who shared them in #16).
   latency and custom sensors are written every poll into daily-partitioned tables, and partitions
   older than the retention window are dropped automatically. Default retention is **14 days**
   (Settings -> Engine, `history.retention_days`). Disk use plateaus once you reach that window.
+  On top of that, 5 minute and hourly rollups are kept much longer for the long graph ranges
+  (defaults 30 and 400 days, `history.rollup_5m_days` / `history.rollup_1h_days`). They're far
+  smaller than raw: roughly 1.4 GB per 1000 interfaces for 30 days of 5 minute rollups and
+  1.6 GB per 1000 interfaces for 400 days of hourly ones. Device metrics plus ping come to
+  roughly twice that per 1000 devices (more columns per row). Shorten either tier in Settings if
+  that's too much.
 - **Redis** is a transient broker (queues, cache, live broadcasting). It holds no durable data -
   everything of record is in PostgreSQL - so it is provisioned with persistence off (see below).
 
