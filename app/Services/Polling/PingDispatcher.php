@@ -46,7 +46,7 @@ class PingDispatcher
 
         // Fast path: one sweep over the whole fleet (unchanged behaviour, no id list to carry).
         if ($shards === 1) {
-            if (! Device::where('monitored', true)->whereNull('agent_id')->exists()) {
+            if (! Device::pollable()->whereNull('agent_id')->exists()) {
                 return 0;
             }
             PingSweepJob::dispatch(); // deviceIds=null -> whole fleet
@@ -54,7 +54,7 @@ class PingDispatcher
             return 1;
         }
 
-        $ids = Device::where('monitored', true)->whereNull('agent_id')->pluck('id')->all();
+        $ids = Device::pollable()->whereNull('agent_id')->pluck('id')->all();
 
         return $this->shardAndDispatch(array_map('intval', $ids));
     }
@@ -71,7 +71,7 @@ class PingDispatcher
     {
         $global = max(1, app(Settings::class)->getInt('ping.interval', 5));
 
-        $ids = Device::where('monitored', true)->whereNull('agent_id')->pluck('id');
+        $ids = Device::pollable()->whereNull('agent_id')->pluck('id');
         if ($ids->isEmpty()) {
             return 0;
         }

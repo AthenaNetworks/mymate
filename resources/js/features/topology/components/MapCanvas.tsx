@@ -13,7 +13,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Cube, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -858,6 +858,14 @@ export function MapCanvas() {
                                 <span className="hidden md:inline">Internet</span>
                             </button>
                             <button
+                                onClick={() => setDeviceDialog({ defaults: { name: 'Switch', mgmt_ip: '', device_type: 'switch', poll_method: 'none' } })}
+                                title="Add a static object with no IP (a dumb switch, patch panel...) - drawn and linked to, never polled"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <Cube weight="light" className="h-4 w-4 text-amber-300" />
+                                <span className="hidden md:inline">Static</span>
+                            </button>
+                            <button
                                 onClick={() => setAddChildMap(true)}
                                 title="Place another map as a node on this overview, then link them"
                                 className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
@@ -973,6 +981,9 @@ export function MapCanvas() {
                                             </button>
                                             <button onClick={() => { setDeviceDialog({ defaults: { name: 'Internet', mgmt_ip: '1.1.1.1', device_type: 'internet', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
                                                 <Globe weight="light" className="h-4 w-4 text-sky-300" /> Add internet object
+                                            </button>
+                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Switch', mgmt_ip: '', device_type: 'switch', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Cube weight="light" className="h-4 w-4 text-amber-300" /> Add static object
                                             </button>
                                             <div className="my-1 h-px bg-white/10" />
                                             <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>

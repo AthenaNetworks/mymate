@@ -32,7 +32,7 @@ class PollDispatcher
         // with an actual throughput method - ping-only devices (poll_method=none,
         // ) have no driver, so dispatching them would just throw + log a
         // spurious `poll: device poll failed` every tick, the exact noise this avoids.
-        $ids = Device::where('monitored', true)
+        $ids = Device::pollable()
             ->whereNull('agent_id') // agent-assigned devices are polled by their agent
             ->whereIn('poll_method', PollMethod::throughputMethods())
             ->pluck('id');
@@ -64,7 +64,7 @@ class PollDispatcher
     {
         $shards = max(1, (int) config('mymate.poll.shards', 16));
 
-        $ids = Device::where('monitored', true)
+        $ids = Device::pollable()
             ->whereNull('agent_id')
             ->whereIn('poll_method', PollMethod::throughputMethods())
             ->pluck('id');
@@ -99,7 +99,7 @@ class PollDispatcher
 
         $shards = max(1, (int) config('mymate.poll.shards', 16));
 
-        $ids = Device::where('monitored', true)
+        $ids = Device::pollable()
             ->whereNull('agent_id')
             ->whereIn('poll_method', PollMethod::throughputMethods())
             ->pluck('id');
@@ -130,7 +130,7 @@ class PollDispatcher
     public function dispatchProbes(): int
     {
         $deviceIds = Probe::where('enabled', true)
-            ->whereHas('device', fn ($q) => $q->where('monitored', true)->whereNull('agent_id'))
+            ->whereHas('device', fn ($q) => $q->pollable()->whereNull('agent_id'))
             ->pluck('device_id')->unique()->values();
         if ($deviceIds->isEmpty()) {
             return 0;

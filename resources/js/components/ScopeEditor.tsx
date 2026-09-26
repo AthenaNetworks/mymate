@@ -20,7 +20,7 @@ export function ScopeEditor({ scope, onChange }: { scope: AlertScope; onChange: 
     const [q, setQ] = useState('');
     const ids = scope.device_ids ?? [];
     const query = q.trim().toLowerCase();
-    const list = (devices ?? []).filter((d) => !query || d.name.toLowerCase().includes(query) || d.mgmt_ip.includes(query));
+    const list = (devices ?? []).filter((d) => !query || d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query));
     const toggle = (id: number) =>
         onChange({ ...scope, device_ids: ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id] });
 

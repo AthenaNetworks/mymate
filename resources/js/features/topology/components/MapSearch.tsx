@@ -23,7 +23,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
 
     const query = q.trim().toLowerCase();
     const matches = useMemo(
-        () => (query ? devices.filter((d) => d.name.toLowerCase().includes(query) || d.mgmt_ip.includes(query)).slice(0, 8) : []),
+        () => (query ? devices.filter((d) => d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query)).slice(0, 8) : []),
         [devices, query],
     );
 

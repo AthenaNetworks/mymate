@@ -2,6 +2,7 @@
 
 namespace App\Actions\Maps;
 
+use App\Models\Device;
 use App\Models\DeviceMapPosition;
 use App\Models\Link;
 use App\Models\Map;
@@ -20,7 +21,12 @@ class ExportMap
         $byDeviceId = $positions->keyBy('device_id');
         $memberIds = $positions->pluck('device_id')->all();
 
+        // Each device gets a stable key the links point at: its IP, or - for a static object with no
+        // IP - its id. a_ip/b_ip are still written so older builds can read the file.
+        $keyOf = fn (?Device $d): ?string => $d === null ? null : ($d->isStatic() ? "static:{$d->id}" : "ip:{$d->mgmt_ip}");
+
         $devices = $positions->map(fn (DeviceMapPosition $p) => [
+            'key' => $keyOf($p->device),
             'name' => $p->device->name,
             'mgmt_ip' => $p->device->mgmt_ip,
             'device_type' => $p->device->device_type?->value,
@@ -37,6 +43,8 @@ class ExportMap
             ->get()
             ->filter(fn (Link $l) => $byDeviceId->has($l->a_device_id) && $byDeviceId->has($l->b_device_id))
             ->map(fn (Link $l) => [
+                'a_key' => $keyOf($l->aDevice),
+                'b_key' => $keyOf($l->bDevice),
                 'a_ip' => $l->aDevice?->mgmt_ip,
                 'a_if' => $l->aInterface?->name,
                 'b_ip' => $l->bDevice?->mgmt_ip,

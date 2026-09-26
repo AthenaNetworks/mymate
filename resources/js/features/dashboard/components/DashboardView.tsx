@@ -36,7 +36,7 @@ function SelectionPanel({ devices }: { devices: Device[] }) {
     const cycleS = useDashboardCycleS();
     const [q, setQ] = useState('');
     const query = q.trim().toLowerCase();
-    const list = query ? devices.filter((d) => d.name.toLowerCase().includes(query) || d.mgmt_ip.includes(query)) : devices;
+    const list = query ? devices.filter((d) => d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query)) : devices;
 
     return (
         <div className="space-y-3 rounded-2xl bg-white/[0.03] p-4 ring-1 ring-white/10">

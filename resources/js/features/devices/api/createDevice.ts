@@ -5,7 +5,7 @@ import { deviceKeys } from './getDevices';
 
 export interface CreateDeviceInput {
     name: string;
-    mgmt_ip: string;
+    mgmt_ip: string | null; // null = static object (ping-only devices only)
     poll_method: PollMethod;
     device_type?: DeviceType;
     credential_id?: number | null;

@@ -63,7 +63,7 @@ class DispatchAgentJobs
     public function buildJob(int $agentId): array
     {
         $devices = Device::where('agent_id', $agentId)
-            ->where('monitored', true)
+            ->pollable()
             ->with(['interfaces:id,device_id,if_index,name', 'credential'])
             ->get();
 

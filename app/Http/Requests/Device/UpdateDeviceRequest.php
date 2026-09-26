@@ -23,7 +23,7 @@ class UpdateDeviceRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
-            'mgmt_ip' => ['sometimes', 'required', 'string', 'max:45', 'ip', new ManageableIp],
+            'mgmt_ip' => ['sometimes', 'nullable', 'string', 'max:45', 'ip', new ManageableIp],
             'poll_method' => ['sometimes', 'required', Rule::enum(PollMethod::class)],
             // Enable/disable monitoring - false pauses throughput + metrics polling.
             'monitored' => ['sometimes', 'boolean'],
@@ -77,6 +77,14 @@ class UpdateDeviceRequest extends FormRequest
             $agentId = $this->has('agent_id')
                 ? ($this->filled('agent_id') ? (int) $this->input('agent_id') : null)
                 : $device->agent_id;
+            // Only a ping-only device may drop its IP (becoming a static map object); SNMP and
+            // RouterOS polling have nothing to talk to without one.
+            $method = $this->has('poll_method') ? (string) $this->input('poll_method') : $device->poll_method->value;
+            if (($ip === null || $ip === '') && $method !== PollMethod::None->value && ! $validator->errors()->has('mgmt_ip')) {
+                $validator->errors()->add('mgmt_ip', 'A device polled over SNMP or RouterOS needs a management IP. Only a ping-only device can be a static object with no IP.');
+
+                return;
+            }
             DeviceIpScope::check($validator, $ip, $agentId, $device->id);
         }];
     }

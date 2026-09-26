@@ -36,7 +36,7 @@ class PingFleet
     {
         // Skip monitoring-paused devices (monitored=false -> mock/demo) and agent-assigned
         // devices (agent_id set -> pinged by their remote agent, not from here).
-        $devices = Device::where('monitored', true)->whereNull('agent_id')
+        $devices = Device::pollable()->whereNull('agent_id')
             ->when($deviceIds !== null, fn ($q) => $q->whereIn('id', $deviceIds))
             ->get();
 

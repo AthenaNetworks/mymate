@@ -61,7 +61,7 @@ export function DevicesView() {
             (mapFilter === 'all' || (mapFilter === 'placed') === ((d.maps_count ?? 1) > 0)) &&
             (!q ||
                 d.name.toLowerCase().includes(q) ||
-                d.mgmt_ip.includes(q) ||
+                (d.mgmt_ip ?? '').includes(q) ||
                 (d.model ?? '').toLowerCase().includes(q) ||
                 (d.vendor ?? '').toLowerCase().includes(q)),
     );

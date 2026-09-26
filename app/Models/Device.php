@@ -113,6 +113,24 @@ class Device extends Model
     }
 
     /**
+     * Devices the engine should actually touch: monitored AND with a management IP. A device with
+     * no IP is a static map object (a dumb switch, a patch panel, an upstream you can't reach) - it
+     * exists to be drawn and linked to, and must never be handed to a pinger, poller, prober or
+     * backup/upgrade job (GitHub #9 / #28 / #49). Every place that selects devices for work goes
+     * through this, so the rule lives in one spot rather than as null checks at each call site.
+     */
+    public function scopePollable(Builder $query): Builder
+    {
+        return $query->where('monitored', true)->whereNotNull('mgmt_ip');
+    }
+
+    /** A static map object: no management IP, so never polled (see scopePollable). */
+    public function isStatic(): bool
+    {
+        return $this->mgmt_ip === null || $this->mgmt_ip === '';
+    }
+
+    /**
      * Devices polled from the same place: one agent's, or the central server's (agent_id null).
      * A management IP only has to be unique within this scope (GitHub #49) - two sites behind two
      * agents can reuse the same private subnet.

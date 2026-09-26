@@ -9,7 +9,7 @@ type UpdateDeviceInput = {
     icon?: string | null;
     icon_color?: string | null;
     name?: string;
-    mgmt_ip?: string;
+    mgmt_ip?: string | null; // null = static object (ping-only devices only)
     monitored?: boolean;
     parent_device_id?: number | null;
     poll_method?: PollMethod;

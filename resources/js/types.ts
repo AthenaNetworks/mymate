@@ -38,7 +38,7 @@ export type DeviceType = 'router' | 'switch' | 'ap' | 'server' | 'internet' | 'u
 export interface Device {
     id: number;
     name: string;
-    mgmt_ip: string;
+    mgmt_ip: string | null; // null = a static map object (no IP, never polled)
     poll_method: PollMethod;
     monitored: boolean; // false = polling paused (no throughput/metrics collected)
     status: DeviceStatus;

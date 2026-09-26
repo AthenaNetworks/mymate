@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Static objects: a device with no IP (GitHub #9, #28, #49).** Add a dumb switch, a patch panel, a
+  building or an upstream you can't reach to the map and link real devices to it, like The Dude's static
+  elements. It's a ping-only device with the IP left blank - there's a "Static" button next to Internet
+  on the map toolbar. It is drawn and linked like any device (so a router port linked to it still shows
+  that port's live traffic and status on the link) but it is never pinged, polled, probed, backed up or
+  upgraded, and its card shows "static object" instead of a load bar. A device polled over SNMP or
+  RouterOS still needs an IP. Static objects and their links survive map export and import.
 - **The same IP can exist at more than one site (GitHub #49).** A management IP now only has to be
   unique within its poll scope - one remote agent, or the central server - instead of across the whole
   install, so 192.168.1.10 behind Site A's agent and 192.168.1.10 behind Site B's can both be added.

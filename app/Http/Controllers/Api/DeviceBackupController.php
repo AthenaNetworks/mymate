@@ -39,6 +39,13 @@ class DeviceBackupController extends Controller
         $enabled = (bool) $request->boolean('backup_enabled');
         $driver = $request->input('backup_driver') ?: ($enabled ? RustedDrivers::suggestFor($device) : $device->backup_driver);
 
+        if ($enabled && $device->isStatic()) {
+            return response()->json([
+                'message' => 'This is a static object with no management IP, so there is nothing to back up.',
+                'errors' => ['backup_enabled' => ['Give the device a management IP before enabling backups.']],
+            ], 422);
+        }
+
         if ($enabled && $driver === null) {
             return response()->json([
                 'message' => 'Pick a backup driver for this device (its vendor could not be matched to one automatically).',

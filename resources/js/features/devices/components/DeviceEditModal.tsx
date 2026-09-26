@@ -32,7 +32,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const { data: devices } = useDevices();
 
     const [name, setName] = useState(device.name);
-    const [mgmtIp, setMgmtIp] = useState(device.mgmt_ip);
+    const [mgmtIp, setMgmtIp] = useState(device.mgmt_ip ?? '');
     const [pollMethod, setPollMethod] = useState<PollMethod>(device.poll_method);
     const [deviceType, setDeviceType] = useState<DeviceType>(device.device_type);
     const [credentialId, setCredentialId] = useState<string>(device.credential_id != null ? String(device.credential_id) : '');
@@ -62,12 +62,14 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        if (!name.trim() || !mgmtIp.trim()) return;
+        // A blank IP is only allowed for a ping-only device, which then becomes a static object.
+        const ipRequired = pollMethod !== 'none';
+        if (!name.trim() || (ipRequired && !mgmtIp.trim())) return;
         update.mutate(
             {
                 id: device.id,
                 name: name.trim(),
-                mgmt_ip: mgmtIp.trim(),
+                mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(),
                 poll_method: pollMethod,
                 device_type: deviceType,
                 monitored,
@@ -112,7 +114,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                         </label>
                         <label className="space-y-1 block">
                             <span className={label}>Management IP</span>
-                            <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} className={field} placeholder="Management IP" />
+                            <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} className={field} placeholder={pollMethod === 'none' ? 'Blank = static object, not polled' : 'Management IP'} />
                         </label>
                         <label className="space-y-1 block">
                             <span className={label}>Poll method</span>
@@ -246,7 +248,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                             </button>
                             <button
                                 type="submit"
-                                disabled={update.isPending || !name.trim() || !mgmtIp.trim()}
+                                disabled={update.isPending || !name.trim() || (pollMethod !== 'none' && !mgmtIp.trim())}
                                 className="rounded-full bg-emerald-500 px-5 py-2 text-sm font-semibold text-emerald-950 shadow-[0_8px_24px_-8px_rgba(16,185,129,0.6)] transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
                             >
                                 {update.isPending ? 'Saving...' : 'Save'}

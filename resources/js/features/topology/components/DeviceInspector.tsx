@@ -648,7 +648,7 @@ export function DeviceInspector() {
                     <div className="min-w-0">
                         <div className="truncate text-base font-bold tracking-tight text-white">{device.name}</div>
                         <div className="truncate text-[11px] text-white/40">
-                            {device.model ?? device.vendor ?? device.mgmt_ip}
+                            {device.model ?? device.vendor ?? device.mgmt_ip ?? 'Static object'}
                         </div>
                     </div>
                 </div>
@@ -658,12 +658,17 @@ export function DeviceInspector() {
             </div>
 
             <div className="grid grid-cols-3 gap-2">
-                <a href={`winbox://${device.mgmt_ip}`} className={actionBtn}>
-                    Winbox
-                </a>
-                <a href={`ssh://${device.mgmt_ip}`} className={actionBtn}>
-                    <Terminal weight="light" className="h-3.5 w-3.5" /> SSH
-                </a>
+                {/* Only offered when there's an address to open - a static object (no IP) has none. */}
+                {device.mgmt_ip && (
+                    <>
+                        <a href={`winbox://${device.mgmt_ip}`} className={actionBtn}>
+                            Winbox
+                        </a>
+                        <a href={`ssh://${device.mgmt_ip}`} className={actionBtn}>
+                            <Terminal weight="light" className="h-3.5 w-3.5" /> SSH
+                        </a>
+                    </>
+                )}
                 {/* Path trace from the MyMate server to this device - read-only, so every operator
                     gets it. Only offered when there's a management IP to trace to (like SSH/Winbox). */}
                 {device.mgmt_ip && (
@@ -714,7 +719,7 @@ export function DeviceInspector() {
             )}
 
             <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                <Detail label="Mgmt IP" value={device.mgmt_ip} mono />
+                <Detail label="Mgmt IP" value={device.mgmt_ip ?? 'none (static object, not polled)'} mono={device.mgmt_ip !== null} />
                 <Detail label="Uptime" value={fmtUptime(device.uptime_seconds, device.uptime_at)} mono />
                 {isAdmin ? (
                     <PollMethodPicker device={device} />
@@ -957,7 +962,7 @@ export function DeviceInspector() {
             )}
 
             {/* Live MTR trace to this device's mgmt IP; the run is stopped when this closes. */}
-            {tracing && (
+            {tracing && device.mgmt_ip && (
                 <TraceModal
                     deviceId={device.id}
                     deviceName={device.name}

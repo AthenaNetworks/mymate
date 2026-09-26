@@ -28,7 +28,7 @@ export function MapDevicePalette() {
     const query = q.trim().toLowerCase();
     const offMap = (devices ?? [])
         .filter((d) => !placed.has(d.id))
-        .filter((d) => !query || d.name.toLowerCase().includes(query) || d.mgmt_ip.includes(query));
+        .filter((d) => !query || d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query));
 
     function place(deviceId: number) {
         if (activeMapId === null) return;

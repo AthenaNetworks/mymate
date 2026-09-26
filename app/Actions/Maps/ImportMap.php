@@ -26,24 +26,36 @@ class ImportMap
         return DB::transaction(function () use ($data): Map {
             $map = Map::create(['name' => $this->uniqueName((string) ($data['map']['name'] ?? 'Imported map'))]);
 
-            // Devices: match by mgmt_ip, else create. Placed on the new map at their saved x/y.
-            $deviceByIp = [];
+            // Devices: match an existing one, else create. Placed on the new map at their saved x/y.
+            // Keyed by the export's `key` (ip:<addr>, or static:<id> for a static object with no IP);
+            // older files have no key, so an IP device falls back to ip:<addr>.
+            $deviceByKey = [];
             foreach ($data['devices'] ?? [] as $d) {
                 $ip = (string) ($d['mgmt_ip'] ?? '');
-                if ($ip === '') {
-                    continue;
+                $key = (string) ($d['key'] ?? ($ip !== '' ? "ip:{$ip}" : ''));
+                if ($key === '') {
+                    continue; // an old-format static object - nothing to match it or its links by
                 }
-                $device = Device::firstOrCreate(
-                    ['mgmt_ip' => $ip],
-                    [
-                        'name' => (string) ($d['name'] ?? $ip),
-                        'device_type' => DeviceType::tryFrom((string) ($d['device_type'] ?? '')) ?? DeviceType::Unknown,
-                        'poll_method' => PollMethod::tryFrom((string) ($d['poll_method'] ?? '')) ?? PollMethod::None,
-                        'icon' => $d['icon'] ?? null,
-                        'icon_color' => $d['icon_color'] ?? null,
-                    ],
-                );
-                $deviceByIp[$ip] = $device;
+                $name = (string) ($d['name'] ?? ($ip !== '' ? $ip : 'Static object'));
+                $attrs = [
+                    'name' => $name,
+                    'device_type' => DeviceType::tryFrom((string) ($d['device_type'] ?? '')) ?? DeviceType::Unknown,
+                    'poll_method' => PollMethod::tryFrom((string) ($d['poll_method'] ?? '')) ?? PollMethod::None,
+                    'icon' => $d['icon'] ?? null,
+                    'icon_color' => $d['icon_color'] ?? null,
+                ];
+
+                if ($ip !== '') {
+                    $device = Device::matchForImport($ip) ?? Device::create($attrs + ['mgmt_ip' => $ip]);
+                } else {
+                    // A static object has no IP to match on: reuse one only when exactly one static
+                    // object already has this name, otherwise create it (never polled either way).
+                    $same = Device::withoutGlobalScope('visibility')->whereNull('mgmt_ip')->where('name', $name)->limit(2)->get();
+                    $device = $same->count() === 1
+                        ? $same->first()
+                        : Device::create(['poll_method' => PollMethod::None, 'mgmt_ip' => null] + $attrs);
+                }
+                $deviceByKey[$key] = $device;
                 DeviceMapPosition::updateOrCreate(
                     ['device_id' => $device->id, 'map_id' => $map->id],
                     ['x' => (float) ($d['x'] ?? 0), 'y' => (float) ($d['y'] ?? 0)],
@@ -53,8 +65,8 @@ class ImportMap
             // Links between resolved devices. An interface is matched by name on its device; a
             // missing one just means a ping-only end (interface_id null). Skip a duplicate.
             foreach ($data['links'] ?? [] as $l) {
-                $a = $deviceByIp[(string) ($l['a_ip'] ?? '')] ?? null;
-                $b = $deviceByIp[(string) ($l['b_ip'] ?? '')] ?? null;
+                $a = $deviceByKey[(string) ($l['a_key'] ?? 'ip:'.($l['a_ip'] ?? ''))] ?? null;
+                $b = $deviceByKey[(string) ($l['b_key'] ?? 'ip:'.($l['b_ip'] ?? ''))] ?? null;
                 if ($a === null || $b === null || $a->id === $b->id) {
                     continue;
                 }

@@ -47,10 +47,11 @@ export function DeviceForm() {
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        if (!name.trim() || !mgmtIp.trim()) return;
+        // A blank IP is fine for a ping-only device: it becomes a static map object (never polled).
+        if (!name.trim() || (pollMethod !== 'none' && !mgmtIp.trim())) return;
         create.mutate(
             {
-                name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
+                name: name.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                 agent_id: agentId === '' ? null : Number(agentId),
                 credential_id: needsCredential && credentialId !== '' ? Number(credentialId) : null,
                 place_on_map: placeOnMap,
@@ -65,7 +66,7 @@ export function DeviceForm() {
     return (
         <form onSubmit={submit} className="space-y-2.5">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className={field} />
-            <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} placeholder="Management IP" className={field} />
+            <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} placeholder={pollMethod === 'none' ? 'Management IP (blank = static object)' : 'Management IP'} className={field} />
             <select value={pollMethod} onChange={(e) => changePollMethod(e.target.value as PollMethod)} className={field}>
                 <option value="snmp">SNMP</option>
                 <option value="routeros">RouterOS API</option>

@@ -65,7 +65,7 @@ export function SetParentDialog({ device, devices, onClose }: { device: Device; 
         () =>
             devices
                 .filter((d) => !excluded.has(d.id))
-                .filter((d) => needle === '' || d.name.toLowerCase().includes(needle) || d.mgmt_ip.includes(needle))
+                .filter((d) => needle === '' || d.name.toLowerCase().includes(needle) || (d.mgmt_ip ?? '').includes(needle))
                 .sort((a, b) => a.name.localeCompare(b.name)),
         [devices, excluded, needle],
     );

@@ -102,14 +102,15 @@ export function DeviceDialog({
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        if (!name.trim() || !mgmtIp.trim()) return;
+        // A blank IP is fine for a ping-only device: it becomes a static map object (never polled).
+        if (!name.trim() || (pollMethod !== 'none' && !mgmtIp.trim())) return;
         const credId = needsCredential && credentialId !== '' ? Number(credentialId) : null;
         const agent = agentId === '' ? null : Number(agentId);
 
         if (mode === 'create') {
             create.mutate(
                 // place_on_map:false - the caller places it on the *active* map (if asked), not the default one.
-                { name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, place_on_map: false },
+                { name: name.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, place_on_map: false },
                 { onSuccess: (d) => { onCreated?.(d, placeOnMap); onClose(); } },
             );
         } else if (device) {
@@ -117,7 +118,7 @@ export function DeviceDialog({
             const latBad = latencyBad.trim() === '' ? null : Number(latencyBad);
             update.mutate(
                 {
-                    id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
+                    id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                     credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor,
                     latency_good_ms: latGood, latency_bad_ms: latBad,
                     latitude: lat.trim() === '' ? null : Number(lat),
@@ -159,7 +160,7 @@ export function DeviceDialog({
                     </label>
                     <label className="block space-y-1">
                         <span className={fieldLabel}>Management IP</span>
-                        <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} placeholder="e.g. 10.0.0.1" className={field} />
+                        <input value={mgmtIp} onChange={(e) => setMgmtIp(e.target.value)} placeholder={pollMethod === 'none' ? 'Blank = static object (dumb switch etc), not polled' : 'e.g. 10.0.0.1'} className={field} />
                     </label>
                     <label className="block space-y-1">
                         <span className={fieldLabel}>Poll method</span>

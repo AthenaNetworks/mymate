@@ -21,8 +21,12 @@ class StoreDeviceRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
-            'mgmt_ip' => ['required', 'string', 'max:45', 'ip', new ManageableIp],
+            // Optional only for a static map object (poll method none, no IP - never polled). Unique
+            // per poll scope (agent or central), checked in after() - see DeviceIpScope.
+            'mgmt_ip' => [
+                Rule::requiredIf(fn () => $this->input('poll_method') !== PollMethod::None->value),
+                'nullable', 'string', 'max:45', 'ip', new ManageableIp,
+            ],
             'poll_method' => ['required', Rule::enum(PollMethod::class)],
             'credential_id' => ['nullable', 'integer', 'exists:credentials,id'],
             'ssh_credential_id' => ['nullable', 'integer', 'exists:credentials,id'],

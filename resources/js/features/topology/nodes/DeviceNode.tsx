@@ -8,7 +8,7 @@ import { useDeviceTileMetric, setDeviceTileMetric } from '../../../lib/shellStor
 
 export type DeviceNodeData = {
     label: string;
-    mgmt_ip: string;
+    mgmt_ip: string | null; // null = a static object (no IP): drawn and linked to, never polled
     status: DeviceStatus;
     device_type: DeviceType;
     icon: string | null; // operator glyph override
@@ -182,12 +182,13 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                     </span>
                     <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-semibold text-white/90">{d.label}</div>
-                        <div className="truncate text-[11px] tabular-nums text-white/40">{d.mgmt_ip}</div>
+                        <div className="truncate text-[11px] tabular-nums text-white/40">{d.mgmt_ip ?? <span className="italic">static object</span>}</div>
                     </div>
                     <StatusDot status={d.status} className="mt-0.5 self-start" />
                 </div>
 
-                {isInternet ? (
+                {/* A static object has no IP, so nothing is measured - no load/latency bar at all. */}
+                {d.mgmt_ip === null ? null : isInternet ? (
                     /* Internet/upstream: a fixed LATENCY readout (rtt + optional loss badge),
                        coloured by the device's quality thresholds. No metric cycling. */
                     <div className="mt-2.5 flex items-center gap-2">
