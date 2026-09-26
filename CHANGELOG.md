@@ -14,6 +14,15 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Operator groups (GitHub #28).** Settings -> Operators now has a Groups card. A group has a name and
+  is either read-only on all maps or restricted to the maps you tick (sub-maps come along), and you
+  add operators to it from either the group or the operator form, so "NOC" or "Field techs - North"
+  is set up once instead of per person. Someone's own per-user restriction still applies, and if any
+  of their groups is restricted they're restricted too, seeing the maps from all of those combined -
+  the most restrictive setting always wins. Admins are never in a group and always see everything.
+  It's enforced server side the same way per-user restriction is. Groups are admin only, and a group
+  that still has members can't be deleted (that would quietly give them the whole fleet). Nobody is
+  in a group after upgrading, so existing access is unchanged.
 - **The same IP can exist at more than one site (GitHub #49).** A management IP now only has to be
   unique within its poll scope - one remote agent, or the central server - instead of across the whole
   install, so 192.168.1.10 behind Site A's agent and 192.168.1.10 behind Site B's can both be added.
