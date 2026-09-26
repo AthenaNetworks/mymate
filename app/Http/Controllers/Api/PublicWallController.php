@@ -35,8 +35,17 @@ class PublicWallController extends Controller
         // Best-effort and event-free so it never blocks the view or fires a broadcast.
         $share->forceFill(['last_viewed_at' => now()])->saveQuietly();
 
-        return response()->json(['data' => MapDetail::build($share->map)])
-            ->header('Cache-Control', 'no-store');
+        // The background placement rides along here (it's not part of MapDetail - the logged-in
+        // canvas reads it from its own endpoint so editing it never churns the node data).
+        $data = MapDetail::build($share->map) + ['background' => $share->map->backgroundMeta()];
+
+        return response()->json(['data' => $data])->header('Cache-Control', 'no-store');
+    }
+
+    /** The shared map's background image (GitHub #37), if it has one. Same sandboxed response as the authenticated route. */
+    public function background(string $token)
+    {
+        return MapBackgroundController::serve($this->share($token)->map);
     }
 
     /** The devices on this map, reduced to the fields the wallboard renders. Never any secrets. */

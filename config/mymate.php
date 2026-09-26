@@ -176,6 +176,10 @@ return [
         // Address -> lat/lng geocoder, proxied server-side (fixed trusted host, like the
         // update check). Empty disables address lookup; drag-drop still works.
         'geocoder_url' => env('MYMATE_MAP_GEOCODER_URL', 'https://nominatim.openstreetmap.org/search'),
+        // Custom background image per logical map (GitHub #37): max upload size (KB) and the
+        // largest side (px) we'll accept, so a 30k-pixel scan can't stall every browser that opens it.
+        'background_max_kb' => (int) env('MYMATE_MAP_BACKGROUND_MAX_KB', 10240),
+        'background_max_px' => (int) env('MYMATE_MAP_BACKGROUND_MAX_PX', 16384),
     ],
 
     // Public wallboard embedding (GitHub #15). Default origins allowed to frame /wall/{token} in an

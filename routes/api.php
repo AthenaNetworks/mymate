@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\GraphSettingController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
+use App\Http\Controllers\Api\MapBackgroundController;
 use App\Http\Controllers\Api\MapController;
 use App\Http\Controllers\Api\MapShareController;
 use App\Http\Controllers\Api\OutageController;
@@ -73,6 +74,7 @@ Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAre
         Route::get('devices', [PublicWallController::class, 'devices'])->name('public.wall.devices');
         Route::get('devices/{device}/icon', [PublicWallController::class, 'icon'])->name('public.wall.icon');
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
+        Route::get('background', [PublicWallController::class, 'background'])->name('public.wall.background');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
@@ -300,6 +302,16 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::post('maps/{map}/shares', [MapShareController::class, 'store'])->name('maps.shares.store');
     Route::patch('maps/{map}/shares/{share}', [MapShareController::class, 'update'])->name('maps.shares.update');
     Route::delete('maps/{map}/shares/{share}', [MapShareController::class, 'destroy'])->name('maps.shares.destroy');
+    // Custom background image per map (GitHub #37). Viewing follows map visibility ({map} binding
+    // runs through the Map global scope, so an out-of-scope map 404s); changing it is admin-only.
+    Route::get('maps/{map}/background', [MapBackgroundController::class, 'show'])->name('maps.background.show');
+    Route::get('maps/{map}/background/image', [MapBackgroundController::class, 'image'])->name('maps.background.image');
+    Route::middleware('admin')->group(function (): void {
+        Route::post('maps/{map}/background', [MapBackgroundController::class, 'store'])
+            ->middleware('throttle:20,1')->name('maps.background.store');
+        Route::patch('maps/{map}/background', [MapBackgroundController::class, 'update'])->name('maps.background.update');
+        Route::delete('maps/{map}/background', [MapBackgroundController::class, 'destroy'])->name('maps.background.destroy');
+    });
 
     // Outage timeline - ?device_id= , ?state=open|closed.
     Route::get('outages', [OutageController::class, 'index'])->name('outages.index');
