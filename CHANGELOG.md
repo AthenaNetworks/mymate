@@ -35,6 +35,10 @@ of commit subjects.
   in the inspector). Set it in the device's edit dialog.
 
 ### Fixed
+- **`docker compose exec app php artisan ...` works on Docker.** Commands run that way (like creating the
+  first admin, as the README says) didn't see the settings the container sets up at start, so they used
+  the wrong database and had no app key. Those settings are now written where every artisan run finds them.
+- **The Docker images build with podman as well as Docker** (base images are named in full).
 - **A fresh .deb or LXC install is HTTPS from the start again, and its backups work.** The installer
   called `mymate-ssl` by a path that isn't on the package scripts' PATH, so every fresh install quietly
   fell back to plain HTTP. And the package didn't depend on `git`, which the backup engine needs, so on a

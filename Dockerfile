@@ -8,7 +8,7 @@
 # Run:    docker compose up      (brings up postgres + redis + this image)
 
 # --- 1. frontend assets ------------------------------------------------------
-FROM node:20-slim AS assets
+FROM docker.io/library/node:20-slim AS assets
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -21,14 +21,14 @@ ARG VITE_REVERB_APP_KEY=mymate
 RUN VITE_REVERB_APP_KEY="$VITE_REVERB_APP_KEY" npx vite build
 
 # --- 2. fping 5.5 (JSON output; distro packages are too old) -----------------
-FROM debian:bookworm-slim AS fping
+FROM docker.io/library/debian:bookworm-slim AS fping
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential autoconf automake libtool curl ca-certificates \
     && curl -fsSL https://github.com/schweikert/fping/releases/download/v5.5/fping-5.5.tar.gz | tar xz \
     && cd fping-5.5 && ./configure --prefix=/usr/local && make && make install
 
 # --- 2b. rusted backup engine (Go; the 1.26 toolchain is auto-fetched) --------
-FROM golang:1.24-bookworm AS rusted
+FROM docker.io/library/golang:1.24-bookworm AS rusted
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates
 # Clone the pinned rusted release (deploy/rusted/VERSION, shared with build-rusted.sh). COPYing
 # the pin first makes it part of the layer cache key: a bumped version rebuilds, an unchanged one
@@ -40,12 +40,12 @@ WORKDIR /src
 RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
 
 # --- 3. composer (named stage so `COPY --from=composer` works everywhere) -----
-FROM composer:2 AS composer
+FROM docker.io/library/composer:2 AS composer
 
 # --- 4. runtime --------------------------------------------------------------
 # Pinned to a patch release, not the floating 8.4 tag: a builder with a stale cached base
 # would otherwise ship an old PHP. 8.4.27 fixes CVE-2026-109618 / CVE-2026-109619 (RCE).
-FROM php:8.4.27-fpm-bookworm AS runtime
+FROM docker.io/library/php:8.4.27-fpm-bookworm AS runtime
 
 # The servers we run under supervisor (openssl, for the self-signed HTTPS cert, is already
 # in the base image). mtr-tiny backs the live device trace and the Tools traceroute - the

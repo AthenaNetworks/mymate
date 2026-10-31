@@ -11,7 +11,7 @@
 # required, MYMATE_AGENT_NAME / MYMATE_AGENT_LOG / MYMATE_AGENT_INSECURE are optional. The
 # agent keeps no state on disk so there is nothing to mount.
 
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.25-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG TARGETVARIANT

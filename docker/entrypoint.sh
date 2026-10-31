@@ -55,6 +55,17 @@ persisted_secret() {
 grep -qE '^APP_KEY=base64:.+' .env || persisted_secret APP_KEY "$STATE_DIR/app_key" "php artisan key:generate --show --no-ansi"
 persisted_secret REVERB_APP_SECRET "$STATE_DIR/reverb_app_secret" "openssl rand -hex 32"
 
+# `docker compose exec app php artisan ...` (creating the first admin, say) doesn't run through this
+# script, so it never sees the exports above: no APP_KEY, and .env.example's sqlite database. Write
+# them into .env as well, which every artisan run reads. A real environment variable still wins.
+set_dotenv() {
+    if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else printf '%s=%s\n' "$1" "$2" >> .env; fi
+}
+for k in DB_CONNECTION SESSION_DRIVER QUEUE_CONNECTION CACHE_STORE BROADCAST_CONNECTION APP_KEY REVERB_APP_SECRET; do
+    eval "v=\${$k:-}"
+    [ -n "$v" ] && set_dotenv "$k" "$v"
+done
+
 # Wait for Postgres before migrating.
 DB_HOST="${DB_HOST:-postgres}"; DB_PORT="${DB_PORT:-5432}"; DB_USERNAME="${DB_USERNAME:-mymate}"
 echo "mymate: waiting for postgres at ${DB_HOST}:${DB_PORT} ..."
