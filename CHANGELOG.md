@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **The Dude import skips leftovers of deleted maps (GitHub #9).** A Dude database can keep a deleted
+  map's elements around, and their link lines came through as links you couldn't see in Dude. Only
+  elements on maps that still exist are imported now.
 - **Several links between the same two devices are drawn side by side (GitHub #9).** They used to sit
   exactly on top of each other, so only the last one was visible. Each now bows out to its own lane with
   its own label, on the map, the geo map and the wallboard.

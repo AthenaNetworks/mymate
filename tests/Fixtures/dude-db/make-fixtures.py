@@ -84,6 +84,20 @@ objs[600] = obj(74, 600, None, {0x5dc0: (0x08, 500), 0x5dc4: (0x08, 1),
 objs[601] = obj(74, 601, None, {0x5dc0: (0x08, 500), 0x5dc4: (0x08, 2),
                                 0x5dc5: (0x08, 130), 0x5dc6: (0x08, 120), 0x5ddf: (0x09, 1)})
 
+# A drawn link line on Main between router1 and switch1 (class 74, kind 4 = link).
+objs[602] = obj(74, 602, None, {0x5dc0: (0x08, 500), 0x5ddf: (0x09, 4),
+                                0x5ddb: (0x08, 600), 0x5ddc: (0x08, 601)})
+
+# Leftovers of a map that was deleted (GitHub #9): The Dude can leave a deleted map's elements
+# behind, still pointing at map 999 that no longer exists. Their link must not be imported.
+objs[3] = obj(15, 3, 'ghost-peer', {0x1f40: (0x88, [ip4('10.0.0.3')])})
+objs[700] = obj(74, 700, None, {0x5dc0: (0x08, 999), 0x5dc4: (0x08, 1),
+                                0x5dc5: (0x08, 10), 0x5dc6: (0x08, 10), 0x5ddf: (0x09, 1)})
+objs[701] = obj(74, 701, None, {0x5dc0: (0x08, 999), 0x5dc4: (0x08, 3),
+                                0x5dc5: (0x08, 40), 0x5dc6: (0x08, 40), 0x5ddf: (0x09, 1)})
+objs[702] = obj(74, 702, None, {0x5dc0: (0x08, 999), 0x5ddf: (0x09, 4),
+                                0x5ddb: (0x08, 700), 0x5ddc: (0x08, 701)})
+
 db = sqlite3.connect(out)
 db.execute('DROP TABLE IF EXISTS objs')
 db.execute('CREATE TABLE objs (id INTEGER PRIMARY KEY, obj BLOB)')

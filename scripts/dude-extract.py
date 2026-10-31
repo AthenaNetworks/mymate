@@ -107,12 +107,19 @@ name = {oid: (o.get('name') or '') for oid, o in objs.items()}
 # the class-74 link map-element: 0x5ddb/0x5ddc = endpoint node elements (each node
 # element carries its device in 0x5dc4), 0x5ddd = the Link object. So we can recover
 # both device ends; the peer end's interface is unknown (importer makes a stub).
+#
+# Only elements on a map that still exists count. The Dude can leave a deleted map's elements
+# (nodes and link lines) behind in objs, pointing at a map id that's gone; importing those
+# produced links the operator never sees in Dude (GitHub #9).
+_live_maps = {oid for oid, o in objs.items() if o.get('classid') == 10}
+def _live_elem(o):
+    return o.get('classid') == 74 and o.get(0x5dc0) in _live_maps
 _node_elem_device = {oid: o.get(0x5dc4) for oid, o in objs.items()
-                     if o.get('classid') == 74 and isinstance(o.get(0x5dc4), int)
+                     if _live_elem(o) and isinstance(o.get(0x5dc4), int)
                      and objs.get(o.get(0x5dc4), {}).get('classid') == 15}
 link_endpoints = {}                              # linkObjID -> (deviceA, deviceB)
 for _oid, _o in objs.items():
-    if _o.get('classid') == 74 and _o.get(0x5ddf) == 4 and isinstance(_o.get(0x5ddd), int):
+    if _live_elem(_o) and _o.get(0x5ddf) == 4 and isinstance(_o.get(0x5ddd), int):
         link_endpoints[_o[0x5ddd]] = (_node_elem_device.get(_o.get(0x5ddb)),
                                       _node_elem_device.get(_o.get(0x5ddc)))
 probe_iface = {}                                 # probeID -> (deviceID, if_index, 'tx'|'rx')
@@ -166,7 +173,7 @@ np = 0
 with open(f'{OUT}/placements.csv','w',newline='') as fh:
     w = csv.writer(fh); w.writerow(['deviceID','device','ip','mapID','map','x','y'])
     for oid,o in objs.items():
-        if o.get('classid')!=74: continue
+        if not _live_elem(o): continue
         did = o.get(0x5dc4)
         if not isinstance(did,int) or did not in devs: continue
         mid = o.get(0x5dc0)
@@ -328,7 +335,7 @@ with open(f'{OUT}/map_links.csv','w',newline='') as fh:
     w = csv.writer(fh); w.writerow(['elementID','mapID','a_deviceID','a_device','b_deviceID','b_device'])
     _mln = 0
     for _oid, _o in objs.items():
-        if _o.get('classid') != 74 or _o.get(0x5ddf) != 4:
+        if not _live_elem(_o) or _o.get(0x5ddf) != 4:
             continue
         _a = _node_elem_device.get(_o.get(0x5ddb))
         _b = _node_elem_device.get(_o.get(0x5ddc))

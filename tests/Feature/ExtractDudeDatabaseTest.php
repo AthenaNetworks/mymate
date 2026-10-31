@@ -93,4 +93,20 @@ class ExtractDudeDatabaseTest extends TestCase
         @rmdir($dir.'/export');
         @rmdir($dir);
     }
+
+    // GitHub #9: a deleted map's elements can linger in dude.db pointing at a map that's gone;
+    // their link lines showed up as links nobody could see in Dude.
+    public function test_ignores_elements_left_behind_by_a_deleted_map(): void
+    {
+        $dir = $this->extractWorkDir('full.db');
+
+        $exportDir = app(ExtractDudeDatabase::class)($dir.'/dude.db', withCharts: false);
+
+        $mapLinks = file_get_contents($exportDir.'/map_links.csv');
+        $this->assertStringContainsString('602,500,1,router1,2,switch1', $mapLinks); // the real line on Main
+        $this->assertStringNotContainsString('ghost-peer', $mapLinks);
+        $this->assertStringNotContainsString('ghost-peer', file_get_contents($exportDir.'/placements.csv'));
+
+        $this->deleteDir($dir);
+    }
 }
