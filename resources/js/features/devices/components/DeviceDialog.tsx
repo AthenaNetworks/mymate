@@ -59,6 +59,7 @@ export function DeviceDialog({
     const { data: credentials } = useCredentials();
 
     const [name, setName] = useState(device?.name ?? defaults?.name ?? '');
+    const [alias, setAlias] = useState(device?.alias ?? '');
     const [mgmtIp, setMgmtIp] = useState(device?.mgmt_ip ?? defaults?.mgmt_ip ?? '');
     const [pollMethod, setPollMethod] = useState<PollMethod>(device?.poll_method ?? defaults?.poll_method ?? 'snmp');
     const [placeOnMap, setPlaceOnMap] = useState(true); // create only: drop it on the current map?
@@ -113,7 +114,7 @@ export function DeviceDialog({
         if (mode === 'create') {
             create.mutate(
                 // place_on_map:false - the caller places it on the *active* map (if asked), not the default one.
-                { name: name.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, place_on_map: false },
+                { name: name.trim(), alias: alias.trim() === '' ? null : alias.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType, credential_id: credId, agent_id: agent, place_on_map: false },
                 { onSuccess: (d) => { onCreated?.(d, placeOnMap); onClose(); } },
             );
         } else if (device) {
@@ -121,7 +122,7 @@ export function DeviceDialog({
             const latBad = latencyBad.trim() === '' ? null : Number(latencyBad);
             update.mutate(
                 {
-                    id: device.id, name: name.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
+                    id: device.id, name: name.trim(), alias: alias.trim() === '' ? null : alias.trim(), mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(), poll_method: pollMethod, device_type: deviceType,
                     credential_id: credId, agent_id: agent, monitored, icon, icon_color: iconColor,
                     ping_source: pingSource.trim() === '' ? null : pingSource.trim(),
                     latency_good_ms: latGood, latency_bad_ms: latBad,
@@ -161,6 +162,10 @@ export function DeviceDialog({
                     <label className="block space-y-1">
                         <span className={fieldLabel}>Name</span>
                         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. bdr1" className={field} />
+                    </label>
+                    <label className="block space-y-1">
+                        <span className={fieldLabel}>Alias</span>
+                        <input value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={100} placeholder="Friendly name for the map (optional)" className={field} />
                     </label>
                     <label className="block space-y-1">
                         <span className={fieldLabel}>Management IP</span>

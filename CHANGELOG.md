@@ -13,6 +13,11 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- **Device alias (GitHub #53).** Give a device a friendly name and the map card, the geo map, the
+  wallboard, map search and the inspector show it instead of the hostname (the hostname stays under it
+  in the inspector). Set it in the device's edit dialog.
+
 ### Fixed
 - **The Dude import skips leftovers of deleted maps (GitHub #9).** A Dude database can keep a deleted
   map's elements around, and their link lines came through as links you couldn't see in Dude. Only

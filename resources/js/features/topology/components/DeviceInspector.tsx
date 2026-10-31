@@ -1,3 +1,4 @@
+import { displayName } from '../../../lib/deviceName';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowsOut, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
@@ -697,8 +698,9 @@ export function DeviceInspector() {
                         </span>
                     )}
                     <div className="min-w-0">
-                        <div className="truncate text-base font-bold tracking-tight text-white">{device.name}</div>
+                        <div className="truncate text-base font-bold tracking-tight text-white">{displayName(device)}</div>
                         <div className="truncate text-[11px] text-white/40">
+                            {device.alias?.trim() ? `${device.name} · ` : ''}
                             {device.model ?? device.vendor ?? device.mgmt_ip ?? 'Static object'}
                         </div>
                     </div>

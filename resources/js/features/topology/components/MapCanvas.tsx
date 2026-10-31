@@ -1,3 +1,4 @@
+import { displayName } from '../../../lib/deviceName';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ReactFlow,
@@ -389,7 +390,7 @@ export function MapCanvas() {
             type: 'device',
             position: posByIdRef.current[d.id] ?? { x: d.map_x, y: d.map_y },
             data: {
-                label: d.name,
+                label: displayName(d),
                 mgmt_ip: d.mgmt_ip,
                 status: d.status,
                 device_type: d.device_type,
@@ -581,7 +582,7 @@ export function MapCanvas() {
                     c.rtt_ms === d.rtt_ms && c.loss_pct === d.loss_pct &&
                     c.latency_good_ms === d.latency_good_ms && c.latency_bad_ms === d.latency_bad_ms
                 ) return n;
-                return { ...n, data: { ...n.data, label: d.name, status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c, rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms } };
+                return { ...n, data: { ...n.data, label: displayName(d), status: d.status, device_type: d.device_type, icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c, rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms } };
             }),
         );
     }, [devices, setNodes]);

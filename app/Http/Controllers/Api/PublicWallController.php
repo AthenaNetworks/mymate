@@ -92,6 +92,7 @@ class PublicWallController extends Controller
         $data = $devices->map(fn ($d) => [
             'id' => $d->id,
             'name' => $d->name,
+            'alias' => $d->alias,
             // Deliberately NOT mgmt_ip - a public link must not leak internal addressing.
             'mgmt_ip' => null,
             'status' => $d->status->value,

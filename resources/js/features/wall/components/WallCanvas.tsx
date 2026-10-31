@@ -1,3 +1,4 @@
+import { displayName } from '../../../lib/deviceName';
 import { useEffect, useMemo } from 'react';
 import {
     ReactFlow,
@@ -70,7 +71,7 @@ export function WallCanvas() {
             draggable: false,
             connectable: false,
             data: {
-                label: d.name,
+                label: displayName(d),
                 mgmt_ip: d.mgmt_ip,
                 status: d.status,
                 device_type: d.device_type,

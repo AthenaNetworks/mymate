@@ -2312,6 +2312,7 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
+        alias: { type: string, nullable: true, description: "Friendly name shown on the map card instead of the hostname." }
         mgmt_ip: { type: string, nullable: true }
         poll_method: { type: string, enum: [snmp, routeros, none] }
         monitored: { type: boolean }
@@ -2369,6 +2370,7 @@ components:
       required: [name, mgmt_ip, poll_method]
       properties:
         name: { type: string, maxLength: 255 }
+        alias: { type: string, maxLength: 100, nullable: true }
         mgmt_ip: { type: string, maxLength: 45, description: "Unique, valid IP." }
         poll_method: { type: string, enum: [snmp, routeros, none] }
         credential_id: { type: integer, nullable: true }
@@ -2384,6 +2386,7 @@ components:
       description: All fields optional.
       properties:
         name: { type: string, maxLength: 255 }
+        alias: { type: string, maxLength: 100, nullable: true }
         mgmt_ip: { type: string, maxLength: 45 }
         poll_method: { type: string, enum: [snmp, routeros, none] }
         monitored: { type: boolean }

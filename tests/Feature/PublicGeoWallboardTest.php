@@ -23,7 +23,7 @@ class PublicGeoWallboardTest extends TestCase
 
     /** The device keys the logical wallboard has always sent - a logical share must not grow. */
     private const LOGICAL_KEYS = [
-        'id', 'name', 'mgmt_ip', 'status', 'map_x', 'map_y', 'device_type', 'icon', 'icon_color', 'vendor', 'model',
+        'alias', 'id', 'name', 'mgmt_ip', 'status', 'map_x', 'map_y', 'device_type', 'icon', 'icon_color', 'vendor', 'model',
         'cpu_pct', 'mem_used_pct', 'temp_c', 'rtt_ms', 'loss_pct', 'latency_good_ms', 'latency_bad_ms',
     ];
 

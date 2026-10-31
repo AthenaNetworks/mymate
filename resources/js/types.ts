@@ -52,6 +52,7 @@ export type DeviceType = 'router' | 'switch' | 'ap' | 'server' | 'internet' | 'u
 export interface Device {
     id: number;
     name: string;
+    alias?: string | null; // friendly name for the map card, in place of the hostname (GitHub #53)
     mgmt_ip: string | null; // null = a static map object (no IP, never polled)
     ping_source: string | null; // local address the up/down ping is sent FROM; null = global default
     poll_method: PollMethod;

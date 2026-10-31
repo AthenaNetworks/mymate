@@ -12,6 +12,7 @@ class DeviceResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'alias' => $this->alias,
             'mgmt_ip' => $this->mgmt_ip,
             // Local address the up/down ping is sent FROM; null = the global default.
             'ping_source' => $this->ping_source,

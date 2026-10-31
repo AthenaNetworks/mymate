@@ -407,4 +407,26 @@ class DeviceApiTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors(['mgmt_ip']);
     }
+
+    // GitHub #53: a friendly name for the map card.
+    public function test_alias_is_saved_returned_and_cleared(): void
+    {
+        $this->postJson('/api/devices', ['name' => 'rtr-bne-01', 'alias' => 'Brisbane core', 'mgmt_ip' => '10.0.0.9', 'poll_method' => 'snmp'])
+            ->assertCreated()
+            ->assertJsonPath('data.alias', 'Brisbane core');
+        $device = Device::where('name', 'rtr-bne-01')->firstOrFail();
+
+        $this->putJson("/api/devices/{$device->id}", ['alias' => 'BNE core'])->assertOk()->assertJsonPath('data.alias', 'BNE core');
+        $this->putJson("/api/devices/{$device->id}", ['alias' => null])->assertOk()->assertJsonPath('data.alias', null);
+        $this->putJson("/api/devices/{$device->id}", ['alias' => str_repeat('x', 101)])->assertUnprocessable();
+
+        $this->assertSame('rtr-bne-01', $device->fresh()->name);
+    }
+
+    public function test_alias_is_in_the_geo_feed(): void
+    {
+        Device::factory()->create(['alias' => 'Tower 3', 'latitude' => -27.4, 'longitude' => 153.0, 'monitored' => true]);
+
+        $this->getJson('/api/geo/devices')->assertOk()->assertJsonPath('data.0.alias', 'Tower 3');
+    }
 }

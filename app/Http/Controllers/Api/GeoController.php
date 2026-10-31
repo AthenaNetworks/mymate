@@ -58,7 +58,7 @@ class GeoController extends Controller
                 'open', 'open.device_id', '=', 'devices.id',
             )
             ->toBase()
-            ->get(['devices.id', 'devices.name', 'devices.status', 'devices.monitored', 'devices.site_id',
+            ->get(['devices.id', 'devices.name', 'devices.alias', 'devices.status', 'devices.monitored', 'devices.site_id',
                 'devices.parent_device_id', 'devices.latitude', 'devices.longitude', 'open.down_since']);
 
         $sites = DB::table('sites')->whereNotNull('latitude')->whereNotNull('longitude')
@@ -82,6 +82,7 @@ class GeoController extends Controller
             $out[] = [
                 'id' => (int) $r->id,
                 'name' => $r->name,
+                'alias' => $r->alias,
                 'status' => $r->status,
                 'site_id' => $r->site_id !== null ? (int) $r->site_id : null,
                 'lat' => $lat,

@@ -1,3 +1,4 @@
+import { displayName } from '../../../lib/deviceName';
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 import { StatusDot } from '../../../components/StatusDot';
@@ -23,7 +24,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
 
     const query = q.trim().toLowerCase();
     const matches = useMemo(
-        () => (query ? devices.filter((d) => d.name.toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query)).slice(0, 8) : []),
+        () => (query ? devices.filter((d) => d.name.toLowerCase().includes(query) || (d.alias ?? '').toLowerCase().includes(query) || (d.mgmt_ip ?? '').includes(query)).slice(0, 8) : []),
         [devices, query],
     );
 
@@ -69,7 +70,7 @@ export function MapSearch({ devices, onSelect }: { devices: Device[]; onSelect: 
                     }`}
                 >
                     <StatusDot status={d.status} />
-                    <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                    <span className="min-w-0 flex-1 truncate">{displayName(d)}</span>
                     <span className="shrink-0 font-mono text-[10px] text-white/35">{d.mgmt_ip}</span>
                 </button>
             ))

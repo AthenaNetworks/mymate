@@ -21,6 +21,8 @@ class StoreDeviceRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            // Friendly name shown on the map card instead of the hostname (GitHub #53).
+            'alias' => ['sometimes', 'nullable', 'string', 'max:100'],
             // Optional only for a static map object (poll method none, no IP - never polled). Unique
             // per poll scope (agent or central), checked in after() - see DeviceIpScope.
             'mgmt_ip' => [

@@ -1,3 +1,4 @@
+import { displayName } from '../../../lib/deviceName';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ReactFlow, useReactFlow, useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -18,7 +19,7 @@ const edgeTypes = { util: UtilEdge };
 /** DeviceNode data from a device row (native card; live cpu/mem/status come from the query). */
 function deviceData(d: Device) {
     return {
-        label: d.name, mgmt_ip: d.mgmt_ip, status: d.status, device_type: d.device_type,
+        label: displayName(d), mgmt_ip: d.mgmt_ip, status: d.status, device_type: d.device_type,
         icon: d.icon, icon_color: d.icon_color, vendor: d.vendor, model: d.model,
         util: null, load: null, cpu: d.cpu_pct, mem: d.mem_used_pct, temp: d.temp_c,
         rtt_ms: d.rtt_ms, loss_pct: d.loss_pct, latency_good_ms: d.latency_good_ms, latency_bad_ms: d.latency_bad_ms,

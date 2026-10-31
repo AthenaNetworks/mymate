@@ -32,6 +32,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
     const { data: credentials } = useCredentials();
 
     const [name, setName] = useState(device.name);
+    const [alias, setAlias] = useState(device.alias ?? '');
     const [mgmtIp, setMgmtIp] = useState(device.mgmt_ip ?? '');
     const [pollMethod, setPollMethod] = useState<PollMethod>(device.poll_method);
     const [deviceType, setDeviceType] = useState<DeviceType>(device.device_type);
@@ -70,6 +71,7 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
             {
                 id: device.id,
                 name: name.trim(),
+                alias: alias.trim() === '' ? null : alias.trim(),
                 mgmt_ip: mgmtIp.trim() === '' ? null : mgmtIp.trim(),
                 poll_method: pollMethod,
                 device_type: deviceType,
@@ -112,6 +114,10 @@ export function DeviceEditModal({ device, onClose }: { device: Device; onClose: 
                         <label className="space-y-1 block">
                             <span className={label}>Name</span>
                             <input value={name} onChange={(e) => setName(e.target.value)} className={field} placeholder="Name" />
+                        </label>
+                        <label className="space-y-1 block">
+                            <span className={label}>Alias</span>
+                            <input value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={100} className={field} placeholder="Friendly name for the map (optional)" />
                         </label>
                         <label className="space-y-1 block">
                             <span className={label}>Management IP</span>

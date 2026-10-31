@@ -22,6 +22,8 @@ class UpdateDeviceRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
+            // Friendly name shown on the map card instead of the hostname (GitHub #53).
+            'alias' => ['sometimes', 'nullable', 'string', 'max:100'],
             // Unique per poll scope (agent or central), checked in after() - see DeviceIpScope.
             'mgmt_ip' => ['sometimes', 'nullable', 'string', 'max:45', 'ip', new ManageableIp],
             // Ping FROM this local address (fping -S / the agent's bound socket). Null = global default.
