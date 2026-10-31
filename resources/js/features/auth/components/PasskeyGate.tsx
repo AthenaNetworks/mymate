@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Fingerprint, SignOut, Warning } from '@phosphor-icons/react';
-import { useRegisterPasskey, useVerifyPasskey } from '../api/passkeys';
+import { Fingerprint, Key, SignOut, Warning } from '@phosphor-icons/react';
+import { useRecoverWithCode, useRegisterPasskey, useVerifyPasskey } from '../api/passkeys';
 import { useLogout } from '../api/auth';
 import { passkeysSupported } from '../lib/passkey';
 import type { PasskeyStage } from '../../../types';
@@ -14,13 +14,26 @@ import type { PasskeyStage } from '../../../types';
 export function PasskeyGate({ stage }: { stage: PasskeyStage }) {
     const register = useRegisterPasskey();
     const verify = useVerifyPasskey();
+    const recover = useRecoverWithCode();
     const logout = useLogout();
+    const [recovering, setRecovering] = useState(false); // lost the passkey: use a recovery code
+    const [code, setCode] = useState('');
     const [name, setName] = useState('This device');
     const [error, setError] = useState<string | null>(null);
 
     const enrol = stage === 'enrol';
     const busy = register.isPending || verify.isPending;
     const supported = passkeysSupported();
+
+    async function submitCode() {
+        setError(null);
+        try {
+            await recover.mutateAsync(code);
+        } catch (e) {
+            const msg = (e as { response?: { data?: { message?: string } } });
+            setError(msg?.response?.data?.message ?? 'That didn\'t work. Please try again.');
+        }
+    }
 
     async function go() {
         setError(null);
@@ -66,8 +79,34 @@ export function PasskeyGate({ stage }: { stage: PasskeyStage }) {
                     />
                 )}
 
+                {recovering && (
+                    <>
+                        <p className="mt-4 text-sm leading-relaxed text-white/55">
+                            Enter one of the recovery codes you saved when you set up your passkey. Each works once.
+                        </p>
+                        <input
+                            value={code}
+                            onChange={(e) => setCode(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && code.trim() && submitCode()}
+                            placeholder="xxxx-xxxx-xxxx"
+                            autoFocus
+                            autoComplete="one-time-code"
+                            className="mt-3 w-full rounded-xl bg-white/[0.03] px-3 py-2 font-mono text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60"
+                        />
+                    </>
+                )}
+
                 {error && <p className="mt-3 text-xs text-rose-400/90">{error}</p>}
 
+                {recovering ? (
+                    <button
+                        onClick={submitCode}
+                        disabled={recover.isPending || code.trim() === ''}
+                        className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
+                    >
+                        <Key weight="bold" className="h-4 w-4" /> {recover.isPending ? 'Checking...' : 'Use recovery code'}
+                    </button>
+                ) : (
                 <button
                     onClick={go}
                     disabled={busy || !supported}
@@ -76,6 +115,26 @@ export function PasskeyGate({ stage }: { stage: PasskeyStage }) {
                     <Fingerprint weight="bold" className="h-4 w-4" />
                     {busy ? 'Waiting for your device...' : enrol ? 'Create passkey' : 'Use passkey'}
                 </button>
+                )}
+
+                {/* Lost the passkey: a recovery code, or another admin can reset it. */}
+                {!enrol && (
+                    <div className="mt-4 rounded-xl bg-white/[0.02] p-3 text-xs leading-relaxed text-white/45 ring-1 ring-white/[0.06]">
+                        {recovering ? (
+                            <button onClick={() => { setRecovering(false); setError(null); }} className="font-medium text-emerald-300/90 hover:underline">
+                                Use my passkey instead
+                            </button>
+                        ) : (
+                            <button onClick={() => { setRecovering(true); setError(null); }} className="font-medium text-emerald-300/90 hover:underline">
+                                Lost your passkey? Use a recovery code
+                            </button>
+                        )}
+                        <p className="mt-1.5">
+                            No codes? Another admin can reset your passkeys in Settings - Operators. If you're the only
+                            admin, run <code className="text-white/60">mymate:user:reset-passkeys &lt;email&gt;</code> on the server.
+                        </p>
+                    </div>
+                )}
 
                 <button
                     onClick={() => logout.mutate()}

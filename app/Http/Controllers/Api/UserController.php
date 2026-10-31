@@ -7,6 +7,7 @@ use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
 use App\Models\User;
 use App\Support\EngineLog;
+use App\Support\PasskeyRecovery;
 use App\Support\RestrictedAudience;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -98,6 +99,24 @@ class UserController extends Controller
         RestrictedAudience::forget(); // access changed - refresh who gets which live devices
 
         return response()->json($this->shape($user, true));
+    }
+
+    /**
+     * Remove every passkey (and recovery code) an operator has, when they've lost them: their next
+     * password login sets up a new passkey, or goes straight in if passkeys aren't required.
+     */
+    public function resetPasskeys(Request $request, User $user, PasskeyRecovery $recovery): JsonResponse
+    {
+        $removed = $recovery->reset($user);
+
+        EngineLog::warning('auth: operator passkeys reset', [
+            'actor_id' => $request->user()->id,
+            'user_id' => $user->id,
+            'removed' => $removed,
+            'ip' => $request->ip(),
+        ]);
+
+        return response()->json(['removed' => $removed]);
     }
 
     public function destroy(Request $request, User $user): Response

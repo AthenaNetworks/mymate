@@ -47,7 +47,8 @@ class EnsurePasskeyVerified
 
         // Always reachable while unverified: sign out, read your own user, and the verification
         // ceremony (challenge an existing passkey to become verified this session).
-        if ($request->routeIs('logout', 'user', 'passkeys.verify', 'passkeys.verify.options')) {
+        // A recovery code is the way in when the passkey is lost.
+        if ($request->routeIs('logout', 'user', 'passkeys.verify', 'passkeys.verify.options', 'passkeys.recover')) {
             return $next($request);
         }
         // First-enrolment ONLY: an operator with no passkey yet may register their first one (the

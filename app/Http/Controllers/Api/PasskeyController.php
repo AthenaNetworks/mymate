@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsurePasskeyVerified;
+use App\Support\EngineLog;
+use App\Support\PasskeyRecovery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\RateLimiter;
 use Laravel\Passkeys\Actions\DeletePasskey;
 use Laravel\Passkeys\Actions\GenerateRegistrationOptions;
 use Laravel\Passkeys\Actions\GenerateVerificationOptions;
@@ -101,6 +104,45 @@ class PasskeyController extends Controller
         $delete($request->user(), $passkey);
 
         return response()->noContent();
+    }
+
+    /**
+     * A new set of one-time recovery codes for when this operator loses their passkeys. Shown once;
+     * any earlier codes stop working. Needs a verified session (the passkey gate covers it).
+     */
+    public function recoveryCodes(Request $request, PasskeyRecovery $recovery): JsonResponse
+    {
+        abort_unless($request->user()->passkeys()->exists(), Response::HTTP_UNPROCESSABLE_ENTITY, 'Add a passkey first.');
+        $codes = $recovery->generate($request->user());
+        EngineLog::info('passkeys: recovery codes generated', ['user' => $request->user()->id]);
+
+        return response()->json(['codes' => $codes]);
+    }
+
+    /**
+     * Use a recovery code instead of a passkey (the password was already right). Counts as the
+     * second factor for this session; the code is used up. Reachable while unverified, tightly
+     * rate-limited.
+     */
+    public function recover(Request $request, PasskeyRecovery $recovery): JsonResponse
+    {
+        $data = $request->validate(['code' => ['required', 'string', 'max:40']]);
+        $user = $request->user();
+        // 5 tries a minute per operator. Its own key: a route throttle would share the passkeys
+        // group's counter and count every attempt twice.
+        $key = 'passkey-recover:'.$user->id;
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            abort(Response::HTTP_TOO_MANY_REQUESTS, 'Too many tries. Wait a minute and try again.');
+        }
+        RateLimiter::hit($key, 60);
+        if (! $recovery->consume($user, $data['code'])) {
+            EngineLog::warning('passkeys: wrong recovery code', ['user' => $user->id, 'ip' => $request->ip()]);
+            abort(Response::HTTP_UNPROCESSABLE_ENTITY, 'That recovery code isn\'t right, or it has already been used.');
+        }
+        $request->session()->put('passkey_verified', true);
+        EngineLog::warning('passkeys: signed in with a recovery code', ['user' => $user->id, 'left' => $recovery->remaining($user)]);
+
+        return response()->json(['verified' => true, 'recovery_codes_left' => $recovery->remaining($user)]);
     }
 
     /** @return array<string,mixed> */

@@ -49,3 +49,12 @@ export function useDeleteUser() {
         onSuccess: () => qc.invalidateQueries({ queryKey: usersKey }),
     });
 }
+
+/** Remove an operator's passkeys (and recovery codes) when they've lost them. Admin only. */
+export function useResetPasskeys() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (id: number): Promise<number> => (await apiClient.post<{ removed: number }>(`/users/${id}/passkeys/reset`)).data.removed,
+        onSuccess: () => qc.invalidateQueries({ queryKey: usersKey }),
+    });
+}

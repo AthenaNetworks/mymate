@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **A way back in when you lose your passkey.** Settings -> Account can create one-time recovery codes,
+  and the passkey prompt now has "Lost your passkey? Use a recovery code". An admin can reset another
+  operator's passkeys from Settings -> Operators, and a sole admin can run
+  `php artisan mymate:user:reset-passkeys <email>` on the server. The passkeys card also nudges you to add
+  a second passkey on another device.
 - **Upgrade remote agents from the console.** Settings -> Agents has an Upgrade button for any agent
   that's behind the server. The agent fetches the matching build from your server, checks it, and runs
   it under a supervisor; if the new version doesn't stay connected it rolls itself back to the last

@@ -83,3 +83,23 @@ export function useUpdateSecuritySettings() {
         },
     });
 }
+
+/** A fresh set of one-time recovery codes (shown once; older codes stop working). */
+export function useGenerateRecoveryCodes() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (): Promise<string[]> => (await apiClient.post<{ codes: string[] }>('/passkeys/recovery-codes')).data.codes,
+        onSuccess: () => qc.invalidateQueries({ queryKey: authUserKey }),
+    });
+}
+
+/** Sign in with a recovery code instead of a lost passkey (the password was already right). */
+export function useRecoverWithCode() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (code: string): Promise<void> => {
+            await apiClient.post('/passkeys/recover', { code });
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: authUserKey }),
+    });
+}

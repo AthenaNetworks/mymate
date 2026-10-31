@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\UpdatePasswordRequest;
 use App\Support\AuthSettings;
+use App\Support\PasskeyRecovery;
 use App\Support\EngineLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -79,6 +80,8 @@ class AuthController extends Controller
             'has_passkey' => $user->passkeys()->exists(),
             'passkey_exempt' => (bool) $user->passkey_exempt,
             'passkey_stage' => $this->passkeyStage($request),
+            // How many one-time recovery codes are left for a lost passkey (0 = none saved).
+            'passkey_recovery_codes_left' => app(PasskeyRecovery::class)->remaining($user),
         ];
     }
 

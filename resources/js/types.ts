@@ -14,6 +14,7 @@ export interface AuthUser {
     has_passkey?: boolean;
     passkey_exempt?: boolean;
     passkey_stage?: PasskeyStage; // drives the post-login enrol / 2FA gate
+    passkey_recovery_codes_left?: number; // one-time codes saved for a lost passkey
 }
 
 /**

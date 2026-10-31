@@ -102,6 +102,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         Route::post('verify', [PasskeyController::class, 'verify'])->name('passkeys.verify');
         Route::get('/', [PasskeyController::class, 'index'])->name('passkeys.index');
         Route::delete('{passkey}', [PasskeyController::class, 'destroy'])->whereNumber('passkey')->name('passkeys.destroy');
+        Route::post('recovery-codes', [PasskeyController::class, 'recoveryCodes'])->name('passkeys.recovery-codes');
+        Route::post('recover', [PasskeyController::class, 'recover'])->name('passkeys.recover'); // own limiter, see the controller
     });
 
     // Authentication policy (admin): the mandatory-passkey toggle + affected-operator count.
@@ -147,6 +149,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         Route::post('users', [UserController::class, 'store'])->name('users.store');
         Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+        // An operator who has lost their passkeys: remove them so they can set up new ones.
+        Route::post('users/{user}/passkeys/reset', [UserController::class, 'resetPasskeys'])->name('users.passkeys.reset');
     });
 
     // Operator groups (GitHub #28). Admin-only end to end, reads included - membership and the

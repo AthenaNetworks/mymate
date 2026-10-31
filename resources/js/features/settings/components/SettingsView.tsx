@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
-import { usePasskeys, useRegisterPasskey, useDeletePasskey, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
+import { usePasskeys, useRegisterPasskey, useDeletePasskey, useGenerateRecoveryCodes, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
 import { useSettings, useUpdateSettings } from '../api/getSettings';
 import { useUpdateCheck } from '../api/updateCheck';
@@ -16,7 +16,7 @@ import { useApiTokens, useCreateApiToken, useDeleteApiToken, type ApiToken } fro
 import { useGraphStyleDefaults, useUpdateGraphStyleDefaults } from '../../graphs/api/graphs';
 import { GRAPH_PALETTE } from '../../graphs/components/GraphChart';
 import { useFactoryReset } from '../api/factoryReset';
-import { useUsers, useSaveUser, useDeleteUser, type UserInput } from '../api/users';
+import { useUsers, useSaveUser, useDeleteUser, useResetPasskeys, type UserInput } from '../api/users';
 import { useUserGroups, useSaveUserGroup, useDeleteUserGroup, type UserGroupInput } from '../api/userGroups';
 import { useMaps } from '../../maps/api/maps';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
@@ -691,6 +691,8 @@ function MapChecklist({ value, onChange }: { value: number[]; onChange: (ids: nu
 
 function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void }) {
     const save = useSaveUser();
+    const resetPasskeys = useResetPasskeys();
+    const [confirmReset, setConfirmReset] = useState(false);
     const [form, setForm] = useState<UserInput>({
         id: initial?.id,
         name: initial?.name ?? '',
@@ -834,6 +836,31 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <Fingerprint weight="bold" className="h-3.5 w-3.5 text-white/40" /> Exclude from mandatory passkey (wallboard / kiosk)
                 </span>
             </label>
+            {/* Lost their passkeys: remove them, so the next password sign-in sets up a new one. */}
+            {editing && initial && (
+                <button
+                    type="button"
+                    onClick={() => setConfirmReset(true)}
+                    className="flex items-center gap-1.5 px-1 text-xs font-medium text-rose-300/80 hover:text-rose-300"
+                >
+                    <Fingerprint weight="bold" className="h-3.5 w-3.5" /> Reset passkeys (they've lost them)
+                </button>
+            )}
+            {confirmReset && initial && (
+                <ConfirmDialog
+                    title="Reset passkeys"
+                    icon={<Fingerprint weight="light" className="h-5 w-5" />}
+                    message={<>Remove every passkey and recovery code <span className="font-semibold text-white/85">{initial.name}</span> has? They'll sign in with their password and set up a new passkey. Only do this once you're sure it's really them asking.</>}
+                    confirmLabel="Reset passkeys"
+                    tone="danger"
+                    busy={resetPasskeys.isPending}
+                    onConfirm={() => resetPasskeys.mutate(initial.id, {
+                        onSuccess: (n) => { setConfirmReset(false); pushToast({ title: `Removed ${n} passkey(s)`, detail: `${initial.name} can now sign in with their password.`, tone: 'up' }); },
+                        onError: () => { setConfirmReset(false); pushToast({ title: 'Couldn\'t reset the passkeys', tone: 'down' }); },
+                    })}
+                    onClose={() => setConfirmReset(false)}
+                />
+            )}
             {error && <p className="text-xs text-rose-400/90">{error}</p>}
             <div className="flex items-center justify-end gap-2 pt-1">
                 <button onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-white/55 hover:text-white/90">
@@ -1385,8 +1412,12 @@ function passkeyDate(iso: string | null): string {
  */
 function PasskeysSection() {
     const { data: passkeys } = usePasskeys();
+    const { data: me } = useCurrentUser();
     const register = useRegisterPasskey();
     const del = useDeletePasskey();
+    const genCodes = useGenerateRecoveryCodes();
+    const [codes, setCodes] = useState<string[] | null>(null); // shown once, right after generating
+    const codesLeft = me?.passkey_recovery_codes_left ?? 0;
     const [name, setName] = useState('');
     const [deleting, setDeleting] = useState<Passkey | null>(null);
     const supported = passkeysSupported();
@@ -1451,6 +1482,45 @@ function PasskeysSection() {
                 ))}
                 {passkeys && passkeys.length === 0 && <p className="text-xs text-white/40">No passkeys yet.</p>}
             </div>
+
+            {/* A way back in if the passkey is lost: a second passkey, and saved recovery codes. */}
+            {passkeys && passkeys.length > 0 && (
+                <div className="mt-4 space-y-2 border-t border-white/[0.06] pt-4">
+                    {passkeys.length === 1 && (
+                        <p className="text-xs leading-relaxed text-amber-300/90">
+                            You only have one passkey. Add one on a second device too, so losing this one doesn't lock you out.
+                        </p>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs text-white/50">
+                            Recovery codes: {codesLeft > 0 ? <span className="text-white/75">{codesLeft} left</span> : <span className="text-amber-300/90">none saved</span>}
+                            <span className="text-white/35"> - one-time codes to sign in if you lose your passkeys.</span>
+                        </p>
+                        <button
+                            onClick={() => genCodes.mutate(undefined, {
+                                onSuccess: (c) => setCodes(c),
+                                onError: () => pushToast({ title: 'Couldn\'t create recovery codes', tone: 'down' }),
+                            })}
+                            disabled={genCodes.isPending}
+                            className="shrink-0 rounded-full px-3 py-1.5 text-xs font-medium text-emerald-200 ring-1 ring-emerald-400/25 hover:bg-emerald-500/10 disabled:opacity-40"
+                        >
+                            {codesLeft > 0 ? 'Make new codes' : 'Create recovery codes'}
+                        </button>
+                    </div>
+                    {codes && (
+                        <div className="rounded-xl bg-amber-500/[0.06] p-3 ring-1 ring-amber-400/25">
+                            <p className="text-xs text-amber-200">Save these somewhere safe now (a password manager, or printed). They won't be shown again, and any older codes no longer work.</p>
+                            <div className="mt-2 grid grid-cols-2 gap-1 font-mono text-sm text-white/85">
+                                {codes.map((c) => <span key={c}>{c}</span>)}
+                            </div>
+                            <div className="mt-2 flex gap-3">
+                                <button onClick={() => { navigator.clipboard?.writeText(codes.join('\n')); pushToast({ title: 'Codes copied', tone: 'up' }); }} className="text-xs font-semibold text-emerald-300/90 hover:underline">Copy</button>
+                                <button onClick={() => setCodes(null)} className="text-xs font-semibold text-white/50 hover:underline">I've saved them</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {deleting && (
                 <ConfirmDialog

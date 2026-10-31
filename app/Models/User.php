@@ -36,6 +36,7 @@ class User extends Authenticatable implements PasskeyUser
     protected $hidden = [
         'password',
         'remember_token',
+        'passkey_recovery_codes', // hashes, but still never in JSON
     ];
 
     protected $casts = [
@@ -47,6 +48,7 @@ class User extends Authenticatable implements PasskeyUser
         // Excludes this operator from a mandatory-passkey requirement (eg a wallboard/kiosk
         // account on a TV). Also a privilege - set explicitly after the admin gate, never fillable.
         'passkey_exempt' => 'boolean',
+        'passkey_recovery_codes' => 'array', // hashes only (App\Support\PasskeyRecovery)
     ];
 
     /** @var array<int>|null memoised per-request visibility sets */
