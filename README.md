@@ -41,7 +41,7 @@ to ask questions, share your maps and setups, and hear about new releases first.
   no-login link for a status screen.
 - A full REST API behind personal API keys, so you can script anything the UI does. A key
   carries your own access, so a read-only login only mints read-only keys. Browse it in the
-  [interactive API reference](https://mymate.as135559.net.au/api-docs) on the demo.
+  [interactive API reference](https://mymate.network/api-docs) on the demo.
 
 ## Install
 
@@ -162,7 +162,7 @@ running RouterOS 7 can host the agent itself, see [agent/ROUTEROS.md](agent/ROUT
 
 | Doc | What |
 |---|---|
-| [API reference](https://mymate.as135559.net.au/api-docs) | Interactive REST API docs (OpenAPI 3.1, rendered with Scalar) - live on the demo |
+| [API reference](https://mymate.network/api-docs) | Interactive REST API docs (OpenAPI 3.1, rendered with Scalar) - live on the demo |
 | [BUILD.md](BUILD.md) | Running from source and building the packages/image yourself |
 | [deploy/ssl/README.md](deploy/ssl/README.md) | HTTPS: Cloudflare Tunnel, reverse proxy, Let's Encrypt, own cert |
 | [deploy/rusted/README.md](deploy/rusted/README.md) | Config backups: the Rusted engine, how it's provisioned, and credentials |
