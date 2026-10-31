@@ -45,3 +45,15 @@ export function useDeleteAgent() {
         },
     });
 }
+
+/** Ask an agent to upgrade itself to this server's version. It reports progress as it goes. */
+export function useUpgradeAgent() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async (id: number): Promise<Agent> => {
+            const { data } = await apiClient.post<{ data: Agent }>(`/agents/${id}/upgrade`);
+            return data.data;
+        },
+        onSuccess: () => qc.invalidateQueries({ queryKey: agentsKey }),
+    });
+}

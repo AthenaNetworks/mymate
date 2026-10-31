@@ -8,6 +8,7 @@ use App\Enums\AgentStatus;
 use App\Jobs\IngestAgentPayloadJob;
 use App\Models\Agent;
 use App\Models\Subnet;
+use App\Services\Agent\AgentReleases;
 use App\Support\EngineLog;
 use Clue\React\Redis\Factory as RedisFactory;
 use GuzzleHttp\Psr7\HttpFactory;
@@ -23,6 +24,7 @@ use Ratchet\RFC6455\Messaging\Message;
 use Ratchet\RFC6455\Messaging\MessageBuffer;
 use React\EventLoop\Loop;
 use React\Socket\ConnectionInterface;
+use React\Stream\ReadableResourceStream;
 use React\Socket\SocketServer;
 
 /**
@@ -123,6 +125,14 @@ class AgentHubCommand extends Command
             return;
         }
 
+        // A plain GET for an upgrade binary (remote upgrades), on the same /agent path and token
+        // as the WebSocket, so it works through whatever proxy the agent already reaches us by.
+        if ($request->getMethod() === 'GET' && preg_match('#/agent/binary/([^/]+)/([a-z0-9]+)_([a-z0-9]+)$#', $request->getUri()->getPath(), $m)) {
+            $this->serveBinary($conn, $m[1], $m[2].'/'.$m[3]);
+
+            return;
+        }
+
         try {
             $response = $this->negotiator->handshake($request);
         } catch (\Throwable) {
@@ -175,8 +185,30 @@ class AgentHubCommand extends Command
                 Agent::where('id', $agentId)->update([
                     'version' => $msg['version'] ?? null,
                     'platform' => $msg['platform'] ?? null,
+                    // Optional extras it supports; older agents send none (agent/COMPATIBILITY.md).
+                    'capabilities' => json_encode(array_values(array_filter(
+                        (array) ($msg['capabilities'] ?? []),
+                        fn ($c) => is_string($c) && strlen($c) <= 40,
+                    ))),
                     'last_seen_at' => now(),
                 ]);
+                break;
+
+            // How a remote upgrade is going, from the agent itself (downloading, restarting,
+            // done, failed, rolled_back).
+            case 'upgrade_status':
+                $stage = (string) ($msg['stage'] ?? '');
+                if (in_array($stage, ['downloading', 'restarting', 'done', 'failed', 'rolled_back'], true)) {
+                    Agent::where('id', $agentId)->update([
+                        'upgrade_status' => $stage,
+                        'upgrade_version' => mb_substr((string) ($msg['version'] ?? ''), 0, 40) ?: null,
+                        'upgrade_message' => mb_substr((string) ($msg['message'] ?? ''), 0, 500) ?: null,
+                        'upgrade_at' => now(),
+                    ]);
+                    $log = in_array($stage, ['failed', 'rolled_back'], true) ? 'warning' : 'info';
+                    EngineLog::$log('agent upgrade: '.$stage, ['id' => $agentId, 'version' => $msg['version'] ?? null, 'message' => $msg['message'] ?? null]);
+                }
+                $this->heartbeat($agentId);
                 break;
 
             // Poll results / a finished scan: queued, never applied here. Writing a big site's batch
@@ -278,6 +310,10 @@ class AgentHubCommand extends Command
         if (! empty($job['scan']['subnets'])) {
             $this->send($agentId, ['type' => 'scan', 'payload' => $job['scan']]);
         }
+        // An admin's remote upgrade - only ever queued for agents that reported the capability.
+        if (! empty($job['upgrade'])) {
+            $this->send($agentId, ['type' => 'upgrade', 'payload' => $job['upgrade']]);
+        }
         // An operator's "Test OID" against one of this agent's devices (#51).
         if (! empty($job['snmp_test'])) {
             $this->send($agentId, ['type' => 'snmp_test', 'payload' => $job['snmp_test']]);
@@ -330,6 +366,25 @@ class AgentHubCommand extends Command
             },
             fn (\Throwable $e) => $retry('failed', $e),
         );
+    }
+
+    /**
+     * Stream a cached upgrade binary to an authenticated agent. Only what PrepareAgentUpgradeJob
+     * already fetched and verified is ever served, read in chunks so a slow link doesn't block
+     * the loop.
+     */
+    private function serveBinary(ConnectionInterface $conn, string $version, string $platform): void
+    {
+        $bin = app(AgentReleases::class)->cached($version, $platform);
+        $fh = $bin ? @fopen($bin['path'], 'rb') : false;
+        if ($fh === false) {
+            $this->reject($conn, 404, 'Not Found');
+
+            return;
+        }
+        $conn->write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {$bin['size']}\r\n"
+            ."X-Content-SHA256: {$bin['sha256']}\r\nConnection: close\r\n\r\n");
+        (new ReadableResourceStream($fh))->pipe($conn);
     }
 
     /**

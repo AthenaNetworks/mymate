@@ -135,7 +135,7 @@ jobs:
 
   # ------------------------------------------------ agent <-> hub integration
   agent-integration:
-    name: Agent - connect + reconnect (live hub)
+    name: Agent - connect, reconnect, upgrade + rollback (live hub)
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -183,3 +183,5 @@ jobs:
           php artisan migrate --force
       - name: Agent connect + reconnect-on-disconnect
         run: agent/test/integration.sh
+      - name: Agent remote upgrade + automatic rollback
+        run: agent/test/upgrade.sh

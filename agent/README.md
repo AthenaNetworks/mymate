@@ -83,6 +83,29 @@ Two layers: the agent **reconnects in-process** with exponential backoff + jitte
 link drops, and the **service manager** (systemd `Restart=always` / launchd `KeepAlive`)
 restarts the process if it ever exits.
 
+## Remote upgrades
+
+An admin can upgrade an agent from the console (Settings -> Agents -> Upgrade) to the version that
+matches the server. It's built so a bad upgrade can't strand an agent:
+
+- The new binary comes from your own server, over the same connection details and token. The agent
+  checks its size and SHA-256 and runs `version` on it before trusting it.
+- It's kept in the agent's state folder (`/var/lib/mymate-agent`, `%ProgramData%\mymate-agent\state`,
+  or `MYMATE_AGENT_STATE_DIR`). The installed binary is never touched, so your package manager still
+  owns it and it's always there to fall back to.
+- The installed binary starts the new version and watches it. If the new version doesn't get a
+  stable connection to the hub (60 seconds connected) within 3 starts, it's marked bad, the agent
+  goes back to the last version that worked, and the console shows "Rolled back" with the reason.
+- Installing a newer package later always wins over an older staged upgrade.
+
+Agents in a container don't offer it (`MYMATE_AGENT_NO_SELF_UPGRADE=1` is set in the image): pull a
+new image instead. Agents from before this feature, or a systemd unit without `StateDirectory=`,
+show "upgrade it by hand" once, and can be upgraded remotely after that.
+
+The server fetches the agent build for its own version from the GitHub release and checks it
+against the release's SHA256SUMS. Without internet access, put the binaries in
+`storage/app/agent-releases/<version>/<os>_<arch>/` (or set `MYMATE_AGENT_RELEASE_URL` to a mirror).
+
 ## Compatibility
 
 Any agent keeps working with a newer My Mate server, and a newer agent with an older server: the

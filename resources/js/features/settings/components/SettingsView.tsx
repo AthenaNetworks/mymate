@@ -11,7 +11,7 @@ import { WallEmbedSection } from './WallEmbedSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
-import { useAgents, useEnrolAgent, useDeleteAgent } from '../api/agents';
+import { useAgents, useEnrolAgent, useDeleteAgent, useUpgradeAgent } from '../api/agents';
 import { useApiTokens, useCreateApiToken, useDeleteApiToken, type ApiToken } from '../api/apiTokens';
 import { useGraphStyleDefaults, useUpdateGraphStyleDefaults } from '../../graphs/api/graphs';
 import { GRAPH_PALETTE } from '../../graphs/components/GraphChart';
@@ -22,7 +22,8 @@ import { useMaps } from '../../maps/api/maps';
 import { useCurrentUser, useIsAdmin, useUpdatePassword } from '../../auth/api/auth';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
-import type { Credential, GraphColorMode, Operator, OperatorGroup } from '../../../types';
+import type { AgentUpgrade, Credential, GraphColorMode, Operator, OperatorGroup } from '../../../types';
+import { relativeTime } from '../../../lib/relativeTime';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -1182,10 +1183,35 @@ const AGENT_STATUS: Record<string, { label: string; dot: string; text: string }>
  * operator pastes on the probe host. Admin-only for enrol/delete; any operator sees the
  * roster + live online/offline status.
  */
+const UPGRADE_LABEL: Record<AgentUpgrade['status'], { text: string; tone: string }> = {
+    queued: { text: 'Upgrade queued', tone: 'text-white/45' },
+    sent: { text: 'Upgrade sent', tone: 'text-white/45' },
+    downloading: { text: 'Downloading upgrade', tone: 'text-white/45' },
+    restarting: { text: 'Restarting into', tone: 'text-white/45' },
+    done: { text: 'Upgraded to', tone: 'text-emerald-300/80' },
+    failed: { text: 'Upgrade failed', tone: 'text-rose-300/90' },
+    rolled_back: { text: 'Rolled back from', tone: 'text-amber-300/90' },
+};
+
+/** The agent's last remote upgrade, as the agent itself reported it. */
+function AgentUpgradeLine({ upgrade }: { upgrade: AgentUpgrade | null }) {
+    if (!upgrade) return null;
+    const l = UPGRADE_LABEL[upgrade.status];
+    if (!l) return null;
+    return (
+        <span className={`block truncate text-[11px] ${l.tone}`} title={upgrade.message ?? undefined}>
+            {l.text} {upgrade.version ?? ''}
+            {upgrade.message && <span className="text-white/35"> - {upgrade.message}</span>}
+            {upgrade.at && <span className="text-white/25"> - {relativeTime(upgrade.at)}</span>}
+        </span>
+    );
+}
+
 function AgentsSection() {
     const { data: agents } = useAgents();
     const enrol = useEnrolAgent();
     const del = useDeleteAgent();
+    const upgradeAgent = useUpgradeAgent();
     const isAdmin = useIsAdmin();
     const [name, setName] = useState('');
     const [token, setToken] = useState<{ name: string; token: string } | null>(null);
@@ -1276,7 +1302,24 @@ function AgentsSection() {
                                     </span>
                                 )}
                                 {a.device_count > 0 && <span className="text-white/30"> - {a.device_count} device(s)</span>}
+                                <AgentUpgradeLine upgrade={a.upgrade ?? null} />
                             </span>
+                            {isAdmin && a.outdated && a.upgrade_target && (
+                                <button
+                                    onClick={() => upgradeAgent.mutate(a.id, {
+                                        onError: (e: unknown) => pushToast({
+                                            title: `Couldn't upgrade ${a.name}`,
+                                            detail: (e as { response?: { data?: { message?: string } } })?.response?.data?.message,
+                                            tone: 'down',
+                                        }),
+                                    })}
+                                    disabled={!a.can_upgrade || upgradeAgent.isPending}
+                                    title={a.can_upgrade ? `Upgrade to ${a.upgrade_target}. If the new version doesn't stay connected it rolls back by itself.` : a.upgrade_blocker ?? ''}
+                                    className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium text-amber-200 ring-1 ring-amber-400/25 hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    Upgrade
+                                </button>
+                            )}
                             {isAdmin && (
                                 <button
                                     onClick={() => setDeleting({ id: a.id, name: a.name, device_count: a.device_count })}

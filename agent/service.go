@@ -8,6 +8,7 @@ import (
 
 	"github.com/AthenaNetworks/mymate/agent/internal/agent"
 	"github.com/AthenaNetworks/mymate/agent/internal/config"
+	"github.com/AthenaNetworks/mymate/agent/internal/upgrade"
 )
 
 // program adapts the agent run loop to kardianos/service, so the same binary runs as a Windows
@@ -18,6 +19,19 @@ type program struct {
 	done   chan struct{}
 }
 
+// runAgent is the service's work. Where the agent can upgrade itself it runs under the upgrade
+// supervisor, which starts the newest healthy staged version and falls back if one fails;
+// otherwise it's the plain agent loop.
+func (p *program) runAgent(ctx context.Context) error {
+	mgr := upgrade.New(agent.Version)
+	if mgr == nil {
+		return agent.Run(ctx, p.cfg)
+	}
+	return upgrade.Supervise(ctx, mgr, func(ctx context.Context) error {
+		return agent.RunWith(ctx, p.cfg, &agent.Options{Upgrader: mgr})
+	})
+}
+
 // Start is non-blocking (a service requirement): it kicks the run loop off in a goroutine.
 func (p *program) Start(service.Service) error {
 	p.done = make(chan struct{})
@@ -25,7 +39,7 @@ func (p *program) Start(service.Service) error {
 	p.cancel = cancel
 	go func() {
 		defer close(p.done)
-		if err := agent.Run(ctx, p.cfg); err != nil && ctx.Err() == nil {
+		if err := p.runAgent(ctx); err != nil && ctx.Err() == nil {
 			slog.Error("agent exited with error", "error", err)
 		}
 	}()

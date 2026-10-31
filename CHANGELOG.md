@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Upgrade remote agents from the console.** Settings -> Agents has an Upgrade button for any agent
+  that's behind the server. The agent fetches the matching build from your server, checks it, and runs
+  it under a supervisor; if the new version doesn't stay connected it rolls itself back to the last
+  version that worked and comes back online, and the console says what happened. Agents from before
+  this release, and agents in containers, are upgraded by hand as before. See the agent README.
 - **Edit the geo map directly (GitHub #52).** On a map in geographic mode an admin can now pin devices
   that have no location yet ("not pinned" at the bottom left drops one in the middle of the view, then
   drag it into place), draw links between devices just like on the regular map, and add text labels at a

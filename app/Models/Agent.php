@@ -20,12 +20,23 @@ class Agent extends Model
     /** @use HasFactory<AgentFactory> */
     use HasFactory;
 
-    protected $fillable = ['name', 'status', 'last_seen_at', 'version', 'platform'];
+    protected $fillable = ['name', 'status', 'last_seen_at', 'version', 'platform', 'capabilities',
+        'upgrade_status', 'upgrade_version', 'upgrade_message', 'upgrade_at'];
 
     protected $casts = [
         'status' => AgentStatus::class,
         'last_seen_at' => 'datetime',
+        'capabilities' => 'array',
+        'upgrade_at' => 'datetime',
     ];
+
+    /** The agent reported it can be upgraded remotely (agent/COMPATIBILITY.md: gate on capabilities). */
+    public const CAP_UPGRADE = 'upgrade';
+
+    public function supports(string $capability): bool
+    {
+        return in_array($capability, (array) $this->capabilities, true);
+    }
 
     // token_hash is a secret - never expose it in arrays/JSON.
     protected $hidden = ['token_hash'];

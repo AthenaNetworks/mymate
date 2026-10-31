@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Support\UpdateChecker;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use App\Actions\Agent\UpgradeAgent;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -32,6 +33,18 @@ class AgentResource extends JsonResource
             // The agent tracks the server version; flag it when it's behind so the UI can prompt an
             // update. 'dev' server builds (unknown version) never flag.
             'outdated' => $this->isOutdated(),
+            // Remote upgrade (older agents never report the capability, see
+            // agent/COMPATIBILITY.md): whether it can be upgraded from here, why not, and how the
+            // last attempt went.
+            'can_upgrade' => ($why = app(UpgradeAgent::class)->blocker($this->resource)) === null,
+            'upgrade_blocker' => $why,
+            'upgrade_target' => app(UpgradeAgent::class)->target(),
+            'upgrade' => $this->upgrade_status === null ? null : [
+                'status' => $this->upgrade_status,
+                'version' => $this->upgrade_version,
+                'message' => $this->upgrade_message,
+                'at' => $this->upgrade_at?->toIso8601String(),
+            ],
             'device_count' => $this->devices_count ?? 0,
             'subnet_count' => $this->subnets_count ?? 0,
         ];

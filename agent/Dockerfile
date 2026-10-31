@@ -33,5 +33,8 @@ COPY --from=build /out/mymate-agent /mymate-agent
 # Runs as root on purpose. RouterOS containers run as root anyway, and the agent's ping falls
 # back to a raw ICMP socket there (the unprivileged ping socket is normally refused by
 # ping_group_range), which needs root / CAP_NET_RAW.
+# A container is upgraded by pulling a new image, not in place: anything staged inside it is
+# gone on the next recreate. So it doesn't offer remote upgrades (the console says so).
+ENV MYMATE_AGENT_NO_SELF_UPGRADE=1
 ENTRYPOINT ["/mymate-agent"]
 CMD ["run"]

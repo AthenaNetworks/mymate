@@ -21,7 +21,11 @@ NoNewPrivileges=yes
 # ICMP up/down polling needs raw sockets; grant just that capability (no root).
 AmbientCapabilities=CAP_NET_RAW
 CapabilityBoundingSet=CAP_NET_RAW
-# Hardening - the agent writes nothing to disk (logs go to the journal).
+# Remote upgrades stage new versions here (/var/lib/mymate-agent, owned by the dynamic user);
+# the installed binary is never touched. Logs go to the journal.
+StateDirectory=mymate-agent
+StateDirectoryMode=0700
+# Hardening.
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

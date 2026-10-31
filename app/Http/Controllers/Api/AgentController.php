@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Agent\UpgradeAgent;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\AgentResource;
 use App\Models\Agent;
@@ -35,6 +36,15 @@ class AgentController extends Controller
             'agent' => new AgentResource($agent->loadCount(['devices', 'subnets'])),
             'token' => $token,
         ], Response::HTTP_CREATED);
+    }
+
+    /** Ask the agent to upgrade itself to the version matching this server. Progress comes back from the agent. */
+    public function upgrade(Agent $agent, UpgradeAgent $upgrade): JsonResponse
+    {
+        $upgrade($agent);
+
+        return (new AgentResource($agent->fresh()->loadCount(['devices', 'subnets'])))
+            ->response()->setStatusCode(Response::HTTP_ACCEPTED);
     }
 
     public function destroy(Agent $agent): Response|JsonResponse

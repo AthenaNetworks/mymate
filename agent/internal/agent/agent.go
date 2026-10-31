@@ -12,11 +12,14 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AthenaNetworks/mymate/agent/internal/config"
 	"github.com/AthenaNetworks/mymate/agent/internal/poll"
 	"github.com/AthenaNetworks/mymate/agent/internal/proto"
+	"github.com/AthenaNetworks/mymate/agent/internal/upgrade"
 	"github.com/gorilla/websocket"
 )
 
@@ -33,9 +36,28 @@ const (
 // errReplaced: the hub dropped us because another connection with our token took over.
 var errReplaced = errors.New("another agent connected with this token, so the hub dropped this one")
 
+// Options are the optional extras a run can have. The zero value is a plain agent.
+type Options struct {
+	// Upgrader is set when this agent can upgrade itself remotely: it then advertises the
+	// capability, handles "upgrade", and reports upgrade outcomes when it connects.
+	Upgrader *upgrade.Manager
+	// OnHealthy runs once, the first time a hub connection has stayed up for
+	// upgrade.HealthyAfter (a staged version proving it works).
+	OnHealthy func()
+
+	healthy   sync.Once
+	upgrading atomic.Bool
+}
+
 // Run connects to the hub and stays connected, reconnecting forever until ctx is cancelled.
 // The poller (with its per-interface counter state for bps deltas) outlives reconnects.
 func Run(ctx context.Context, cfg *config.Config) error {
+	return RunWith(ctx, cfg, &Options{})
+}
+
+// RunWith is Run with Options. It returns upgrade.ErrRestart once an upgrade has been staged,
+// so the caller can restart into the new version.
+func RunWith(ctx context.Context, cfg *config.Config, opts *Options) error {
 	b := &backoff{min: time.Second, max: 60 * time.Second}
 	poller := poll.New()
 
@@ -44,9 +66,12 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			return err
 		}
 
-		err := serve(ctx, cfg, b, poller)
+		err := serve(ctx, cfg, b, poller, opts)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
+		}
+		if errors.Is(err, upgrade.ErrRestart) {
+			return err
 		}
 
 		wait := b.next()
@@ -66,7 +91,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 // serve runs a single connection lifecycle: dial, hello, then read + keepalive until the
 // link drops or ctx is cancelled. A single writer goroutine serialises all data writes
 // (gorilla requires one concurrent writer), so poll goroutines can safely queue results.
-func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Poller) error {
+func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Poller, opts *Options) error {
 	dialer := websocket.Dialer{
 		HandshakeTimeout: handshakeTimeout,
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: cfg.InsecureTLS}, //nolint:gosec // opt-in for self-signed dev
@@ -84,15 +109,36 @@ func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Pol
 	b.reset()
 	slog.Info("connected to hub", "server", cfg.RedactedURL())
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	// Cancelling (an upgrade restart) must also unblock the read below.
+	go func() { <-ctx.Done(); _ = conn.Close() }()
 
 	send := make(chan []byte, 64)
 	go writer(ctx, conn, send)
 	go keepalive(ctx, conn)
 
-	// Announce ourselves.
-	send <- mustJSON(proto.Hello{Type: "hello", Version: Version, Platform: Platform(), Name: cfg.Name})
+	// Announce ourselves, with what we can do.
+	hello := proto.Hello{Type: "hello", Version: Version, Platform: Platform(), Name: cfg.Name}
+	if opts.Upgrader != nil {
+		hello.Capabilities = []string{proto.CapUpgrade}
+	}
+	send <- mustJSON(hello)
+	sendUpgradeReport(opts, send) // e.g. "rolled back" from before a restart
+
+	// A connection that stays up proves this version works (see upgrade.HealthyAfter).
+	go func() {
+		select {
+		case <-time.After(upgrade.HealthyAfter):
+			opts.healthy.Do(func() {
+				if opts.OnHealthy != nil {
+					opts.OnHealthy()
+				}
+				sendUpgradeReport(opts, send)
+			})
+		case <-ctx.Done():
+		}
+	}()
 
 	// Keepalive read deadline, advanced on every pong.
 	conn.SetReadLimit(4 << 20)
@@ -102,6 +148,9 @@ func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Pol
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
+			if cause := context.Cause(ctx); errors.Is(cause, upgrade.ErrRestart) {
+				return cause
+			}
 			return err
 		}
 		var msg proto.Inbound
@@ -111,6 +160,10 @@ func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Pol
 		}
 		if msg.Type == "bye" {
 			return byeError(msg.Payload)
+		}
+		if msg.Type == "upgrade" {
+			startUpgrade(ctx, cfg, opts, send, msg.Payload, func() { cancel(upgrade.ErrRestart) })
+			continue
 		}
 		handle(ctx, poller, send, msg)
 	}
@@ -205,6 +258,59 @@ func keepalive(ctx context.Context, conn *websocket.Conn) {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// startUpgrade stages the version the hub asked for, in the background, reporting progress. Once
+// it's staged and verified, restart() ends the session so the supervisor starts the new version.
+// One at a time; an agent that can't upgrade itself says so.
+func startUpgrade(ctx context.Context, cfg *config.Config, opts *Options, send chan<- []byte, payload json.RawMessage, restart func()) {
+	var job proto.Upgrade
+	if err := json.Unmarshal(payload, &job); err != nil {
+		slog.Warn("bad upgrade request", "error", err)
+		return
+	}
+	status := func(stage, msg string) {
+		select {
+		case send <- mustJSON(proto.UpgradeStatus{Type: "upgrade_status", Stage: stage, Version: job.Version, Message: msg}):
+		case <-ctx.Done():
+		}
+	}
+	if opts.Upgrader == nil {
+		status(upgrade.StageFailed, "this agent can't upgrade itself (no writable state directory, or self-upgrade is turned off)")
+		return
+	}
+	if job.Version == Version {
+		status(upgrade.StageDone, "")
+		return
+	}
+	if !opts.upgrading.CompareAndSwap(false, true) {
+		return // one already running
+	}
+	go func() {
+		defer opts.upgrading.Store(false)
+		slog.Info("upgrading", "from", Version, "to", job.Version)
+		status(upgrade.StageDownloading, "")
+		t := upgrade.Target{Version: job.Version, Path: job.Path, SHA256: job.SHA256, Size: job.Size}
+		if err := opts.Upgrader.Stage(ctx, t, cfg.ServerURL, cfg.Token, cfg.InsecureTLS); err != nil {
+			slog.Error("upgrade failed, staying on this version", "to", job.Version, "error", err)
+			status(upgrade.StageFailed, err.Error())
+			return
+		}
+		slog.Info("upgrade staged, restarting into it", "version", job.Version)
+		status(upgrade.StageRestarting, "")
+		time.Sleep(time.Second) // let the status go out before the session ends
+		restart()
+	}()
+}
+
+// sendUpgradeReport sends a saved upgrade outcome to the hub, once.
+func sendUpgradeReport(opts *Options, send chan<- []byte) {
+	if opts.Upgrader == nil {
+		return
+	}
+	if r := opts.Upgrader.TakeReport(); r != nil {
+		send <- mustJSON(proto.UpgradeStatus{Type: "upgrade_status", Stage: r.Stage, Version: r.Version, Message: r.Message})
+	}
 }
 
 // byeError is why the hub ended the session. Payload is optional (older hubs send none).

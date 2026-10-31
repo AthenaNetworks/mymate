@@ -422,6 +422,10 @@ return [
     // Kept above the keepalive so a single dropped ping doesn't flap the alert. Floor 60s.
     'agents' => [
         'offline_after' => (int) env('MYMATE_AGENT_OFFLINE_AFTER', 90),
+        // Remote agent upgrades fetch the agent build matching this server from here ({version}
+        // = e.g. v1.10.0). Point it at a mirror, or drop the binaries into
+        // storage/app/agent-releases/<version>/<os>_<arch>/ by hand on an offline install.
+        'release_url' => env('MYMATE_AGENT_RELEASE_URL', 'https://github.com/AthenaNetworks/mymate/releases/download/{version}'),
     ],
 
     // Firmware upgrades. Ordered upgrades wait for each device to

@@ -411,6 +411,8 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     // Remote agents (probes): list is readable by any operator; enrol/delete are admin-only
     // (RestrictWritesToAdmins). Enrolment returns the token once.
     Route::apiResource('agents', AgentController::class)->only(['index', 'store', 'destroy']);
+    Route::post('agents/{agent}/upgrade', [AgentController::class, 'upgrade'])
+        ->middleware(['admin', 'throttle:20,1'])->name('agents.upgrade');
 
     // Alerting: policies, transports (test-send is rate-limited), event log.
     Route::apiResource('alert-policies', AlertPolicyController::class)->only(['index', 'store', 'update', 'destroy']);

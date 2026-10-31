@@ -14,6 +14,31 @@ type Hello struct {
 	Version  string `json:"version"`
 	Platform string `json:"platform"`
 	Name     string `json:"name"`
+	// Capabilities lists optional features this agent supports, so the server only offers what
+	// it can do (agent/COMPATIBILITY.md). Older agents send none. Known: "upgrade".
+	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+// CapUpgrade: the agent can be upgraded remotely (it has a writable state directory).
+const CapUpgrade = "upgrade"
+
+// Upgrade (server -> agent, type "upgrade") asks the agent to upgrade itself to Version. Only
+// sent to agents that report CapUpgrade. Path is a hub path (/agent/binary/...) on the agent's own
+// server; SHA256 and Size are of the binary itself.
+type Upgrade struct {
+	Version string `json:"version"`
+	Path    string `json:"path"`
+	SHA256  string `json:"sha256"`
+	Size    int64  `json:"size"`
+}
+
+// UpgradeStatus (agent -> server, type "upgrade_status") reports how an upgrade is going:
+// downloading, restarting, done, failed, or rolled_back (with Message saying why).
+type UpgradeStatus struct {
+	Type    string `json:"type"` // "upgrade_status"
+	Stage   string `json:"stage"`
+	Version string `json:"version"`
+	Message string `json:"message,omitempty"`
 }
 
 // Result reports the outcome of a batch of jobs back to the server. Payload shape is

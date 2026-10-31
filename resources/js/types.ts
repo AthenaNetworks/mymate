@@ -294,8 +294,20 @@ export interface Agent {
     platform: string | null;
     latency_ms: number | null; // current link latency (hub keepalive RTT); null when not live
     outdated: boolean; // agent version is behind the server (agent tracks the server version)
+    // Remote upgrade: possible from here? if not, why; the version it would go to; the last attempt.
+    can_upgrade?: boolean;
+    upgrade_blocker?: string | null;
+    upgrade_target?: string | null;
+    upgrade?: AgentUpgrade | null;
     device_count: number;
     subnet_count: number;
+}
+
+export interface AgentUpgrade {
+    status: 'queued' | 'sent' | 'downloading' | 'restarting' | 'done' | 'failed' | 'rolled_back';
+    version: string | null;
+    message: string | null;
+    at: string | null;
 }
 
 // Multiple maps. Named NetworkMap to avoid clashing with JS Map.
