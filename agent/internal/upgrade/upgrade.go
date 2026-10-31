@@ -38,16 +38,27 @@ import (
 const (
 	// MaxAttempts is how many starts a staged version gets to become healthy before it's
 	// marked bad and the agent falls back.
-	MaxAttempts = 3
-	// HealthyAfter: connected to the hub and stayed connected this long = the version works.
-	HealthyAfter = 60 * time.Second
-	// HealthDeadline: a staged version that hasn't become healthy by now gives up (the
-	// supervisor counts it as a failed start).
-	HealthDeadline = 5 * time.Minute
-
+	MaxAttempts   = 3
 	maxBinarySize = 128 << 20
 	stateFile     = "upgrade.json"
 )
+
+// Health timing. Variables, not constants, so tests can shorten them; production uses the
+// defaults (MYMATE_AGENT_HEALTHY_AFTER / MYMATE_AGENT_HEALTH_DEADLINE exist for tests only).
+var (
+	// HealthyAfter: connected to the hub and stayed connected this long = the version works.
+	HealthyAfter = envDuration("MYMATE_AGENT_HEALTHY_AFTER", 60*time.Second)
+	// HealthDeadline: a staged version that hasn't become healthy by now gives up, and its
+	// supervisor stops it a little after that if it hasn't (a hung version can't exit by itself).
+	HealthDeadline = envDuration("MYMATE_AGENT_HEALTH_DEADLINE", 5*time.Minute)
+)
+
+func envDuration(name string, def time.Duration) time.Duration {
+	if d, err := time.ParseDuration(os.Getenv(name)); err == nil && d > 0 {
+		return d
+	}
+	return def
+}
 
 // Env vars between the supervising base and its staged child.
 const (

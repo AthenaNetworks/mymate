@@ -251,3 +251,38 @@ func TestSuperviseRestartsIntoAStagedVersion(t *testing.T) {
 		t.Fatal("it became the current version")
 	}
 }
+
+// A version that hangs - runs, never connects, ignores SIGTERM - can't give up by itself. The
+// supervisor must stop it at the deadline, count the failure, and in the end roll back.
+func TestSuperviseStopsAHungVersionAndRollsBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh")
+	}
+	m := newManager(t, "v1.0.0")
+	stage(t, m, "v1.1.0")
+	HealthDeadline, supervisorGrace, healthPoll, killDelay, restartBackoff =
+		50*time.Millisecond, 50*time.Millisecond, 10*time.Millisecond, 200*time.Millisecond, time.Millisecond
+	starts := 0
+	childCommand = func(ctx context.Context, bin, version string) *exec.Cmd {
+		starts++
+		return exec.CommandContext(ctx, "sh", "-c", "trap '' TERM; sleep 60")
+	}
+
+	done := make(chan error, 1)
+	errBase := errors.New("base ran")
+	go func() { done <- Supervise(context.Background(), m, func(context.Context) error { return errBase }) }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, errBase) {
+			t.Fatalf("expected a fall back to the base, got %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the supervisor waited on a hung version instead of stopping it")
+	}
+	if starts != MaxAttempts {
+		t.Fatalf("started %d times, want %d", starts, MaxAttempts)
+	}
+	if r := m.TakeReport(); r == nil || r.Stage != StageRolledBack || !strings.Contains(r.Message, "no stable hub connection") {
+		t.Fatalf("rollback report = %+v", r)
+	}
+}

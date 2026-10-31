@@ -43,7 +43,7 @@ func Supervise(ctx context.Context, m *Manager, runSelf func(context.Context) er
 
 		attempt := m.BeginAttempt(v)
 		slog.Info("starting staged agent version", "version", v, "attempt", attempt, "of", MaxAttempts)
-		code, err := runChild(ctx, m.BinaryPath(v), v)
+		code, err := runChild(ctx, m, m.BinaryPath(v), v)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -77,18 +77,65 @@ var childCommand = func(ctx context.Context, bin, version string) *exec.Cmd {
 	return cmd
 }
 
+// supervisorGrace is how long past HealthDeadline the supervisor waits for an unhealthy child to
+// give up by itself before stopping it.
+var supervisorGrace = 30 * time.Second
+
+// healthPoll is how often the supervisor checks whether its child has become healthy.
+var healthPoll = 5 * time.Second
+
+// killDelay: a child asked to stop that's still running this much later is killed.
+var killDelay = 15 * time.Second
+
 // runChild runs bin and waits. Cancelling ctx asks the child to stop (SIGTERM, or a kill on
 // Windows) and waits briefly for it to unwind.
-func runChild(ctx context.Context, bin, version string) (int, error) {
-	cmd := childCommand(ctx, bin, version)
+//
+// It also enforces the health deadline itself. The child is meant to give up on its own when it
+// can't get a stable connection, but a version that hangs - deadlocked, stuck in a syscall, a
+// broken build - never would, and the agent would be offline for good. So if the child hasn't
+// marked itself healthy (MarkHealthy resets the attempt count) by HealthDeadline plus a grace
+// period, it's stopped and counted as a failed start.
+func runChild(ctx context.Context, m *Manager, bin, version string) (int, error) {
+	runCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	cmd := childCommand(runCtx, bin, version)
 	cmd.Cancel = func() error { return stopProcess(cmd.Process) }
-	cmd.WaitDelay = 15 * time.Second
-	err := cmd.Run()
+	cmd.WaitDelay = killDelay // then it's killed outright
+
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	deadline, poll := time.Now().Add(HealthDeadline+supervisorGrace), healthPoll
+	go func() {
+		t := time.NewTicker(poll)
+		defer t.Stop()
+		for {
+			select {
+			case <-runCtx.Done():
+				return
+			case <-t.C:
+				if m.Load().Attempts == 0 {
+					return // healthy: from here it's just a running agent
+				}
+				if time.Now().After(deadline) {
+					slog.Error("staged agent version isn't healthy and didn't give up by itself, stopping it", "version", version)
+					cancel(errHung)
+					return
+				}
+			}
+		}
+	}()
+	err := cmd.Wait()
+	if errors.Is(context.Cause(runCtx), errHung) && ctx.Err() == nil {
+		return ExitUnhealthy, errHung
+	}
 	if cmd.ProcessState != nil {
 		return cmd.ProcessState.ExitCode(), err
 	}
 	return -1, err
 }
+
+var errHung = errors.New("stopped by the supervisor: never became healthy")
 
 func describeExit(code int, err error) string {
 	switch {
