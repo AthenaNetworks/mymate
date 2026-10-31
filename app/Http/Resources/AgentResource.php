@@ -29,7 +29,8 @@ class AgentResource extends JsonResource
             'platform' => $this->platform,
             // Current link latency (ms), measured from the hub's keepalive ping/pong. Null when the
             // agent hasn't answered a keepalive recently (the cache entry expires), i.e. it's offline.
-            'latency_ms' => Cache::get("agent:{$this->id}:latency"),
+            // Cast: the Redis store keeps numbers unserialised, so this comes back a string (#58).
+            'latency_ms' => ($ms = Cache::get("agent:{$this->id}:latency")) === null ? null : (float) $ms,
             // The agent tracks the server version; flag it when it's behind so the UI can prompt an
             // update. 'dev' server builds (unknown version) never flag.
             'outdated' => $this->isOutdated(),

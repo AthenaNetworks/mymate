@@ -10,6 +10,7 @@ use App\Models\Subnet;
 use App\Models\User;
 use App\Services\Polling\PollDispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 /**
@@ -32,6 +33,22 @@ class AgentTest extends TestCase
         // Only the hash is stored - never the plaintext.
         $this->assertSame(Agent::hashToken($token), $agent->fresh()->token_hash);
         $this->assertDatabaseMissing('agents', ['token_hash' => $token]);
+    }
+
+    // GitHub #58: the Redis cache hands the keepalive RTT back as a string, and the UI called
+    // .toFixed() on it.
+    public function test_agent_latency_is_returned_as_a_number(): void
+    {
+        $this->actingAsUser();
+        $agent = Agent::factory()->create();
+        Cache::put("agent:{$agent->id}:latency", '1.3', 60);
+
+        $this->getJson('/api/agents')->assertOk()
+            ->assertJsonPath('data.0.latency_ms', 1.3);
+        $this->assertIsFloat($this->getJson('/api/agents')->json('data.0.latency_ms'));
+
+        Cache::forget("agent:{$agent->id}:latency");
+        $this->getJson('/api/agents')->assertJsonPath('data.0.latency_ms', null);
     }
 
     public function test_from_token_resolves_the_agent(): void

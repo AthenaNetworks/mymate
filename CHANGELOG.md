@@ -23,6 +23,11 @@ of commit subjects.
 - Docker: `docker-compose.yml` publishes port 54321 and adds a `cmr-data` volume for the
   controller's identity. Copy both into your compose file to use CMR.
 
+### Fixed
+- Settings > Agents went blank with `latency_ms.toFixed is not a function` when an agent was
+  online. The cached link latency came back from Redis as a string; it's now sent as a number
+  ([#58](https://github.com/AthenaNetworks/mymate/issues/58)).
+
 ## [2.0.0] - 2026-10-31
 
 A big one: remote agent upgrades, your own images on the map, an editable geo map, a way back in

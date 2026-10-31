@@ -43,6 +43,12 @@ const numField =
 // the viewport regardless of internal truncation.
 const card = 'min-w-0 rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.06]';
 
+// The server sends a number, but older ones sent the cached string ("1.3"), which crashed the tab (#58).
+function formatAgentLatency(raw: number | string): string {
+    const ms = Number(raw);
+    return ms < 10 ? ms.toFixed(1) : String(Math.round(ms));
+}
+
 function EngineSettings() {
     const { data: settings } = useSettings();
     const update = useUpdateSettings();
@@ -1319,7 +1325,7 @@ function AgentsSection() {
                             <span className="min-w-0 flex-1 truncate text-sm text-white/85">
                                 {a.name}
                                 <span className={`text-xs ${st.text}`}> - {st.label}</span>
-                                {a.latency_ms != null && <span className="text-white/30"> - {a.latency_ms < 10 ? a.latency_ms.toFixed(1) : Math.round(a.latency_ms)} ms</span>}
+                                {a.latency_ms != null && <span className="text-white/30"> - {formatAgentLatency(a.latency_ms)} ms</span>}
                                 {a.platform && <span className="text-white/30"> - {a.platform}</span>}
                                 {a.version && (
                                     <span className="text-white/30"> - v{a.version.replace(/^v/, '')}</span>
