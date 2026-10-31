@@ -13,6 +13,18 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Security
+- **PHP 8.4.27 or newer is now required (GitHub #57).** 8.4.27 fixes two critical remote code
+  execution bugs in PHP itself (CVE-2026-109618, CVE-2026-109619). The Docker image is built on
+  8.4.27 and the Debian package won't install against an older PHP. If you upgrade PHP yourself
+  with apt, restart My Mate's services afterwards
+  (`systemctl restart mymate-horizon mymate-loop mymate-reverb mymate-scheduler mymate-agent-hub`): the
+  background engine is long-running and keeps the old PHP in memory until it restarts.
+- **Dependency security updates.** Laravel 13.39 (incl. a critical token guard authentication
+  bypass, CVE-2026-114509), Guzzle 7.16, league/commonmark 2.10.6, Flysystem 3.36 and Symfony
+  8.1.10 components, plus axios 1.21 / follow-redirects 1.16.2 in the web UI. `composer audit`
+  and `npm audit` are clean.
+
 ## [1.9.0] - 2026-09-26
 
 ### Added

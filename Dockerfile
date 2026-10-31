@@ -43,7 +43,9 @@ RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
 FROM composer:2 AS composer
 
 # --- 4. runtime --------------------------------------------------------------
-FROM php:8.4-fpm-bookworm AS runtime
+# Pinned to a patch release, not the floating 8.4 tag: a builder with a stale cached base
+# would otherwise ship an old PHP. 8.4.27 fixes CVE-2026-109618 / CVE-2026-109619 (RCE).
+FROM php:8.4.27-fpm-bookworm AS runtime
 
 # The servers we run under supervisor (openssl, for the self-signed HTTPS cert, is already
 # in the base image). mtr-tiny backs the live device trace and the Tools traceroute - the
