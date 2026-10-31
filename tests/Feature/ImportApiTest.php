@@ -126,7 +126,8 @@ class ImportApiTest extends TestCase
 
         $run->refresh();
         $this->assertSame(ImportStatus::Completed, $run->status, 'import error: '.$run->error);
-        $this->assertSame(2, \App\Models\Device::count()); // router1 + switch1 from the fixture
+        // router1 + switch1, plus ghost-peer: only on a deleted map, but still a device in Dude (#9).
+        $this->assertSame(3, \App\Models\Device::count());
     }
 
     public function test_rejects_a_non_sqlite_file(): void
