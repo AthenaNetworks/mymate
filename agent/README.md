@@ -83,6 +83,12 @@ Two layers: the agent **reconnects in-process** with exponential backoff + jitte
 link drops, and the **service manager** (systemd `Restart=always` / launchd `KeepAlive`)
 restarts the process if it ever exits.
 
+## Compatibility
+
+Any agent keeps working with a newer My Mate server, and a newer agent with an older server: the
+protocol only ever grows, and new features are offered only to agents that say they support them.
+If you're changing the protocol, read [COMPATIBILITY.md](COMPATIBILITY.md) first.
+
 ## Build from source
 
 ```sh
