@@ -50,7 +50,7 @@ import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
 import { computeLayout, dependencyLayout, declump, type LayoutKind } from '../lib/layout';
 import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from '../api/layoutSnapshots';
-import { computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
+import { bundleParallel, computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import { fmtDuration } from '../../device-page/lib/format';
@@ -515,7 +515,7 @@ export function MapCanvas() {
                 data: { count: cl.count },
             }))
             : [];
-        setEdges([...utilEdges, ...interEdges, ...mapLinkEdges, ...childLinkEdges]);
+        setEdges([...bundleParallel(utilEdges), ...interEdges, ...mapLinkEdges, ...childLinkEdges]);
 
         setUtil((prev) => {
             const base: UtilMap = {};

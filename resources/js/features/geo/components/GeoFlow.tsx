@@ -5,7 +5,7 @@ import { MapPin } from '@phosphor-icons/react';
 import { DeviceNode } from '../../topology/nodes/DeviceNode';
 import { UtilEdge } from '../../topology/edges/UtilEdge';
 import { OspfCostControl } from '../../topology/components/OspfCostControl';
-import { computeData, linkUtil, metaOf } from '../../topology/lib/edgeData';
+import { bundleParallel, computeData, linkUtil, metaOf } from '../../topology/lib/edgeData';
 import { GeoStackNode } from './GeoStackNode';
 import { GeoTileLayer } from './GeoTileLayer';
 import { LayerToggle, loadLayerPrefs, persistLayerPrefs, type LayerPrefs } from './geoLayers';
@@ -170,7 +170,7 @@ export function GeoFlow({
                 built.push({ id: String(l.id), source: s, target: t, type: 'util', selectable: clickable, data });
             }
         }
-        setEdges(built);
+        setEdges(bundleParallel(built));
     }, [intraLinks, nodeIdOfDevice, statusById, setEdges, layers.links, layers.bandwidth, layers.ospf, clickable]);
 
     // Selection highlight follows the inspector.

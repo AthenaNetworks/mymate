@@ -16,7 +16,7 @@ import { MapNoteNode } from '../../topology/nodes/MapNoteNode';
 import { UtilEdge } from '../../topology/edges/UtilEdge';
 import { MapLinkEdge } from '../../topology/edges/MapLinkEdge';
 import { ChildLinkEdge } from '../../topology/edges/ChildLinkEdge';
-import { computeData, linkUtil, metaOf } from '../../topology/lib/edgeData';
+import { bundleParallel, computeData, linkUtil, metaOf } from '../../topology/lib/edgeData';
 import { useWallDevices, useWallLinks, useWallMap } from '../api/wall';
 import { MapBackgroundLayer } from '../../topology/components/MapBackgroundLayer';
 import { wallToken } from '../../../lib/wall';
@@ -141,7 +141,7 @@ export function WallCanvas() {
             deletable: false,
             data: { count: cl.count },
         }));
-        return [...utilEdges, ...mapLinkEdges, ...childLinkEdges];
+        return [...bundleParallel(utilEdges), ...mapLinkEdges, ...childLinkEdges];
     }, [intraLinks, mapLinks, childDeviceLinks, statusById]);
 
     // Frame the topology once it has loaded (and never again - a wallboard shouldn't jump on

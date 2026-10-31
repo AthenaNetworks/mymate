@@ -29,7 +29,12 @@ export type UtilEdgeData = {
     onRemove?: () => void; // request deletion of this link (hover the label -> ✕)
     emphasized?: boolean; // touches the selected device - bring it forward
     dimmed?: boolean; // a device is selected but this link isn't its - push it back
+    parallelIndex?: number; // this link's lane among links between the same two cards (GitHub #9)
+    parallelCount?: number;
 };
+
+/** Gap between neighbouring parallel links at their widest point (px). */
+const PARALLEL_SPACING = 22;
 
 /** Compact link capacity ("1G", "10G", "100M"); null when unknown. */
 function speedLabel(mbps: number | null | undefined): string | null {
@@ -115,10 +120,34 @@ export function UtilEdge({
 
     // Both helpers return [path, labelX, labelY]; only the geometry differs, so the
     // colour ramp, width, dash-flow, and label below are identical either way.
-    const [path, labelX, labelY] =
-        edgeStyle === 'straight'
-            ? getStraightPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty })
-            : getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sPos, targetPosition: tPos });
+    // Several links between the same two cards fan out side by side instead of stacking on one
+    // line (GitHub #9). The middle lane (odd counts) keeps the normal path.
+    const lane = (d.parallelCount ?? 0) > 1 ? (d.parallelIndex ?? 0) - ((d.parallelCount ?? 1) - 1) / 2 : 0;
+    let path: string, labelX: number, labelY: number;
+    if (lane !== 0) {
+        // Bow out along the normal of the pair, oriented by node id so an A->B and a B->A link
+        // between the same cards still fan to opposite sides.
+        const flip = source < target ? 1 : -1;
+        const len = Math.hypot(tx - sx, ty - sy) || 1;
+        const nx = (-(ty - sy) / len) * flip;
+        const ny = ((tx - sx) / len) * flip;
+        // A quadratic curve only reaches half way to its control point, hence the 2x.
+        const cx = (sx + tx) / 2 + nx * lane * PARALLEL_SPACING * 2;
+        const cy = (sy + ty) / 2 + ny * lane * PARALLEL_SPACING * 2;
+        path = `M ${sx},${sy} Q ${cx},${cy} ${tx},${ty}`;
+        // Stagger the labels along the curves too: side by side they'd still overlap where the
+        // link runs steeply and the labels are wider than the gap between lanes.
+        // Measured along the pair's canonical direction, like the bow, so opposite-way links agree.
+        const along = Math.min(0.8, Math.max(0.2, 0.5 + lane * 0.18));
+        const t = flip === 1 ? along : 1 - along;
+        labelX = (1 - t) ** 2 * sx + 2 * (1 - t) * t * cx + t ** 2 * tx;
+        labelY = (1 - t) ** 2 * sy + 2 * (1 - t) * t * cy + t ** 2 * ty;
+    } else {
+        [path, labelX, labelY] =
+            edgeStyle === 'straight'
+                ? getStraightPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty })
+                : getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sPos, targetPosition: tPos });
+    }
 
     const color = linkColor(d.util, d.down);
     // On-screen direction of source -> target, for the tx/rx arrows in the label.

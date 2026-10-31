@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Several links between the same two devices are drawn side by side (GitHub #9).** They used to sit
+  exactly on top of each other, so only the last one was visible. Each now bows out to its own lane with
+  its own label, on the map, the geo map and the wallboard.
 - **Long jobs no longer run twice.** Backups, upgrades, traces and Dude imports could be picked up by a
   second worker after 90 seconds while the first was still running them. Those queues now wait for the
   job's full timeout.

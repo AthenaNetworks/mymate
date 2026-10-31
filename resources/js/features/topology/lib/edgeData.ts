@@ -77,3 +77,28 @@ export function computeData(meta: EdgeMeta, util: UtilMap, statusById: Record<nu
 
     return { ...meta, util: max, mbps, abMbps, baMbps, down };
 }
+
+/**
+ * Number the links that run between the same two cards (GitHub #9) so UtilEdge can fan them out
+ * instead of drawing them on top of each other. Order is by link id, so a link keeps its lane
+ * as the others update. Returns the same edges with `parallelIndex` / `parallelCount` set.
+ */
+export function bundleParallel<E extends { id: string; source: string; target: string; data?: Record<string, unknown> }>(edges: E[]): E[] {
+    const pairKey = (e: E) => (e.source < e.target ? `${e.source}|${e.target}` : `${e.target}|${e.source}`);
+    const groups = new Map<string, E[]>();
+    for (const e of edges) {
+        const k = pairKey(e);
+        const g = groups.get(k);
+        if (g) g.push(e);
+        else groups.set(k, [e]);
+    }
+    const lane = new Map<string, { index: number; count: number }>();
+    for (const g of groups.values()) {
+        if (g.length < 2) continue;
+        [...g].sort((a, b) => Number(a.id) - Number(b.id) || a.id.localeCompare(b.id)).forEach((e, i) => lane.set(e.id, { index: i, count: g.length }));
+    }
+    return edges.map((e) => {
+        const l = lane.get(e.id);
+        return l ? { ...e, data: { ...e.data, parallelIndex: l.index, parallelCount: l.count } } : e;
+    });
+}
