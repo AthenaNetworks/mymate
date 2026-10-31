@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: My Mate API
-  version: "1.6.0"
+  version: "2.0.0"
   summary: Programmatic access to the My Mate network monitor.
   description: |
     The **My Mate** REST API drives the same data the web console uses: devices, interfaces,
