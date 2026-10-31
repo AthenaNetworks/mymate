@@ -109,7 +109,7 @@ jobs:
 
   # ---------------------------------------------------------------- agent
   agent:
-    name: Agent - vet + cross-compile
+    name: Agent - vet + test + cross-compile
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -120,12 +120,15 @@ jobs:
       - name: Vet
         working-directory: agent
         run: go vet ./...
+      - name: Unit tests
+        working-directory: agent
+        run: go test -race ./...
       - name: Cross-compile every target (catches build breaks on all platforms)
         working-directory: agent
         env:
           CGO_ENABLED: '0'
         run: |
-          for t in linux/amd64 linux/arm64 linux/arm darwin/arm64 darwin/amd64; do
+          for t in linux/amd64 linux/arm64 linux/arm darwin/arm64 darwin/amd64 windows/amd64; do
             echo "building $t"
             GOOS=${t%/*} GOARCH=${t#*/} go build ./...
           done
