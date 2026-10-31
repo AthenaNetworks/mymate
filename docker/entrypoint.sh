@@ -32,12 +32,28 @@ if [ ! -s "$CERT_DIR/tls.crt" ] || [ ! -s "$CERT_DIR/tls.key" ]; then
     chmod 600 "$CERT_DIR/tls.key" 2>/dev/null || true
 fi
 
-# APP_KEY: use the one you passed in; otherwise generate an EPHEMERAL one (set APP_KEY
-# yourself, or mount .env, to keep sessions/encrypted data across restarts).
-if [ -z "${APP_KEY:-}" ] && ! grep -qE '^APP_KEY=base64:.+' .env; then
-    php artisan key:generate --force >/dev/null 2>&1 || true
-    echo "mymate: generated an ephemeral APP_KEY - set APP_KEY to persist across restarts"
-fi
+# Secrets: use the ones you passed in. Otherwise generate them ONCE and keep them in the state
+# volume (/var/lib/mymate), so they survive restarts and image upgrades. APP_KEY matters most:
+# device credentials are stored encrypted with it, so a fresh key on every start used to leave
+# every stored password and community string unreadable after a restart.
+STATE_DIR=/var/lib/mymate
+mkdir -p "$STATE_DIR" && chmod 700 "$STATE_DIR"
+# persisted_secret NAME FILE GENERATOR: export NAME from the env, else from FILE, else generate
+# it into FILE. An explicit value always wins (and isn't written anywhere).
+persisted_secret() {
+    eval "current=\${$1:-}"
+    if [ -n "$current" ] && [ "$current" != "change-me" ]; then
+        return
+    fi
+    if [ ! -s "$2" ]; then
+        ( umask 077; $3 > "$2.tmp" ) && [ -s "$2.tmp" ] && mv "$2.tmp" "$2"
+        echo "mymate: generated $1 and saved it in $2 - keep the mymate-state volume (or set $1) to keep it"
+    fi
+    export "$1=$(cat "$2")"
+}
+# A key in a mounted .env counts as passed in (exporting a generated one would override it).
+grep -qE '^APP_KEY=base64:.+' .env || persisted_secret APP_KEY "$STATE_DIR/app_key" "php artisan key:generate --show --no-ansi"
+persisted_secret REVERB_APP_SECRET "$STATE_DIR/reverb_app_secret" "openssl rand -hex 32"
 
 # Wait for Postgres before migrating.
 DB_HOST="${DB_HOST:-postgres}"; DB_PORT="${DB_PORT:-5432}"; DB_USERNAME="${DB_USERNAME:-mymate}"

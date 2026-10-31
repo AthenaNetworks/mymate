@@ -30,6 +30,11 @@ of commit subjects.
   in the inspector). Set it in the device's edit dialog.
 
 ### Fixed
+- **Docker no longer loses your stored device credentials on restart.** With no `APP_KEY` set, the
+  container made a new one every start, and everything encrypted with the old one (device passwords,
+  SNMP communities, alert transport settings) became unreadable. It now generates the key once and keeps
+  it in a `mymate-state` volume, and does the same for the Reverb secret instead of `change-me`. The
+  compose file also keeps uploads, config backups and the TLS certificate in named volumes now.
 - **The Dude import skips leftovers of deleted maps (GitHub #9).** A Dude database can keep a deleted
   map's elements around, and their link lines came through as links you couldn't see in Dude. Only
   elements on maps that still exist are imported now.

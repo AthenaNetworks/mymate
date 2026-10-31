@@ -80,8 +80,10 @@ docker compose exec app php artisan mymate:user:create --admin
 It serves HTTPS on port 9443 by default with a self-signed certificate, on all interfaces.
 Change the port with `MYMATE_HTTPS_PORT`. If you'd rather terminate TLS at a reverse proxy or
 a Cloudflare Tunnel, uncomment the HTTP port in `docker-compose.yml` and expose that instead
-(the app reads `X-Forwarded-Proto`). Set your own `APP_KEY` and `REVERB_APP_SECRET`, and point
-`APP_URL` at the address you actually browse to, before you rely on it.
+(the app reads `X-Forwarded-Proto`). Point `APP_URL` at the address you actually browse to
+before you rely on it. `APP_KEY` and `REVERB_APP_SECRET` are generated on first start and kept in
+the `mymate-state` volume (or set your own). Don't lose that volume: `APP_KEY` encrypts the
+stored device credentials.
 
 ## Upgrading
 
@@ -121,9 +123,10 @@ docker compose pull
 docker compose up -d
 ```
 
-Pin the image tag you want in `docker-compose.yml` (or track `:latest`) before pulling. Keep
-`/etc/rusted` and `/var/lib/rusted` as named volumes so your backup history survives the
-recreate.
+Pin the image tag you want in `docker-compose.yml` (or track `:latest`) before pulling. The
+compose file keeps everything that has to survive a recreate in named volumes (the generated
+`APP_KEY`, uploads, config backups and the TLS certificate), so keep those. If you set up an
+older compose file without them, copy the new `volumes:` sections across before you upgrade.
 
 ## First login
 
