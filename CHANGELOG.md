@@ -14,6 +14,10 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Custom SNMP sensors work on devices behind a remote agent (GitHub #51).** They were only ever read
+  from the central server, so agent devices never got a reading (and graphs of those sensors stayed
+  empty). The agent now reads them on the same cadence, and "Test OID" on an agent device runs from
+  the agent. Needs the updated agent; older agents just keep skipping sensors.
 - **Devices behind a remote agent are only discovered by the agent (GitHub #54).** "Discover now" and
   approving a discovery candidate walked the device from the central server, from the wrong source
   address, instead of asking its agent. Both now hand the walk to the agent on its next poll.

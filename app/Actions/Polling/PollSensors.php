@@ -4,9 +4,11 @@ namespace App\Actions\Polling;
 
 use App\Models\Device;
 use App\Models\Sensor;
+use App\Services\Snmp\SnmpCredential;
 use App\Support\DeviceScope;
 use App\Support\EngineLog;
 use App\Support\SensorReader;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,55 +28,88 @@ class PollSensors
             return;
         }
 
-        // Resolve each sensor's scope to a device-id set once (null = all devices).
-        $scopes = [];
-        foreach ($sensors as $sensor) {
-            $ids = DeviceScope::resolve($sensor->scope);
-            $scopes[$sensor->id] = $ids === null ? null : array_flip($ids);
-        }
-
+        $scopes = self::scopes($sensors);
         $devices = Device::with('credential')->whereIn('id', $deviceIds)->get();
-        $now = now();
         $readings = [];
-        $history = [];
 
         foreach ($devices as $device) {
-            $community = \App\Services\Snmp\SnmpCredential::fromCredential($device->credential);
+            $community = SnmpCredential::fromCredential($device->credential);
             if (! $community->isUsable()) {
                 continue; // custom sensors are SNMP GETs - skip non-SNMP devices
             }
 
-            foreach ($sensors as $sensor) {
-                $inScope = $scopes[$sensor->id];
-                if ($inScope !== null && ! isset($inScope[$device->id])) {
-                    continue;
-                }
-
+            foreach (self::forDevice($sensors, $scopes, $device->id) as $sensor) {
                 try {
                     $value = $this->reader->read($device->mgmt_ip, $community, $sensor->oid, $sensor->mode, $sensor->agg, (float) $sensor->divisor);
                 } catch (\Throwable) {
                     continue; // unreachable / unsupported OID - just skip this reading
                 }
 
-                if ($value === null) {
-                    continue;
+                if ($value !== null) {
+                    $readings[] = ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => $value];
                 }
-
-                $readings[] = ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'value' => $value, 'read_at' => $now];
-                $history[] = ['sensor_id' => $sensor->id, 'device_id' => $device->id, 'ts' => $now, 'value' => $value];
             }
         }
 
-        if ($readings !== []) {
-            DB::table('sensor_readings')->upsert($readings, ['sensor_id', 'device_id'], ['value', 'read_at']);
+        self::store($readings);
+    }
+
+    /**
+     * Each sensor's scope resolved to a device-id set once (null = all devices).
+     *
+     * @param  Collection<int, Sensor>  $sensors
+     * @return array<int, array<int, int>|null>
+     */
+    public static function scopes(Collection $sensors): array
+    {
+        $scopes = [];
+        foreach ($sensors as $sensor) {
+            $ids = DeviceScope::resolve($sensor->scope);
+            $scopes[$sensor->id] = $ids === null ? null : array_flip($ids);
         }
-        if ($history !== [] && config('mymate.history.enabled', true)) {
+
+        return $scopes;
+    }
+
+    /**
+     * The sensors whose scope covers this device.
+     *
+     * @param  Collection<int, Sensor>  $sensors
+     * @param  array<int, array<int, int>|null>  $scopes
+     * @return list<Sensor>
+     */
+    public static function forDevice(Collection $sensors, array $scopes, int $deviceId): array
+    {
+        return $sensors->filter(function (Sensor $sensor) use ($scopes, $deviceId): bool {
+            $inScope = $scopes[$sensor->id] ?? null;
+
+            return $inScope === null || isset($inScope[$deviceId]);
+        })->values()->all();
+    }
+
+    /**
+     * Upsert the current readings and append history. Shared with remote-agent sensor reads (#51).
+     *
+     * @param  list<array{sensor_id: int, device_id: int, value: float}>  $readings
+     */
+    public static function store(array $readings): void
+    {
+        if ($readings === []) {
+            return;
+        }
+        $now = now();
+        DB::table('sensor_readings')->upsert(
+            array_map(fn (array $r): array => $r + ['read_at' => $now], $readings),
+            ['sensor_id', 'device_id'], ['value', 'read_at'],
+        );
+        if (config('mymate.history.enabled', true)) {
             try {
-                DB::table('sensor_samples')->insert($history);
+                DB::table('sensor_samples')->insert(array_map(fn (array $r): array => [
+                    'sensor_id' => $r['sensor_id'], 'device_id' => $r['device_id'], 'ts' => $now, 'value' => $r['value'],
+                ], $readings));
             } catch (\Throwable $e) {
-                EngineLog::warning('sensors: history write failed', ['rows' => count($history), 'error' => $e->getMessage()]);
+                EngineLog::warning('sensors: history write failed', ['rows' => count($readings), 'error' => $e->getMessage()]);
             }
         }
     }
-
 }

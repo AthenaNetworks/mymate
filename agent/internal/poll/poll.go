@@ -31,7 +31,9 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 	var metrics []proto.MetricsResult
 	var discovery []proto.DeviceDiscovery
 	var optical []proto.DeviceOptical
+	var sensors []proto.SensorResult
 	for _, t := range job.SNMP {
+		sensors = append(sensors, p.pollSNMPSensors(t)...)
 		if m := p.pollSNMPMetrics(t); m != nil {
 			metrics = append(metrics, *m)
 		}
@@ -71,6 +73,7 @@ func (p *Poller) Run(ctx context.Context, job proto.PollJob) proto.ResultPayload
 		Discovery:  discovery,
 		Probes:     probes,
 		Optical:    optical,
+		Sensors:    sensors,
 	}
 }
 

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Agent\TestAgentSnmp;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreSensorRequest;
 use App\Http\Resources\SensorResource;
@@ -36,7 +37,7 @@ class SensorController extends Controller
      * poller will ({@see SensorReader}), so the operator can confirm it returns a value (and see it)
      * before committing. Errors come back as a message rather than a 500 so the form can show them.
      */
-    public function test(Request $request, SensorReader $reader): JsonResponse
+    public function test(Request $request, SensorReader $reader, TestAgentSnmp $agentTest): JsonResponse
     {
         $data = $request->validate([
             'device_id' => ['required', 'integer', 'exists:devices,id'],
@@ -52,13 +53,23 @@ class SensorController extends Controller
             return response()->json(['data' => ['ok' => false, 'error' => 'That device has no usable SNMP credential to test with.']]);
         }
 
-        try {
-            $value = $reader->read(
-                $device->mgmt_ip, $cred, $data['oid'],
-                $data['mode'] ?? 'get', $data['agg'] ?? null, (float) ($data['divisor'] ?? 1),
-            );
-        } catch (\Throwable $e) {
-            return response()->json(['data' => ['ok' => false, 'error' => 'SNMP read failed: '.$e->getMessage()]]);
+        $mode = $data['mode'] ?? 'get';
+        if ($device->agent_id !== null) {
+            // Behind an agent: run the read from the agent's network, not from here (#51).
+            $reply = $agentTest($device, $cred, $data['oid'], $mode);
+            if (isset($reply['error'])) {
+                return response()->json(['data' => ['ok' => false, 'error' => 'SNMP read failed: '.$reply['error']]]);
+            }
+            $value = SensorReader::reduce($reply['values'] ?? [], $mode, $data['agg'] ?? null, (float) ($data['divisor'] ?? 1));
+        } else {
+            try {
+                $value = $reader->read(
+                    $device->mgmt_ip, $cred, $data['oid'],
+                    $mode, $data['agg'] ?? null, (float) ($data['divisor'] ?? 1),
+                );
+            } catch (\Throwable $e) {
+                return response()->json(['data' => ['ok' => false, 'error' => 'SNMP read failed: '.$e->getMessage()]]);
+            }
         }
 
         if ($value === null) {

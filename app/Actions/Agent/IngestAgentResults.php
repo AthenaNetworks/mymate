@@ -5,6 +5,7 @@ namespace App\Actions\Agent;
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
+use App\Actions\Polling\PollSensors;
 use App\Actions\Polling\RecordDeviceResources;
 use App\Actions\Polling\RecordOpticalPower;
 use App\Enums\DeviceStatus;
@@ -16,6 +17,7 @@ use App\Models\Agent;
 use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Models\Probe;
+use App\Models\Sensor;
 use App\Services\Polling\DeviceMetrics;
 use App\Services\Polling\LiveDeviceFrame;
 use App\Services\Polling\LiveInterfaceFrame;
@@ -26,6 +28,7 @@ use App\Services\Polling\StorageReading;
 use App\Services\Probes\ProbeResult;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
+use App\Support\SensorReader;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -67,6 +70,46 @@ class IngestAgentResults
         $this->ingestProbes($agent, $payload['probes'] ?? []);
         // Agents older than the optical support (#11) never send this key - nothing to do.
         $this->ingestOptical($agent, $payload['optical'] ?? []);
+        $this->ingestSensors($agent, $payload['sensors'] ?? []);
+    }
+
+    /**
+     * Custom SNMP sensor values the agent read (#51), reduced and scaled by the same code as the
+     * central sensor poll. Only this agent's devices, and only sensors that are enabled and in
+     * scope for the device - the agent can't write a reading the server wouldn't have taken.
+     *
+     * @param  array<int,array<string,mixed>>  $sensors
+     */
+    private function ingestSensors(Agent $agent, array $sensors): void
+    {
+        if ($sensors === []) {
+            return;
+        }
+        $owned = Device::where('agent_id', $agent->id)
+            ->whereIn('id', collect($sensors)->pluck('device_id')->all())->pluck('id')->flip();
+        $defs = Sensor::where('enabled', true)->get();
+        $scopes = PollSensors::scopes($defs);
+        $byId = $defs->keyBy('id');
+
+        $readings = [];
+        foreach ($sensors as $r) {
+            $deviceId = (int) ($r['device_id'] ?? 0);
+            $sensor = $byId->get((int) ($r['sensor_id'] ?? 0));
+            if (! isset($owned[$deviceId]) || $sensor === null) {
+                continue;
+            }
+            $inScope = $scopes[$sensor->id] ?? null;
+            if ($inScope !== null && ! isset($inScope[$deviceId])) {
+                continue;
+            }
+            $values = array_map('strval', array_filter((array) ($r['values'] ?? []), 'is_scalar'));
+            $value = SensorReader::reduce($values, $sensor->mode, $sensor->agg, (float) $sensor->divisor);
+            if ($value !== null) {
+                $readings[] = ['sensor_id' => $sensor->id, 'device_id' => $deviceId, 'value' => $value];
+            }
+        }
+
+        PollSensors::store($readings);
     }
 
     /**

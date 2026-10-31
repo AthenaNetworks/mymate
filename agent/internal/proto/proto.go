@@ -87,6 +87,44 @@ type SNMPTarget struct {
 	// (sysDescr/sysLocation/ENTITY-MIB/uptime/memory) this cycle. Set on the discovery cadence,
 	// so the agent-polled device is (re)discovered from the agent, not the central server (#33).
 	Discover bool `json:"discover,omitempty"`
+	// Sensors: custom SNMP sensors to read this cycle (#51), on the server's metrics cadence.
+	// The agent only fetches the raw values; the server reduces/scales them exactly like its
+	// own sensor poll. Older servers never send it.
+	Sensors []SensorTarget `json:"sensors,omitempty"`
+}
+
+// SensorTarget is one custom sensor OID: "get" a scalar, or "walk" a table.
+type SensorTarget struct {
+	SensorID int    `json:"sensor_id"`
+	OID      string `json:"oid"`
+	Mode     string `json:"mode"` // "get" | "walk"
+}
+
+// SensorResult is the raw value(s) the agent read for one sensor on one device. Only sent when
+// the read worked; a failed read is simply missing, like a failed central read.
+type SensorResult struct {
+	DeviceID int      `json:"device_id"`
+	SensorID int      `json:"sensor_id"`
+	Values   []string `json:"values"`
+}
+
+// SNMPTest (server -> agent, type "snmp_test") is the sensor form's "Test OID" run from the
+// agent's network (#51). The agent answers with an SNMPTestResult carrying the same RequestID.
+type SNMPTest struct {
+	RequestID string   `json:"request_id"`
+	IP        string   `json:"ip"`
+	Community string   `json:"community"`
+	SNMP      SNMPAuth `json:"snmp,omitempty"`
+	OID       string   `json:"oid"`
+	Mode      string   `json:"mode"`
+}
+
+// SNMPTestResult (agent -> server, type "snmp_test_result").
+type SNMPTestResult struct {
+	Type      string   `json:"type"` // "snmp_test_result"
+	RequestID string   `json:"request_id"`
+	Values    []string `json:"values"`
+	Error     string   `json:"error,omitempty"`
 }
 
 // SNMPAuth carries the version + v3 USM parameters. Empty/"2c" version means a plain community
@@ -258,6 +296,7 @@ type ResultPayload struct {
 	Discovery  []DeviceDiscovery `json:"discovery,omitempty"`
 	Probes     []ProbeCheck      `json:"probes,omitempty"`
 	Optical    []DeviceOptical   `json:"optical,omitempty"`
+	Sensors    []SensorResult    `json:"sensors,omitempty"`
 }
 
 // DeviceOptical is one device's SFP optical power read (#11). It's only sent when the read

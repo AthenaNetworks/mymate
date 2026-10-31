@@ -2,13 +2,14 @@
 
 namespace App\Support;
 
+use App\Actions\Polling\PollSensors;
 use App\Services\Snmp\SnmpClient;
 use App\Services\Snmp\SnmpCredential;
 
 /**
  * Read a single custom-sensor value off a device: SNMP GET a scalar OID, or walk a table and
  * reduce it by `agg`, then scale by `divisor`. Shared by the polling loop
- * ({@see \App\Actions\Polling\PollSensors}) and the "test this OID" endpoint so a test behaves
+ * ({@see PollSensors}) and the "test this OID" endpoint so a test behaves
  * exactly like a real poll. SNMP transport errors propagate; a non-numeric / empty result is null.
  */
 class SensorReader
@@ -17,9 +18,20 @@ class SensorReader
 
     public function read(string $host, SnmpCredential $cred, string $oid, string $mode, ?string $agg, float $divisor): ?float
     {
-        $raw = $mode === 'walk'
-            ? self::aggregate($this->snmp->walk($host, $cred, $oid), (string) ($agg ?: 'sum'))
-            : self::firstNumeric($this->snmp->get($host, $cred, [$oid]));
+        $values = $mode === 'walk' ? $this->snmp->walk($host, $cred, $oid) : $this->snmp->get($host, $cred, [$oid]);
+
+        return self::reduce($values, $mode, $agg, $divisor);
+    }
+
+    /**
+     * Turn raw GET/walk values into the sensor's reading. Split out so values a remote agent read
+     * (#51) go through exactly the same reduction as a central read.
+     *
+     * @param  array<int|string, string>  $values
+     */
+    public static function reduce(array $values, string $mode, ?string $agg, float $divisor): ?float
+    {
+        $raw = $mode === 'walk' ? self::aggregate($values, (string) ($agg ?: 'sum')) : self::firstNumeric($values);
 
         if ($raw === null) {
             return null;

@@ -140,6 +140,18 @@ func handle(ctx context.Context, poller *poll.Poller, send chan<- []byte, msg pr
 			case <-ctx.Done():
 			}
 		}()
+	case "snmp_test":
+		var t proto.SNMPTest
+		if err := json.Unmarshal(msg.Payload, &t); err != nil {
+			slog.Warn("bad snmp test", "error", err)
+			return
+		}
+		go func() {
+			select {
+			case send <- mustJSON(poller.TestSNMP(t)):
+			case <-ctx.Done():
+			}
+		}()
 	case "bye":
 		slog.Info("hub closed the session")
 	default:

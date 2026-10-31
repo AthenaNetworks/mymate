@@ -2,7 +2,8 @@
 
 namespace App\Actions\Agent;
 
-use App\Console\Commands\AgentHubCommand;
+use App\Actions\Polling\PollSensors;
+use App\Console\Commands\Agent\AgentHubCommand;
 use App\Enums\AgentStatus;
 use App\Enums\PollMethod;
 use App\Enums\ProbeKind;
@@ -10,6 +11,7 @@ use App\Models\Agent;
 use App\Models\Credential;
 use App\Models\Device;
 use App\Models\Probe;
+use App\Models\Sensor;
 use App\Models\Subnet;
 use App\Services\Polling\DeviceMetricProfiles;
 use App\Services\Polling\OpticalPowerReader;
@@ -111,6 +113,15 @@ class DispatchAgentJobs
             Cache::put($portStatsKey, now()->timestamp, now()->addDay());
         }
 
+        // Custom SNMP sensors (#51) on the metrics cadence, like the central sensor poll.
+        $sensorsKey = "agent:{$agentId}:last_sensors";
+        $sensorsDue = (now()->timestamp - (int) Cache::get($sensorsKey, 0)) >= $opticalInterval;
+        $sensors = $sensorsDue ? Sensor::where('enabled', true)->get() : collect();
+        if ($sensorsDue) {
+            Cache::put($sensorsKey, now()->timestamp, now()->addDay());
+        }
+        $sensorScopes = PollSensors::scopes($sensors);
+
         $ping = [];
         $snmp = [];
         $routeros = [];
@@ -140,6 +151,9 @@ class DispatchAgentJobs
                     // for them. Older agents ignore both and just keep sending octets.
                     'port_stats' => $portStatsDue ? self::portStatsOids() : null,
                     'discover' => $discoverDue,
+                    'sensors' => array_map(fn (Sensor $s): array => [
+                        'sensor_id' => $s->id, 'oid' => $s->oid, 'mode' => $s->mode,
+                    ], PollSensors::forDevice($sensors, $sensorScopes, $d->id)),
                 ];
             } elseif ($d->poll_method === PollMethod::RouterOs && $d->credential?->type === 'routeros') {
                 $routeros[] = [
@@ -237,7 +251,7 @@ class DispatchAgentJobs
         return SnmpCredential::fromCredential($c)->isUsable();
     }
 
-    private static function snmpAuth(SnmpCredential $cred): array
+    public static function snmpAuth(SnmpCredential $cred): array
     {
         if ($cred->version !== '3') {
             return ['version' => $cred->version];

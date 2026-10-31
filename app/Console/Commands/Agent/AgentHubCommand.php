@@ -5,15 +5,16 @@ namespace App\Console\Commands\Agent;
 use App\Actions\Agent\DispatchAgentJobs;
 use App\Actions\Agent\IngestAgentResults;
 use App\Actions\Agent\IngestAgentScan;
+use App\Actions\Agent\TestAgentSnmp;
 use App\Enums\AgentStatus;
 use App\Models\Agent;
 use App\Models\Subnet;
 use App\Support\EngineLog;
 use Clue\React\Redis\Factory as RedisFactory;
-use Illuminate\Support\Facades\Cache;
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Message as Psr7Message;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Psr\Http\Message\RequestInterface;
 use Ratchet\RFC6455\Handshake\RequestVerifier;
 use Ratchet\RFC6455\Handshake\ServerNegotiator;
@@ -205,6 +206,11 @@ class AgentHubCommand extends Command
                 }
                 Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
                 break;
+
+            // An agent answering an operator's "Test OID" (#51).
+            case 'snmp_test_result':
+                TestAgentSnmp::recordReply($agentId, $msg);
+                break;
         }
     }
 
@@ -267,6 +273,10 @@ class AgentHubCommand extends Command
         }
         if (! empty($job['scan']['subnets'])) {
             $this->send($agentId, ['type' => 'scan', 'payload' => $job['scan']]);
+        }
+        // An operator's "Test OID" against one of this agent's devices (#51).
+        if (! empty($job['snmp_test'])) {
+            $this->send($agentId, ['type' => 'snmp_test', 'payload' => $job['snmp_test']]);
         }
     }
 
