@@ -143,7 +143,7 @@ cmd_self_signed() {
     c "Done. The console is on HTTPS with the built-in certificate."
     warn "Your browser will warn it's 'not trusted' the first time - that's expected for a"
     warn "self-signed cert. For a trusted one (no warning), run:  sudo mymate-ssl setup"
-    warn "Agents must set MYMATE_INSECURE=1 to trust it, or use a real cert (methods 1-4)."
+    warn "Agents must set MYMATE_AGENT_INSECURE=1 to trust it, or use a real cert (methods 1-4)."
 }
 
 # True if the self-signed cert exists and its SANs already cover $host.

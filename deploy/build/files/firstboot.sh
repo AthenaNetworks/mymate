@@ -71,7 +71,7 @@ set_env CORS_ALLOWED_ORIGINS "*"
 # with the new config); restarting them from here would deadlock.
 SSL_HOST="$HOST_IP"
 case "$HOST_FQDN" in *.*) [ "$HOST_FQDN" != localhost ] && SSL_HOST="$HOST_FQDN" ;; esac
-MYMATE_SSL_NO_RESTART=1 mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1 \
+MYMATE_SSL_NO_RESTART=1 /usr/local/sbin/mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1 \
     || echo "my-mate: WARNING self-signed HTTPS setup failed - serving plain HTTP." >&2
 
 # 3. Re-assert ICMP for THIS environment - the build-time sysctl/capability may not carry

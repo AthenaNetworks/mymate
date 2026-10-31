@@ -35,6 +35,13 @@ of commit subjects.
   in the inspector). Set it in the device's edit dialog.
 
 ### Fixed
+- **A fresh .deb or LXC install is HTTPS from the start again, and its backups work.** The installer
+  called `mymate-ssl` by a path that isn't on the package scripts' PATH, so every fresh install quietly
+  fell back to plain HTTP. And the package didn't depend on `git`, which the backup engine needs, so on a
+  minimal Debian the backup engine never started. Both found by installing the package in a clean
+  Debian 13 machine. (An existing HTTP-only install can switch with `sudo mymate-ssl setup`.)
+- **The hint for agents and a self-signed certificate named the wrong setting.** It's
+  `MYMATE_AGENT_INSECURE=1`, not `MYMATE_INSECURE=1`.
 - **One busy remote site no longer stalls every other agent.** The agent hub wrote each batch of results
   to the database itself, so while it worked through a large site nothing else was sent or received.
   Results now go to a queue (a new `agent` Horizon worker) and the hub stays free. It also retries its

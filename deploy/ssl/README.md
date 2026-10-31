@@ -131,5 +131,5 @@ sudo -u mymate php /opt/mymate/artisan mymate:configure-host mon.example.com   #
   (mixed content). Confirm the engine restarted so Reverb advertises `wss://` (the helper
   does this); hard-refresh.
 - **Agent won't connect** - it must use `wss://<domain>/agent` (matching the cert's name)
-  with a valid Bearer token. For a self-signed cert set `MYMATE_INSECURE=1` on the agent
+  with a valid Bearer token. For a self-signed cert set `MYMATE_AGENT_INSECURE=1` on the agent
   (dev only). Check the hub: `journalctl -u mymate-agent-hub`.

@@ -215,7 +215,7 @@ ICMPERR
     if [ "$FIRST_INSTALL" = "1" ]; then
         SSL_HOST="$HOST_IP"
         case "$HOST_FQDN" in *.*) [ "$HOST_FQDN" != localhost ] && SSL_HOST="$HOST_FQDN" ;; esac
-        if mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1; then
+        if /usr/local/sbin/mymate-ssl self-signed "${SSL_HOST:-}" >/dev/null 2>&1; then
             echo "my-mate: serving HTTPS with a self-signed certificate."
         else
             echo "my-mate: WARNING self-signed HTTPS setup failed - serving plain HTTP. Run 'sudo mymate-ssl setup'." >&2
