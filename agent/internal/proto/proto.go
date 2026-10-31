@@ -33,6 +33,12 @@ type Inbound struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
+// Bye is the optional payload of a "bye": why the hub is closing the session. "replaced" means
+// another connection with the same token took over. Unknown reasons are just a close.
+type Bye struct {
+	Reason string `json:"reason,omitempty"`
+}
+
 // --- Poll job (server -> agent, type "poll") ------------------------------
 
 // PollJob is the "poll" payload: ping everything, SNMP-poll devices with a community,

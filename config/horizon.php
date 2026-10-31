@@ -207,6 +207,23 @@ return [
     */
 
     'defaults' => [
+        // Remote-agent results: the hub queues each batch here instead of writing it to the DB
+        // inside its event loop (which stalled every other agent while one big site was ingested).
+        // ONE process on purpose: an agent's batches are applied in the order they arrived, which
+        // the down-after-N-misses ping logic depends on.
+        'supervisor-agent' => [
+            'connection' => 'redis',
+            'queue' => ['agent'],
+            'balance' => false,
+            'maxProcesses' => 1,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 256,
+            'tries' => 1,
+            'timeout' => 60,
+            'nice' => 0,
+        ],
+
         // Up/down sweeps: one job per tick for the whole fleet - light, frequent.
         'supervisor-ping' => [
             'connection' => 'redis',
@@ -333,6 +350,7 @@ return [
             'supervisor-backup' => ['maxProcesses' => 3],
             'supervisor-trace' => ['maxProcesses' => 3],
             'supervisor-import' => ['maxProcesses' => 1],
+            'supervisor-agent' => ['maxProcesses' => 1],
         ],
 
         'local' => [
@@ -343,6 +361,7 @@ return [
             'supervisor-backup' => ['maxProcesses' => 1],
             'supervisor-trace' => ['maxProcesses' => 1],
             'supervisor-import' => ['maxProcesses' => 1],
+            'supervisor-agent' => ['maxProcesses' => 1],
         ],
     ],
 

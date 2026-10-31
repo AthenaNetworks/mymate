@@ -30,6 +30,12 @@ of commit subjects.
   in the inspector). Set it in the device's edit dialog.
 
 ### Fixed
+- **One busy remote site no longer stalls every other agent.** The agent hub wrote each batch of results
+  to the database itself, so while it worked through a large site nothing else was sent or received.
+  Results now go to a queue (a new `agent` Horizon worker) and the hub stays free. It also retries its
+  Redis connection instead of sitting silent if Redis wasn't up yet, drops the connection of an agent
+  you delete, and when two copies of an agent share a token the newer one takes over cleanly (an updated
+  agent that gets replaced waits five minutes and logs why, instead of flapping).
 - **Docker no longer loses your stored device credentials on restart.** With no `APP_KEY` set, the
   container made a new one every start, and everything encrypted with the old one (device passwords,
   SNMP communities, alert transport settings) became unreadable. It now generates the key once and keeps

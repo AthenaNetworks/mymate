@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -24,7 +25,13 @@ const (
 	pingPeriod       = 30 * time.Second // how often we send a keepalive ping
 	pongWait         = 45 * time.Second // no traffic within this -> treat the link as dead
 	writeWait        = 10 * time.Second
+	// After the hub says another copy of this agent connected with the same token, wait this long
+	// before trying again, so two copies don't knock each other off every second.
+	replacedWait = 5 * time.Minute
 )
+
+// errReplaced: the hub dropped us because another connection with our token took over.
+var errReplaced = errors.New("another agent connected with this token, so the hub dropped this one")
 
 // Run connects to the hub and stays connected, reconnecting forever until ctx is cancelled.
 // The poller (with its per-interface counter state for bps deltas) outlives reconnects.
@@ -43,6 +50,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		}
 
 		wait := b.next()
+		if errors.Is(err, errReplaced) {
+			wait = replacedWait
+			slog.Error("another copy of this agent is using the same token; each agent needs its own token", "retry_in", wait)
+		}
 		slog.Warn("disconnected from hub; reconnecting", "error", err, "retry_in", wait.Round(time.Millisecond))
 		select {
 		case <-ctx.Done():
@@ -98,6 +109,9 @@ func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Pol
 			slog.Warn("ignoring malformed message from hub", "error", err)
 			continue
 		}
+		if msg.Type == "bye" {
+			return byeError(msg.Payload)
+		}
 		handle(ctx, poller, send, msg)
 	}
 }
@@ -152,8 +166,6 @@ func handle(ctx context.Context, poller *poll.Poller, send chan<- []byte, msg pr
 			case <-ctx.Done():
 			}
 		}()
-	case "bye":
-		slog.Info("hub closed the session")
 	default:
 		slog.Debug("ignoring unknown message type", "type", msg.Type)
 	}
@@ -193,6 +205,16 @@ func keepalive(ctx context.Context, conn *websocket.Conn) {
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// byeError is why the hub ended the session. Payload is optional (older hubs send none).
+func byeError(payload json.RawMessage) error {
+	var bye proto.Bye
+	_ = json.Unmarshal(payload, &bye)
+	if bye.Reason == "replaced" {
+		return errReplaced
+	}
+	return errors.New("hub closed the session")
 }
 
 func dialError(err error, resp *http.Response) error {

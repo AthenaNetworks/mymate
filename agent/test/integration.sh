@@ -92,4 +92,28 @@ start_hub
 wait_for 30 '[ "$(status)" = online ]' || fail "agent did not reconnect after the hub returned"
 say "agent RECONNECTED and is ONLINE again ✓"
 
+# --- 4. the same token connecting twice: the newest wins, the agent stays online ----------
+say "connecting a second copy with the same token"
+env MYMATE_URL="http://127.0.0.1:$PORT" MYMATE_AGENT_TOKEN="$TOKEN" MYMATE_AGENT_LOG=debug \
+    "$BIN" >/tmp/agent2.log 2>&1 & AGENT2=$!
+wait_for 15 'grep -q "connected to hub" /tmp/agent2.log' || { kill $AGENT2; fail "second copy never connected"; }
+wait_for 15 'grep -q "each agent needs its own token" /tmp/agent.log' || { kill $AGENT2; fail "the replaced copy wasn't told it was replaced"; }
+[ "$(status)" = online ] || { kill $AGENT2; fail "agent went offline when the old connection was replaced"; }
+sleep 5
+grep -c "connected to hub" /tmp/agent2.log | grep -qx 1 || { kill $AGENT2; fail "the copies are still knocking each other off"; }
+kill $AGENT2 2>/dev/null
+say "newest connection replaced the old one, the old copy backed off, the agent stayed ONLINE ✓"
+
+# --- 5. delete the agent while it's connected: the hub drops its socket ---------------------
+say "deleting the agent while it is connected"
+kill "$AGENT" 2>/dev/null; AGENT=""
+: > /tmp/agent.log
+# A fresh agent (the first is backing off after step 4). Once it's deleted the hub notices on
+# the next heartbeat (agent ping / hub keepalive, every 30s) and drops it; reconnecting is refused.
+start_agent
+wait_for 15 'grep -q "connected to hub" /tmp/agent.log' || fail "agent didn't reconnect for the delete test"
+q "\\App\\Models\\Agent::destroy($AID);" >/dev/null; AID=""
+wait_for 75 'grep -q "hub rejected the token" /tmp/agent.log' || fail "hub kept a deleted agent's socket open"
+say "hub closed the deleted agent's connection ✓"
+
 printf '\033[32m== AGENT CONNECT + RECONNECT TEST PASSED ==\033[0m\n'

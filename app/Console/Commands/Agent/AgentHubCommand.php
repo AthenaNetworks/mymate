@@ -3,10 +3,9 @@
 namespace App\Console\Commands\Agent;
 
 use App\Actions\Agent\DispatchAgentJobs;
-use App\Actions\Agent\IngestAgentResults;
-use App\Actions\Agent\IngestAgentScan;
 use App\Actions\Agent\TestAgentSnmp;
 use App\Enums\AgentStatus;
+use App\Jobs\IngestAgentPayloadJob;
 use App\Models\Agent;
 use App\Models\Subnet;
 use App\Support\EngineLog;
@@ -29,7 +28,7 @@ use React\Socket\SocketServer;
 /**
  * The remote-agent WebSocket hub. Agents dial in over TLS (nginx terminates + proxies /agent
  * here), authenticate with a Bearer token, and stay connected; the hub marks them online,
- * folds their results into the pipeline ({@see IngestAgentResults}), and forwards poll/scan
+ * folds their results into the pipeline ({@see \App\Jobs\IngestAgentPayloadJob}), and forwards poll/scan
  * jobs the loop publishes over Redis ({@see DispatchAgentJobs}).
  *
  * A long-running ReactPHP process (like Reverb/Horizon), built on the same react/socket +
@@ -83,7 +82,7 @@ class AgentHubCommand extends Command
     private function onConnection(ConnectionInterface $conn): void
     {
         // Per-connection state: pre-handshake we buffer raw HTTP; after, a MessageBuffer deframes.
-        $state = (object) ['handshaked' => false, 'raw' => '', 'agentId' => null, 'mb' => null];
+        $state = (object) ['handshaked' => false, 'raw' => '', 'agentId' => null, 'mb' => null, 'conn' => null];
 
         $conn->on('data', fn ($data) => $this->onData($conn, $state, $data));
         $conn->on('close', fn () => $this->onClose($state));
@@ -142,6 +141,17 @@ class AgentHubCommand extends Command
             true, // client -> server frames are masked
         );
 
+        // The same token connecting again (an agent restarted before its old socket timed out, or
+        // two copies running): the newest wins and the old socket is closed. onClose only acts
+        // for the connection that's current, so the old one closing can't mark the agent offline.
+        $previous = $this->conns[$agent->id] ?? null;
+        if ($previous !== null && $previous !== $conn) {
+            EngineLog::warning('agent reconnected, closing its previous connection', ['agent' => $agent->name, 'id' => $agent->id]);
+            // Say why first: an agent that understands it backs off for a while instead of
+            // reconnecting straight away, so two copies sharing a token don't flap every second.
+            $previous->end((new Frame((string) json_encode(['type' => 'bye', 'payload' => ['reason' => 'replaced']]), true, Frame::OP_TEXT))->getContents());
+        }
+        $state->conn = $conn;
         $this->conns[$agent->id] = $conn;
         $agent->forceFill(['status' => AgentStatus::Online, 'last_seen_at' => now()])->save();
         EngineLog::info('agent connected', ['agent' => $agent->name, 'id' => $agent->id]);
@@ -169,26 +179,18 @@ class AgentHubCommand extends Command
                 ]);
                 break;
 
+            // Poll results / a finished scan: queued, never applied here. Writing a big site's batch
+            // inside the event loop held up every other agent's frames and keepalives.
             case 'result':
-                if ($agent = Agent::find($agentId)) {
-                    try {
-                        app(IngestAgentResults::class)($agent, $msg['payload'] ?? []);
-                    } catch (\Throwable $e) {
-                        EngineLog::warning('agent: result ingest failed', ['id' => $agentId, 'error' => $e->getMessage()]);
-                    }
-                }
-                Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
-                break;
-
             case 'discovery':
-                if ($agent = Agent::find($agentId)) {
+                if ($this->heartbeat($agentId)) {
+                    $kind = $msg['type'] === 'discovery' ? IngestAgentPayloadJob::SCAN : IngestAgentPayloadJob::RESULTS;
                     try {
-                        app(IngestAgentScan::class)($agent, $msg['payload'] ?? []);
+                        IngestAgentPayloadJob::dispatch($agentId, $kind, (array) ($msg['payload'] ?? []));
                     } catch (\Throwable $e) {
-                        EngineLog::warning('agent: scan ingest failed', ['id' => $agentId, 'error' => $e->getMessage()]);
+                        EngineLog::warning('agent: could not queue '.$kind, ['id' => $agentId, 'error' => $e->getMessage()]);
                     }
                 }
-                Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
                 break;
 
             // Live scan feedback: a sweep started / is progressing. Scoped to the agent's own
@@ -204,7 +206,7 @@ class AgentHubCommand extends Command
                         'scan_found' => (int) ($msg['found'] ?? 0),
                     ]);
                 }
-                Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
+                $this->heartbeat($agentId);
                 break;
 
             // An agent answering an operator's "Test OID" (#51).
@@ -242,13 +244,15 @@ class AgentHubCommand extends Command
         // reaper can flip a silent agent offline promptly instead of waiting on a TCP/proxy
         // timeout to notice the socket died.
         if ($opcode === Frame::OP_PING || $opcode === Frame::OP_PONG) {
-            Agent::where('id', $agentId)->update(['last_seen_at' => now()]);
+            $this->heartbeat($agentId);
         }
     }
 
     private function onClose(object $state): void
     {
-        if ($state->agentId === null) {
+        // Only the agent's current connection counts: a replaced one closing (see onData) mustn't
+        // drop the new one or mark the agent offline.
+        if ($state->agentId === null || ($this->conns[$state->agentId] ?? null) !== $state->conn) {
             return;
         }
         unset($this->conns[$state->agentId]);
@@ -302,20 +306,47 @@ class AgentHubCommand extends Command
         $conn->write((new Frame((string) json_encode($payload), true, Frame::OP_TEXT))->getContents());
     }
 
+    /** Seconds before retrying a failed / dropped Redis subscription. */
+    private const RESUBSCRIBE_SECONDS = 5;
+
     private function subscribeRedis($loop): void
     {
         // Laravel's Redis::publish prefixes the channel with the connection prefix
         // (e.g. "my-mate-database-"); subscribe to the SAME prefixed name so we match.
         $channel = (string) config('database.redis.options.prefix', '').DispatchAgentJobs::CHANNEL;
+        // Without the subscription the hub keeps every agent connected but sends them nothing, so a
+        // failed connect (Redis not up yet at boot) or a dropped one is retried, not just logged.
+        $retry = function (string $why, ?\Throwable $e = null) use ($loop): void {
+            EngineLog::error("agent hub: redis subscription {$why}, retrying", ['error' => $e?->getMessage()]);
+            $loop->addTimer(self::RESUBSCRIBE_SECONDS, fn () => $this->subscribeRedis($loop));
+        };
 
         (new RedisFactory($loop))->createClient($this->redisUri())->then(
-            function ($client) use ($channel) {
+            function ($client) use ($channel, $retry) {
                 $client->subscribe($channel);
                 $client->on('message', fn (string $ch, string $payload) => $this->forwardJob($payload));
+                $client->on('close', fn () => $retry('closed'));
                 EngineLog::info('agent hub: subscribed to dispatch channel');
             },
-            fn ($e) => EngineLog::error('agent hub: redis subscribe failed', ['error' => $e->getMessage()]),
+            fn (\Throwable $e) => $retry('failed', $e),
         );
+    }
+
+    /**
+     * Stamp an agent as heard from. False when the agent no longer exists (deleted while it was
+     * connected): its socket is closed then, rather than kept up with everything it sends dropped.
+     */
+    private function heartbeat(int $agentId): bool
+    {
+        if (Agent::where('id', $agentId)->update(['last_seen_at' => now()]) > 0) {
+            return true;
+        }
+        EngineLog::info('agent deleted while connected, closing it', ['id' => $agentId]);
+        $conn = $this->conns[$agentId] ?? null;
+        unset($this->conns[$agentId]);
+        $conn?->close();
+
+        return false;
     }
 
     private function bearer(RequestInterface $request): ?string
