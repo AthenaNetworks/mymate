@@ -134,6 +134,19 @@ export interface Device {
     backup_message: string | null;
     backup_at: string | null;
     backup_commit: string | null;
+    // Paired with the CMR controller; null = not a CMR device. Refreshed by the minute sync.
+    cmr: DeviceCmr | null;
+}
+
+export interface DeviceCmr {
+    device_id: string;
+    mac: string | null;
+    board: string | null;
+    os: string | null;
+    connected: boolean;
+    remote_addr: string | null; // source IP of its last connection - a NAT address if it's behind one
+    first_seen: string | null;
+    last_seen: string | null;
 }
 
 /** Outcome of the last config-backup run. `null` on a device = never backed up. */
@@ -833,6 +846,11 @@ export interface DiscoveryCandidate {
     matched_credential_id: number | null;
     // Every credential that authenticated against the host (poll + SSH), for tags in the queue.
     matched_credentials: { id: number; name: string; type: 'snmp' | 'routeros' | 'ssh' }[];
+    // 'cmr' = paired with the CMR controller (no credential needed); mac/board/os come from it.
+    source: 'scan' | 'cmr';
+    mac: string | null;
+    board: string | null;
+    os: string | null;
     first_seen: string | null;
     last_seen: string | null;
 }

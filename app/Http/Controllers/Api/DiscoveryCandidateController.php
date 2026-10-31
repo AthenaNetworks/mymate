@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Discovery\CmrAddressTaken;
 use App\Actions\Discovery\IgnoreCandidate;
 use App\Actions\Discovery\PromoteCandidate;
 use App\Enums\DiscoveryStatus;
@@ -34,13 +35,18 @@ class DiscoveryCandidateController extends Controller
     {
         // Only identified hosts (SNMP/RouterOS) are promotable - there's nothing to poll
         // otherwise. Post-#7 these don't get queued, but legacy rows might still exist.
+        // CMR candidates are the exception: they pair with the controller, which needs no credential.
         abort_if(
-            $candidate->detected_method === null,
+            $candidate->detected_method === null && ! $candidate->isCmr(),
             Response::HTTP_UNPROCESSABLE_ENTITY,
             'This candidate was never identified via SNMP or RouterOS, so it cannot be promoted.'
         );
 
-        $device = $promote($candidate);
+        try {
+            $device = $promote($candidate);
+        } catch (CmrAddressTaken $e) {
+            abort(Response::HTTP_UNPROCESSABLE_ENTITY, $e->getMessage());
+        }
 
         return (new DeviceResource($device))->response()->setStatusCode(Response::HTTP_CREATED);
     }

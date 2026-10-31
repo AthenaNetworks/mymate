@@ -39,6 +39,12 @@ RUN git clone --depth 1 --branch "$(tr -d '[:space:]' < /rusted-version)" https:
 WORKDIR /src
 RUN CGO_ENABLED=0 GOTOOLCHAIN=auto go build -trimpath -o /rusted ./cmd/rusted
 
+# --- 2c. CMR controller (cmr-ctrl): the pinned release binary, checksum-verified ---------------
+FROM docker.io/library/debian:bookworm-slim AS cmr
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
+COPY deploy/cmr /cmr
+RUN ARCH="$(dpkg --print-architecture)" OUT=/cmr-ctrl bash /cmr/fetch-cmr.sh
+
 # --- 3. composer (named stage so `COPY --from=composer` works everywhere) -----
 FROM docker.io/library/composer:2 AS composer
 
@@ -95,6 +101,10 @@ RUN setcap cap_net_raw+ep /usr/local/sbin/fping
 COPY --from=rusted /rusted /usr/local/bin/rusted
 RUN mkdir -p /var/lib/rusted/backups /etc/rusted \
     && chown -R www-data:www-data /var/lib/rusted /etc/rusted
+
+# CMR controller + its state dir (identity key, registry, admin token - the entrypoint makes them).
+COPY --from=cmr /cmr-ctrl /usr/local/bin/cmr-ctrl
+RUN mkdir -p /var/lib/mymate-cmr && chown www-data:www-data /var/lib/mymate-cmr && chmod 0700 /var/lib/mymate-cmr
 
 # Container config + entrypoint.
 COPY docker/nginx.conf /etc/nginx/nginx.conf

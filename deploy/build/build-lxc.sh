@@ -82,6 +82,10 @@ $PODMAN exec "$NAME" bash -c '
     systemctl disable rusted-api >/dev/null 2>&1 || true
     rm -f /etc/rusted/config.toml 2>/dev/null || true
     rm -rf /var/lib/rusted/rusted.db /var/lib/rusted/backups 2>/dev/null || true
+    # Same for the CMR controller: every clone must get its own identity, or they would all share
+    # one fingerprint (and private key).
+    systemctl disable mymate-cmr >/dev/null 2>&1 || true
+    rm -f /etc/mymate-cmr/admin.token /var/lib/mymate-cmr/ctrl.ed25519.seed /var/lib/mymate-cmr/reg.json 2>/dev/null || true
 '
 
 # --- 4. export the rootfs as a Proxmox template --------------------------

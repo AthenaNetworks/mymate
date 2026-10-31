@@ -102,6 +102,17 @@ class DeviceResource extends JsonResource
             'backup_message' => $this->backup_message,
             'backup_at' => $this->backup_at,
             'backup_commit' => $this->backup_commit,
+            // CMR controller mirror (null id = not a CMR device). Refreshed by the minute sync.
+            'cmr' => $this->cmr_device_id === null ? null : [
+                'device_id' => $this->cmr_device_id,
+                'mac' => $this->cmr_mac,
+                'board' => $this->cmr_board,
+                'os' => $this->cmr_os,
+                'connected' => (bool) $this->cmr_connected,
+                'remote_addr' => $this->cmr_remote_addr,
+                'first_seen' => $this->cmr_first_seen,
+                'last_seen' => $this->cmr_last_seen,
+            ],
         ];
     }
 }

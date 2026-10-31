@@ -5,6 +5,7 @@ import { useApproveCandidate } from '../api/approveCandidate';
 import { useIgnoreCandidate } from '../api/ignoreCandidate';
 import { useIsAdmin } from '../../auth/api/auth';
 import { relativeTime } from '../../../lib/relativeTime';
+import { pushToast } from '../../../lib/toast';
 import type { DiscoveryCandidate, DiscoveryStatus } from '../../../types';
 
 const credTag: Record<string, string> = {
@@ -15,6 +16,16 @@ const credTag: Record<string, string> = {
 
 /** One tag per credential that authenticated against the host (SNMP / RouterOS / SSH). */
 function CredentialTags({ candidate }: { candidate: DiscoveryCandidate }) {
+    if (candidate.source === 'cmr') {
+        return (
+            <span
+                title="Paired with the CMR controller - added ping-only; give it a credential afterwards to poll it"
+                className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-300 ring-1 ring-emerald-400/25"
+            >
+                cmr
+            </span>
+        );
+    }
     const creds = candidate.matched_credentials ?? [];
     if (creds.length === 0) {
         return (
@@ -114,6 +125,7 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
                             </span>
                             <span className="block truncate text-xs text-white/40">
                                 {c.sysname ?? 'unidentified'}
+                                {c.source === 'cmr' && [c.board, c.mac].filter(Boolean).length > 0 ? ` - ${[c.board, c.mac].filter(Boolean).join(' ')}` : ''}
                                 {c.agent ? ` - via agent ${c.agent.name ?? `#${c.agent.id}`}` : ''} - seen {relativeTime(c.last_seen)}
                             </span>
                         </span>
@@ -121,7 +133,14 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
                         {c.status === 'new' && isAdmin ? (
                             <span className="flex shrink-0 items-center gap-1">
                                 <button
-                                    onClick={() => approve.mutate(c.id)}
+                                    onClick={() =>
+                                        approve.mutate(c.id, {
+                                            onError: (e: unknown) => {
+                                                const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                                                pushToast({ title: `Couldn't add ${c.sysname ?? c.ip}`, detail: msg, tone: 'down' });
+                                            },
+                                        })
+                                    }
                                     disabled={approve.isPending}
                                     title="Approve -> add as a device"
                                     className="flex items-center gap-1 rounded-lg bg-emerald-500/90 px-2 py-1 text-xs font-semibold text-emerald-950 transition-all duration-300 ease-fluid hover:bg-emerald-400 active:scale-95 disabled:opacity-40"

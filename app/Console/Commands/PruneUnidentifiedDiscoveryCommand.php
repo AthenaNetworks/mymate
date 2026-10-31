@@ -24,7 +24,9 @@ class PruneUnidentifiedDiscoveryCommand extends Command
 
     public function handle(): int
     {
+        // CMR candidates never have a detected method: they pair rather than answer a probe.
         $candidates = DiscoveryCandidate::whereNull('detected_method')
+            ->whereNull('cmr_device_id')
             ->where('status', '!=', DiscoveryStatus::Approved->value)
             ->get();
 

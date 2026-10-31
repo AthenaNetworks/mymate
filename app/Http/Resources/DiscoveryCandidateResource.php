@@ -25,6 +25,11 @@ class DiscoveryCandidateResource extends JsonResource
             'matched_credential_id' => $this->matched_credential_id,
             // Every credential that authenticated (SNMP + RouterOS + SSH), for tags in the queue.
             'matched_credentials' => $this->matchedCredentials(),
+            // scan | cmr. A CMR candidate paired with the controller; mac/board/os come from it.
+            'source' => $this->source,
+            'mac' => $this->mac,
+            'board' => $this->board,
+            'os' => $this->os,
             'first_seen' => $this->first_seen,
             'last_seen' => $this->last_seen,
         ];

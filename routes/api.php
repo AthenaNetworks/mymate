@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AlertTransportController;
 use App\Http\Controllers\Api\ApiTokenController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupSettingController;
+use App\Http\Controllers\Api\CmrSettingController;
 use App\Http\Controllers\Api\ContactController;
 use App\Http\Controllers\Api\CredentialController;
 use App\Http\Controllers\Api\DeviceBackupController;
@@ -410,6 +411,14 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->middleware('throttle:6,1')->name('backups.run-all');
     Route::post('settings/backup/test', [BackupSettingController::class, 'test'])
         ->middleware('throttle:6,1')->name('settings.backup.test');
+    // CMR controller (cmr-ctrl sidecar): URL/token + on/off, the fingerprint devices pin, and a
+    // reachability check. Admin-only, reads included: it carries the controller's details.
+    Route::middleware('admin')->group(function (): void {
+        Route::get('settings/cmr', [CmrSettingController::class, 'show'])->name('settings.cmr.show');
+        Route::put('settings/cmr', [CmrSettingController::class, 'update'])->name('settings.cmr.update');
+        Route::post('settings/cmr/test', [CmrSettingController::class, 'test'])
+            ->middleware('throttle:6,1')->name('settings.cmr.test');
+    });
     Route::apiResource('credentials', CredentialController::class)->only(['index', 'store', 'update', 'destroy']);
 
     // Remote agents (probes): list is readable by any operator; enrol/delete are admin-only

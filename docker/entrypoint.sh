@@ -110,5 +110,17 @@ if [ -x /usr/local/bin/rusted ]; then
         || echo "mymate: backup engine not auto-configured - set it in Settings"
 fi
 
+# CMR controller (cmr-ctrl): an admin token kept in its state volume next to the identity key the
+# devices pin, then point My Mate at it. Mount /var/lib/mymate-cmr to keep the fingerprint across
+# container recreation - otherwise every paired device has to be re-pointed.
+if [ -x /usr/local/bin/cmr-ctrl ]; then
+    if [ ! -s /var/lib/mymate-cmr/admin.token ]; then
+        (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > /var/lib/mymate-cmr/admin.token)
+    fi
+    chown -R www-data:www-data /var/lib/mymate-cmr 2>/dev/null || true
+    php artisan mymate:cmr:configure --url http://127.0.0.1:8411 --token-file /var/lib/mymate-cmr/admin.token >/dev/null 2>&1 \
+        || echo "mymate: CMR controller not auto-configured - set it in Settings"
+fi
+
 echo "mymate: starting services"
 exec "$@"

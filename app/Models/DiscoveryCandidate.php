@@ -22,6 +22,7 @@ class DiscoveryCandidate extends Model
 
     protected $fillable = [
         'ip', 'agent_id', 'status', 'sysname', 'detected_method', 'matched_credential_id', 'matched_ssh_credential_id', 'matched_credential_ids', 'first_seen', 'last_seen',
+        'source', 'cmr_device_id', 'mac', 'board', 'os',
     ];
 
     protected $casts = [
@@ -34,7 +35,18 @@ class DiscoveryCandidate extends Model
 
     protected $attributes = [
         'status' => 'new',
+        'source' => self::SOURCE_SCAN,
     ];
+
+    public const SOURCE_SCAN = 'scan';
+
+    /** Paired with the CMR controller (`cmr-ctrl`) rather than found by a subnet sweep. */
+    public const SOURCE_CMR = 'cmr';
+
+    public function isCmr(): bool
+    {
+        return $this->cmr_device_id !== null;
+    }
 
     /** The agent whose subnet sweep found this host, or null for a central scan. A promoted device inherits it. */
     public function agent(): BelongsTo

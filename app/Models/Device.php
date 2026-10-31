@@ -41,6 +41,7 @@ class Device extends Model
         'signal_dbm', 'snr_db', 'ccq_pct', 'wireless_clients', 'ospf_neighbors',
         'rtt_ms', 'loss_pct', 'ping_at', 'latency_good_ms', 'latency_bad_ms',
         'backup_enabled', 'backup_driver', 'backup_status', 'backup_message', 'backup_at', 'backup_commit',
+        'cmr_device_id', 'cmr_mac', 'cmr_board', 'cmr_os', 'cmr_connected', 'cmr_remote_addr', 'cmr_first_seen', 'cmr_last_seen',
     ];
 
     protected $casts = [
@@ -80,6 +81,9 @@ class Device extends Model
         'backup_enabled' => 'boolean',
         'backup_status' => BackupStatus::class,
         'backup_at' => 'datetime',
+        'cmr_connected' => 'boolean',
+        'cmr_first_seen' => 'datetime',
+        'cmr_last_seen' => 'datetime',
     ];
 
     // In-memory defaults so a freshly created model mirrors the DB defaults
@@ -91,6 +95,7 @@ class Device extends Model
         'map_x' => 0,
         'map_y' => 0,
         'backup_enabled' => false,
+        'cmr_connected' => false,
     ];
 
     public function credential(): BelongsTo

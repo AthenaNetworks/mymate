@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useGenerateRecoveryCodes, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -8,6 +8,7 @@ import { useUpdateCheck } from '../api/updateCheck';
 import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
 import { SensorsSection } from './SensorsSection';
 import { WallEmbedSection } from './WallEmbedSection';
+import { CmrControllerSection } from './CmrControllerSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
@@ -2050,6 +2051,7 @@ const TABS: Tab[] = [
     { id: 'engine', label: 'Engine', icon: GearSix, adminOnly: true, render: () => <EngineSettings /> },
     { id: 'mail', label: 'Mail', icon: Envelope, adminOnly: true, render: () => <MailServerSection /> },
     { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },
+    { id: 'cmr', label: 'CMR', icon: PlugsConnected, adminOnly: true, render: () => <CmrControllerSection /> },
     { id: 'credentials', label: 'Credentials', icon: Key, adminOnly: true, render: () => <CredentialsSection /> },
     { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
     { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },

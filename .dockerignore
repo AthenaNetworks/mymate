@@ -33,3 +33,6 @@ docs
 context
 PRD.md
 database/SCHEMA.md
+
+# Fetched sidecar binaries (the image fetches its own, checksum-pinned)
+deploy/cmr/vendor

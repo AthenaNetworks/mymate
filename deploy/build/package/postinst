@@ -208,6 +208,15 @@ ICMPERR
             || echo "my-mate: WARNING backup engine setup failed - configure it later in Settings." >&2
     fi
 
+    # --- 7c2. CMR controller (cmr-ctrl) ---------------------------------
+    # Same pattern: provision the bundled daemon (token + identity generated once, kept on
+    # upgrade) and point My Mate at it. Best-effort, never fails the install.
+    if [ -x /usr/local/bin/cmr-ctrl ] && [ -f "$APP/deploy/cmr/provision.sh" ]; then
+        echo "my-mate: provisioning the CMR controller"
+        APP_DIR="$APP" APP_USER="$RUN_USER" bash "$APP/deploy/cmr/provision.sh" \
+            || echo "my-mate: WARNING CMR controller setup failed - see deploy/cmr/README.md." >&2
+    fi
+
     # --- 7b. HTTPS by default (self-signed) - encrypt day-1 traffic -----
     # Secure before the admin ever logs in: a per-instance self-signed cert so the console
     # (and the /agent tunnel) is HTTPS out of the box. The operator upgrades to a trusted

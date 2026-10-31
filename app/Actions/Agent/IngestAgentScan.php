@@ -60,7 +60,7 @@ class IngestAgentScan
         // central or other-agent device with the same IP is a different box (GitHub #49).
         $agentId = $subnet->agent_id;
         $deviceIps = Device::inPollScope($agentId)->whereIn('mgmt_ip', $ips)->pluck('mgmt_ip')->flip();
-        $existing = DiscoveryCandidate::where('agent_id', $agentId)->whereIn('ip', $ips)->get()->keyBy('ip');
+        $existing = DiscoveryCandidate::where('agent_id', $agentId)->whereNull('cmr_device_id')->whereIn('ip', $ips)->get()->keyBy('ip');
 
         $new = 0;
         $skipped = 0;

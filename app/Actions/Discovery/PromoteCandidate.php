@@ -4,6 +4,7 @@ namespace App\Actions\Discovery;
 
 use App\Actions\Devices\CreateDevice;
 use App\Enums\DiscoveryStatus;
+use App\Enums\PollMethod;
 use App\Jobs\DiscoverInterfacesJob;
 use App\Jobs\PollInterfacesJob;
 use App\Models\Device;
@@ -32,6 +33,10 @@ class PromoteCandidate
     public function __invoke(DiscoveryCandidate $candidate): Device
     {
         $device = DB::transaction(function () use ($candidate): Device {
+            if ($candidate->isCmr()) {
+                return $this->promoteCmr($candidate);
+            }
+
             // Same poll scope as the candidate: an agent-found host is looked up (and created)
             // behind that agent, so a same-IP device at another site is left alone (GitHub #49).
             $agentId = $candidate->agent_id;
@@ -53,7 +58,7 @@ class PromoteCandidate
                     // Polled by the agent that found it - the central server usually has no route there.
                     'agent_id' => $agentId,
                     // SSH-only match -> a ping-only device we can still back up over SSH.
-                    'poll_method' => $candidate->detected_method ?? \App\Enums\PollMethod::None,
+                    'poll_method' => $candidate->detected_method ?? PollMethod::None,
                     'credential_id' => $candidate->matched_credential_id,
                     'ssh_credential_id' => $candidate->matched_ssh_credential_id,
                 ];
@@ -83,6 +88,51 @@ class PromoteCandidate
         // After commit: populate the new device right away (interfaces, then a first tick).
         DiscoverInterfacesJob::dispatch($device->id);
         PollInterfacesJob::dispatch($device->id);
+
+        return $device;
+    }
+
+    /**
+     * A device paired with the CMR controller. It's matched on its CMR device id first, then on
+     * its address (the device may already be monitored by IP, and now gets linked to CMR). It's
+     * added ping-only: CMR pairing needs no credential, and the operator assigns one (or fixes
+     * the address of a device behind NAT) in the inspector like any other device.
+     */
+    private function promoteCmr(DiscoveryCandidate $candidate): Device
+    {
+        $cmr = [
+            'cmr_device_id' => $candidate->cmr_device_id,
+            'cmr_mac' => $candidate->mac,
+            'cmr_board' => $candidate->board,
+            'cmr_os' => $candidate->os,
+            'cmr_remote_addr' => $candidate->ip,
+            'cmr_first_seen' => $candidate->first_seen,
+            'cmr_last_seen' => $candidate->last_seen,
+        ];
+
+        $devices = Device::withoutGlobalScope('visibility');
+        $device = (clone $devices)->where('cmr_device_id', $candidate->cmr_device_id)->first()
+            ?? (clone $devices)->inPollScope(null)->where('mgmt_ip', $candidate->ip)->first();
+
+        if ($device !== null && $device->cmr_device_id !== null && $device->cmr_device_id !== $candidate->cmr_device_id) {
+            // Two CMR devices behind one NAT address: the first one took the IP.
+            throw new CmrAddressTaken(
+                "{$device->name} already uses {$candidate->ip}. If these devices are behind NAT, give that one its real management IP first."
+            );
+        }
+
+        if ($device === null) {
+            $device = ($this->createDevice)([
+                'name' => $candidate->sysname ?: ($candidate->mac ?: $candidate->ip),
+                'mgmt_ip' => $candidate->ip,
+                'poll_method' => PollMethod::None,
+                'model' => $candidate->board,
+            ] + $cmr);
+        } else {
+            $device->update($cmr);
+        }
+
+        $candidate->update(['status' => DiscoveryStatus::Approved]);
 
         return $device;
     }

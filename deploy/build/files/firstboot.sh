@@ -91,6 +91,11 @@ if [ -x /usr/local/bin/rusted ] && [ -f "$APP/deploy/rusted/provision.sh" ]; the
     APP_DIR="$APP" APP_USER=mymate bash "$APP/deploy/rusted/provision.sh" \
         || echo "my-mate: WARNING backup engine setup failed - configure it later in Settings." >&2
 fi
+# Same for the CMR controller: its own admin token + identity (fingerprint) per instance.
+if [ -x /usr/local/bin/cmr-ctrl ] && [ -f "$APP/deploy/cmr/provision.sh" ]; then
+    APP_DIR="$APP" APP_USER=mymate bash "$APP/deploy/cmr/provision.sh" \
+        || echo "my-mate: WARNING CMR controller setup failed - see deploy/cmr/README.md." >&2
+fi
 
 touch "$MARKER"
 

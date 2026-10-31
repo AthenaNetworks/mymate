@@ -56,3 +56,4 @@ Thumbs.db
 
 # Internal schema reference - kept local only.
 /database/SCHEMA.md
+/deploy/cmr/vendor

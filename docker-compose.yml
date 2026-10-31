@@ -42,6 +42,8 @@ services:
       - "${MYMATE_HTTPS_PORT:-9443}:443"
       # Uncomment to also serve plain HTTP (e.g. behind a proxy that terminates TLS):
       # - "${MYMATE_HTTP_PORT:-9080}:80"
+      # MikroTik CMR controller: devices in controller-managed mode connect here (TLS).
+      - "${MYMATE_CMR_PORT:-54321}:54321"
     # fping needs raw ICMP. NET_RAW is in Docker's default set already; the sysctl covers
     # hosts that hand out unprivileged ping sockets instead.
     cap_add:
@@ -54,6 +56,7 @@ services:
       - mymate-tls:/etc/mymate/tls            # the TLS certificate (self-signed, or mount your own)
       - rusted-config:/etc/rusted             # backup engine config + its API token
       - rusted-data:/var/lib/rusted           # config backups and their git history
+      - cmr-data:/var/lib/mymate-cmr          # CMR controller identity (devices pin it) + registry
     restart: unless-stopped
 
   postgres:
@@ -93,3 +96,4 @@ volumes:
   mymate-tls:
   rusted-config:
   rusted-data:
+  cmr-data:

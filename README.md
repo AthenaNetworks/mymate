@@ -34,6 +34,8 @@ to ask questions, share your maps and setups, and hear about new releases first.
   install. Back up on a schedule you choose, then browse every stored version and diff them
   from the Backups page. For MikroTik (which won't hand its config over the API) it can
   install an SSH key over the API so key based backups just work.
+- A MikroTik CMR controller built in: point devices in controller-managed mode at My Mate, they
+  pair and wait in Discovery for you to add them. See [deploy/cmr/README.md](deploy/cmr/README.md).
 - A heads up in Settings when a newer release is out.
 - Login with an in app operator list and a read only viewer tier.
 - Alerting (email, Slack, Teams, Messenger), outage history, multiple maps, and a
@@ -166,6 +168,7 @@ running RouterOS 7 can host the agent itself, see [agent/ROUTEROS.md](agent/ROUT
 | [BUILD.md](BUILD.md) | Running from source and building the packages/image yourself |
 | [deploy/ssl/README.md](deploy/ssl/README.md) | HTTPS: Cloudflare Tunnel, reverse proxy, Let's Encrypt, own cert |
 | [deploy/rusted/README.md](deploy/rusted/README.md) | Config backups: the Rusted engine, how it's provisioned, and credentials |
+| [deploy/cmr/README.md](deploy/cmr/README.md) | The MikroTik CMR controller: setup, the port to open, pairing devices |
 | [agent/README.md](agent/README.md) | The remote agent: deploy, configure, discover |
 | [agent/ROUTEROS.md](agent/ROUTEROS.md) | Running the agent in a MikroTik RouterOS 7 container |
 | [deploy/demo/README.md](deploy/demo/README.md) | The public sales demo: synthetic topology, simulator, deploy/troubleshooting |

@@ -37,6 +37,9 @@ FPING_BIN="${FPING_BIN:-$SCRIPT_DIR/vendor/fping}"
 # and postinst auto-provisions backups; when absent the package still installs fine (backups
 # just start unconfigured). Build it with deploy/rusted/build-rusted.sh.
 RUSTED_BIN="${RUSTED_BIN:-$REPO_ROOT/deploy/rusted/vendor/rusted}"
+# Optional CMR controller binary (cmr-ctrl), same deal: bundled to /usr/local/bin/cmr-ctrl and
+# provisioned by postinst. Fetch it with deploy/cmr/fetch-cmr.sh (ARCH must match).
+CMR_BIN="${CMR_BIN:-$REPO_ROOT/deploy/cmr/vendor/cmr-ctrl}"
 REVERB_KEY="${REVERB_KEY:-mymate}"
 PHP_VERSION="${PHP_VERSION:-8.4}"
 
@@ -76,6 +79,7 @@ tar -C "$REPO_ROOT" \
     --exclude='./dist' \
     --exclude='./deploy/build' \
     --exclude='./deploy/rusted/vendor' \
+    --exclude='./deploy/cmr/vendor' \
     --exclude='./vendor' \
     --exclude='./agent' \
     --exclude='./PRD.md' \
@@ -142,6 +146,13 @@ if [ -f "$RUSTED_BIN" ]; then
     say "Bundled the Rusted backup engine"
 else
     warn "Rusted binary not found ($RUSTED_BIN) - backups will need manual setup. Build it with deploy/rusted/build-rusted.sh."
+fi
+# CMR controller (optional) - postinst runs deploy/cmr/provision.sh to wire it up.
+if [ -f "$CMR_BIN" ]; then
+    install -Dm755 "$CMR_BIN"                     "$STAGE/usr/local/bin/cmr-ctrl"
+    say "Bundled the CMR controller"
+else
+    warn "cmr-ctrl binary not found ($CMR_BIN) - the CMR controller will need manual setup. Fetch it with deploy/cmr/fetch-cmr.sh."
 fi
 install -Dm644 "$FILES_DIR/nginx-mymate.conf"     "$STAGE/etc/nginx/sites-available/mymate"
 # Pristine copy mymate-ssl reads to revert to plain HTTP (methods 1 & 2, and LXC reset) -

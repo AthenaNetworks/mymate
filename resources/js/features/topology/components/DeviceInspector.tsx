@@ -960,6 +960,32 @@ export function DeviceInspector() {
 
             <BackupSection device={device} isAdmin={isAdmin} />
 
+            {device.cmr && (
+                <Section title="CMR controller" right={device.cmr.connected ? 'connected' : 'offline'}>
+                    <dl className="space-y-1 text-xs">
+                        {(
+                            [
+                                ['MAC', device.cmr.mac],
+                                ['Board', device.cmr.board],
+                                ['RouterOS', device.cmr.os],
+                                ['Connects from', device.cmr.remote_addr],
+                                ['Last seen', device.cmr.last_seen ? relativeTime(device.cmr.last_seen) : null],
+                            ] as const
+                        )
+                            .filter(([, v]) => v)
+                            .map(([k, v]) => (
+                                <div key={k} className="flex justify-between gap-2">
+                                    <dt className="text-white/45">{k}</dt>
+                                    <dd className="truncate font-mono text-white/75">{v}</dd>
+                                </div>
+                            ))}
+                    </dl>
+                    {device.cmr.remote_addr && device.cmr.remote_addr !== device.mgmt_ip && (
+                        <p className="mt-1.5 text-[11px] text-white/35">It connects from a different address than its management IP (NAT).</p>
+                    )}
+                </Section>
+            )}
+
             <Section title="Services">
                 <div className="space-y-1.5">
                     {services.map((s) => (

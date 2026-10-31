@@ -31,6 +31,11 @@ Schedule::command('mymate:history:rollup')->everyFiveMinutes()->name('history-ro
 // schedule takes effect without restarting the scheduler.
 Schedule::command('mymate:backup:run --scheduled')->hourly()->name('device-backups')->withoutOverlapping();
 
+// CMR controller: pull what the cmr-ctrl sidecar has paired into the review queue / device mirror.
+// A no-op until it's turned on in Settings. Its own process so a slow daemon never holds up the
+// scheduler; the HTTP calls are capped at mymate.cmr.timeout.
+Schedule::command('mymate:cmr:sync')->everyMinute()->name('cmr-sync')->withoutOverlapping(5)->runInBackground();
+
 // Sweep cached RouterOS upgrade packages past the retention window (default 90 days).
 Schedule::command('mymate:routeros:prune-packages')->daily()->name('routeros-package-prune')->withoutOverlapping();
 

@@ -13,6 +13,16 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- MikroTik CMR controller. Point devices in controller-managed mode (RouterOS 7.26+) at My Mate
+  on tcp/54321 and they pair, then wait in Discovery for an admin to add them. Settings -> CMR
+  shows the address and the fingerprint to put on the device. The .deb, LXC and Docker image
+  bundle and set up the `cmr-ctrl` daemon. Config push comes later. See deploy/cmr/README.md.
+
+### Changed
+- Docker: `docker-compose.yml` publishes port 54321 and adds a `cmr-data` volume for the
+  controller's identity. Copy both into your compose file to use CMR.
+
 ## [2.0.0] - 2026-10-31
 
 A big one: remote agent upgrades, your own images on the map, an editable geo map, a way back in

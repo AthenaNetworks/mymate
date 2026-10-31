@@ -1,0 +1,36 @@
+# systemd unit for the CMR controller (cmr-ctrl) My Mate drives.
+# Installed and started by deploy/cmr/provision.sh.
+#
+# MikroTik devices in controller-managed mode dial in on tcp/54321 (TLS, the daemon's own
+# certificate - it does not go through nginx). The admin API My Mate talks to stays on loopback
+# behind a bearer token. The identity key under /var/lib/mymate-cmr is what devices pin: keep it,
+# or every paired device has to be re-pointed at the new fingerprint.
+
+[Unit]
+Description=MikroTik CMR controller (cmr-ctrl, for My Mate)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mymate-cmr
+Group=mymate-cmr
+ExecStart=/usr/local/bin/cmr-ctrl \
+    -listen :54321 \
+    -admin 127.0.0.1:8411 \
+    -admintoken-file /etc/mymate-cmr/admin.token \
+    -registry /var/lib/mymate-cmr/reg.json \
+    -keyfile /var/lib/mymate-cmr/ctrl.ed25519.seed
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/mymate-cmr
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

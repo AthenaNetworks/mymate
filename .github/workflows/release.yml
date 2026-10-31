@@ -31,6 +31,9 @@ jobs:
       - name: Build the Rusted backup engine (bundled so backups work out of the box)
         continue-on-error: true   # optional - the .deb still installs (backups just unconfigured)
         run: bash deploy/rusted/build-rusted.sh
+      - name: Fetch the CMR controller (bundled, checksum-pinned)
+        continue-on-error: true
+        run: bash deploy/cmr/fetch-cmr.sh
       - name: Build the .deb
         run: VERSION="${GITHUB_REF_NAME#v}" deploy/build/build-deb.sh
       - uses: actions/upload-artifact@v4
@@ -60,6 +63,9 @@ jobs:
       - name: Build the Rusted backup engine (bundled so backups work out of the box)
         continue-on-error: true
         run: bash deploy/rusted/build-rusted.sh
+      - name: Fetch the CMR controller (bundled, checksum-pinned)
+        continue-on-error: true
+        run: bash deploy/cmr/fetch-cmr.sh
       - name: Install container tooling
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends podman zstd nftables passt
       - name: Build the .deb (input to the template)

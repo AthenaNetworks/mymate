@@ -502,6 +502,20 @@ return [
         'ssh_port' => (int) env('RUSTED_SSH_PORT', 22),
     ],
 
+    // MikroTik CMR controller. My Mate is the control plane for the `cmr-ctrl` sidecar
+    // (github.com/AthenaNetworks/go-mikrotik-cmr): devices dial in to it on tcp/54321, it pairs
+    // them, and My Mate syncs what it knows over its loopback admin API. These are the defaults;
+    // the live URL/token are operator-editable in Settings (App\Support\CmrSettings).
+    // See deploy/cmr/README.md.
+    'cmr' => [
+        // Loopback admin API, same trust model as the Rusted URL above (not an SSRF surface).
+        'url' => env('CMR_API_URL', 'http://127.0.0.1:8411'),
+        'token' => env('CMR_API_TOKEN', ''),
+        'timeout' => (int) env('CMR_API_TIMEOUT', 10),
+        // The port devices connect to. Shown in Settings; the daemon owns the real listener.
+        'port' => (int) env('CMR_PORT', 54321),
+    ],
+
     // MikroTik "The Dude" import (FR-Dude). The importer shells out to the
     // reverse-engineering script, then upserts the CSVs.
     'import' => [
