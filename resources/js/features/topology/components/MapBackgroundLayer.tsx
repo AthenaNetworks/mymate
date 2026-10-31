@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { ViewportPortal } from '@xyflow/react';
+import { ViewportPortal, useStore } from '@xyflow/react';
 
 type Props = {
     src: string;
@@ -9,6 +9,7 @@ type Props = {
     y: number;
     scale: number;
     opacity: number;
+    tile?: boolean;
 };
 
 /**
@@ -21,7 +22,10 @@ type Props = {
  * Positions are flow coordinates, same as the nodes. Used by the logged-in canvas and the public
  * wallboard alike.
  */
-export const MapBackgroundLayer = memo(function MapBackgroundLayer({ src, width, height, x, y, scale, opacity }: Props) {
+export const MapBackgroundLayer = memo(function MapBackgroundLayer({ src, width, height, x, y, scale, opacity, tile }: Props) {
+    if (tile) {
+        return <TiledBackground src={src} width={width} height={height} x={x} y={y} scale={scale} opacity={opacity} />;
+    }
     return (
         <ViewportPortal>
             <img
@@ -48,3 +52,30 @@ export const MapBackgroundLayer = memo(function MapBackgroundLayer({ src, width,
         </ViewportPortal>
     );
 });
+
+/**
+ * The same image repeated across the whole canvas, wallpaper style (GitHub #53). Painted in screen
+ * space behind the viewport and offset by the pan/zoom, the way React Flow's own dotted
+ * <Background> works, rather than as one enormous element in flow space. x/y anchor the pattern.
+ */
+function TiledBackground({ src, width, height, x, y, scale, opacity }: Omit<Props, 'tile'>) {
+    const [tx, ty, zoom] = useStore((s) => s.transform);
+    const w = width * scale * zoom;
+    const h = height * scale * zoom;
+    return (
+        <div
+            aria-hidden
+            style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: -1,
+                pointerEvents: 'none',
+                backgroundImage: `url("${src}")`,
+                backgroundRepeat: 'repeat',
+                backgroundSize: `${w}px ${h}px`,
+                backgroundPosition: `${tx + x * zoom}px ${ty + y * zoom}px`,
+                opacity,
+            }}
+        />
+    );
+}

@@ -88,11 +88,13 @@ class MapBackgroundController extends Controller
             'y' => ['sometimes', 'numeric', 'between:-1000000,1000000'],
             'scale' => ['sometimes', 'numeric', 'between:0.01,100'],
             'opacity' => ['sometimes', 'numeric', 'between:0,1'],
+            // Repeat the image across the whole canvas, wallpaper style (GitHub #53).
+            'tile' => ['sometimes', 'boolean'],
         ]);
 
         $fill = [];
         foreach ($data as $k => $v) {
-            $fill['background_'.$k] = (float) $v;
+            $fill['background_'.$k] = $k === 'tile' ? (bool) $v : (float) $v;
         }
         $map->forceFill($fill)->save();
 
@@ -114,6 +116,7 @@ class MapBackgroundController extends Controller
             'background_y' => 0,
             'background_scale' => 1,
             'background_opacity' => 0.6,
+            'background_tile' => false,
         ])->save();
 
         return response()->noContent();

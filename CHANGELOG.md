@@ -14,6 +14,8 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Tile a map's background image (GitHub #53).** A new "Tile it across the whole map" option in the
+  background panel repeats the image like wallpaper, on the map and its wallboard.
 - **Device alias (GitHub #53).** Give a device a friendly name and the map card, the geo map, the
   wallboard, map search and the inspector show it instead of the hostname (the hostname stays under it
   in the inspector). Set it in the device's edit dialog.

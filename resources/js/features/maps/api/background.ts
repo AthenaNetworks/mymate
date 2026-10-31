@@ -7,7 +7,7 @@ import type { MapBackground } from '../../../types';
 // so uploading or nudging it never invalidates the map and never rebuilds the canvas nodes. Every
 // write updates this cache directly from the response. Writes are admin-only (the API enforces it).
 
-export type BackgroundPlacement = Pick<MapBackground, 'x' | 'y' | 'scale' | 'opacity'>;
+export type BackgroundPlacement = Pick<MapBackground, 'x' | 'y' | 'scale' | 'opacity' | 'tile'>;
 
 const bgKey = (mapId: number) => ['maps', mapId, 'background'] as const;
 

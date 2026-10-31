@@ -224,6 +224,21 @@ SVG;
         Storage::disk('local')->assertMissing($old);
     }
 
+    // GitHub #53: repeat the image across the whole map.
+    public function test_tiling_is_toggled_and_reset_on_remove(): void
+    {
+        $this->actingAsUser();
+        $map = Map::factory()->create();
+        $this->upload($map, $this->png())->assertCreated()->assertJsonPath('data.tile', false);
+
+        $this->patchJson("/api/maps/{$map->id}/background", ['tile' => true])->assertOk()->assertJsonPath('data.tile', true);
+        $this->patchJson("/api/maps/{$map->id}/background", ['tile' => 'sideways'])->assertUnprocessable();
+        $this->getJson("/api/maps/{$map->id}/background")->assertJsonPath('data.tile', true);
+
+        $this->deleteJson("/api/maps/{$map->id}/background")->assertNoContent();
+        $this->assertFalse($map->fresh()->background_tile);
+    }
+
     public function test_remove_and_map_delete_clean_up_the_file(): void
     {
         $this->actingAsUser();

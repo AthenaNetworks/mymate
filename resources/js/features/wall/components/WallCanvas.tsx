@@ -181,6 +181,7 @@ export function WallCanvas() {
                     y={background.y}
                     scale={background.scale}
                     opacity={background.opacity}
+                    tile={background.tile}
                 />
             )}
         </ReactFlow>

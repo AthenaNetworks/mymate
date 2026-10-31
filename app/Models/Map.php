@@ -53,6 +53,7 @@ class Map extends Model
         'background_y' => 'float',
         'background_scale' => 'float',
         'background_opacity' => 'float',
+        'background_tile' => 'boolean',
     ];
 
     /**
@@ -60,7 +61,7 @@ class Map extends Model
      * No path or storage detail leaves the server - the client builds the image URL from the map
      * id (or the share token) plus `version`, which changes on every upload.
      *
-     * @return array{version:string, mime:string, width:int, height:int, x:float, y:float, scale:float, opacity:float}|null
+     * @return array{version:string, mime:string, width:int, height:int, x:float, y:float, scale:float, opacity:float, tile:bool}|null
      */
     public function backgroundMeta(): ?array
     {
@@ -77,6 +78,7 @@ class Map extends Model
             'y' => (float) $this->background_y,
             'scale' => (float) $this->background_scale,
             'opacity' => (float) $this->background_opacity,
+            'tile' => (bool) $this->background_tile,
         ];
     }
 

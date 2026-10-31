@@ -399,6 +399,7 @@ export interface MapBackground {
     y: number;
     scale: number;
     opacity: number; // 0..1
+    tile: boolean; // repeat across the whole canvas instead of placing it once (GitHub #53)
 }
 
 // Alerting.

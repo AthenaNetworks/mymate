@@ -52,6 +52,7 @@ export function MapBackground({ mapId }: { mapId: number | null }) {
                     y={shown.y}
                     scale={shown.scale}
                     opacity={shown.opacity}
+                    tile={shown.tile}
                 />
             )}
             {editing && isAdmin && mapId !== null && (
@@ -164,6 +165,10 @@ function BackgroundEditor({ mapId, bg, onDraft }: { mapId: number; bg: Bg | null
                                     className="min-w-0 flex-1 accent-emerald-400"
                                 />
                                 <span className="w-12 text-right font-mono tabular-nums">{Math.round(bg.opacity * 100)}%</span>
+                            </label>
+                            <label className="flex items-center gap-2 sm:col-span-2">
+                                <input type="checkbox" checked={bg.tile} onChange={(e) => change({ tile: e.target.checked })} className="accent-emerald-400" />
+                                <span>Tile it across the whole map (wallpaper)</span>
                             </label>
                         </div>
                     )}
