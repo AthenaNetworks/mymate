@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Polling\PollInterfaces;
+use App\Models\Device;
 use App\Support\EngineLog;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -27,7 +28,10 @@ class PollInterfacesJob implements ShouldQueue
 
     public function handle(PollInterfaces $poll): void
     {
-        $poll([$this->deviceId]);
+        // An agent's devices are polled by the agent (#54).
+        if (Device::whereKey($this->deviceId)->whereNull('agent_id')->exists()) {
+            $poll([$this->deviceId]);
+        }
     }
 
     /** @return array<int, object> */

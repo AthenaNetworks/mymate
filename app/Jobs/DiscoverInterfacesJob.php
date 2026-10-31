@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\Agent\DispatchAgentJobs;
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Polling\DiscoverInterfaces;
 use App\Models\Device;
@@ -30,6 +31,13 @@ class DiscoverInterfacesJob implements ShouldQueue
     public function handle(DiscoverInterfaces $discover, CaptureDeviceFacts $facts): void
     {
         $device = Device::find($this->deviceId);
+        if ($device?->agent_id !== null) {
+            // Behind an agent: this server usually can't reach it (and walking it from here
+            // would be the wrong source address anyway), so hand it to the agent (#54).
+            DispatchAgentJobs::requestDiscovery($device->agent_id);
+
+            return;
+        }
         if ($device !== null) {
             $discover($device);
             $facts($device); // best-effort vendor/model/uptime/type - never throws

@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Devices behind a remote agent are only discovered by the agent (GitHub #54).** "Discover now" and
+  approving a discovery candidate walked the device from the central server, from the wrong source
+  address, instead of asking its agent. Both now hand the walk to the agent on its next poll.
 - **Config backups on Docker are versioned again (GitHub #41).** The config was captured but the git
   commit failed with "Author identity unknown", so nothing showed on the Backups page. The backup
   engine now always has a git identity (Rusted v0.1.1, plus the Docker and systemd service setup).

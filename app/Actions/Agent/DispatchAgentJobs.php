@@ -66,6 +66,15 @@ class DispatchAgentJobs
      *
      * @return array<string,mixed>
      */
+    /**
+     * Ask an agent to rediscover its devices on its next job instead of waiting out the
+     * discover interval - "Discover now" or approving a candidate behind an agent (#54).
+     */
+    public static function requestDiscovery(int $agentId): void
+    {
+        Cache::forget("agent:{$agentId}:last_discover");
+    }
+
     public function buildJob(int $agentId): array
     {
         $devices = Device::where('agent_id', $agentId)
