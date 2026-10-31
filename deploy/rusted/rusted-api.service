@@ -17,6 +17,8 @@ Type=simple
 User=rusted
 Group=rusted
 ExecStart=/usr/local/bin/rusted --config /etc/rusted/config.toml serve
+# A git identity for backup commits, whatever the backup repo's own config says (GitHub #41).
+Environment=HOME=/var/lib/rusted GIT_AUTHOR_NAME=rusted GIT_AUTHOR_EMAIL=rusted@localhost GIT_COMMITTER_NAME=rusted GIT_COMMITTER_EMAIL=rusted@localhost
 Restart=on-failure
 RestartSec=5
 # Rusted needs SSH out to devices + its data dir; otherwise lock it down.

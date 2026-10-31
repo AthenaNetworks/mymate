@@ -92,7 +92,10 @@ if command -v systemctl >/dev/null 2>&1; then
     say "Installing + starting the rusted-api service"
     $SUDO install -m0644 "$APP_DIR/deploy/rusted/rusted-api.service" /etc/systemd/system/rusted-api.service
     $SUDO systemctl daemon-reload
-    $SUDO systemctl enable --now rusted-api
+    $SUDO systemctl enable rusted-api
+    # restart, not `enable --now`: on a package upgrade the service is already running the
+    # previous binary, and `--now` leaves it running until the next reboot (GitHub #41).
+    $SUDO systemctl restart rusted-api
 else
     say "No systemd here - start rusted yourself: $BIN --config $CONFIG serve"
 fi

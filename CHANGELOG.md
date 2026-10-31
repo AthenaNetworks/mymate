@@ -13,6 +13,15 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- **Config backups on Docker are versioned again (GitHub #41).** The config was captured but the git
+  commit failed with "Author identity unknown", so nothing showed on the Backups page. The backup
+  engine now always has a git identity (Rusted v0.1.1, plus the Docker and systemd service setup).
+- **Upgrading the package now restarts the backup engine (GitHub #41).** The .deb replaced the Rusted
+  binary but left the old one running until a reboot, so an upgraded box kept failing MikroTik backups
+  with "captured empty configuration" long after the fix shipped. When a device does return nothing,
+  the error now includes what the device said instead of just "empty".
+
 ### Security
 - **PHP 8.4.27 or newer is now required (GitHub #57).** 8.4.27 fixes two critical remote code
   execution bugs in PHP itself (CVE-2026-109618, CVE-2026-109619). The Docker image is built on
