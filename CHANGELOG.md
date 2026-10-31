@@ -13,6 +13,21 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-31
+
+A big one: remote agent upgrades, your own images on the map, an editable geo map, a way back in
+when you lose a passkey, and a long list of fixes - including a critical PHP security update.
+
+**Before you upgrade:**
+- **PHP 8.4.27 or newer is required** (it fixes two remote code execution bugs in PHP itself). On the
+  .deb / LXC, `apt upgrade` first; the package won't install against an older PHP.
+- **Docker:** copy the new `volumes:` sections from `docker-compose.yml` into yours before pulling,
+  so your generated app key, uploads, backups and certificate survive container recreation.
+- **API change:** read-only operators (and their API keys) can no longer list wallboard share links
+  or read config backup contents - those are admin-only now.
+- **Agents:** they keep working as they are. To use remote upgrades from now on, upgrade each agent
+  by hand once to 2.0.0.
+
 ### Added
 - **A way back in when you lose your passkey.** Settings -> Account can create one-time recovery codes,
   and the passkey prompt now has "Lost your passkey? Use a recovery code". An admin can reset another
@@ -40,6 +55,8 @@ of commit subjects.
   in the inspector). Set it in the device's edit dialog.
 
 ### Fixed
+- **Docker's self-signed certificate works when you browse by IP address.** It listed the IP as a DNS
+  name, which never matches, so browsers and agents rejected it. (Thanks @Mr-Jerf.)
 - **`docker compose exec app php artisan ...` works on Docker.** Commands run that way (like creating the
   first admin, as the README says) didn't see the settings the container sets up at start, so they used
   the wrong database and had no app key. Those settings are now written where every artisan run finds them.
@@ -1135,7 +1152,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/AthenaNetworks/mymate/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AthenaNetworks/mymate/compare/v1.7.2...v1.8.0
 [1.7.2]: https://github.com/AthenaNetworks/mymate/compare/v1.7.1...v1.7.2
