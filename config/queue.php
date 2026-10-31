@@ -73,6 +73,19 @@ return [
             'after_commit' => false,
         ],
 
+        // The same Redis queues, for the workers that run long jobs (upgrade / backup / trace /
+        // import, see config/horizon.php). retry_after is applied by the worker that pops a job,
+        // and it must outlast the job: at the default 90s a 5 minute backup or a reboot-waiting
+        // upgrade was handed to a second worker while the first was still running it.
+        'redis-long' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => env('REDIS_QUEUE', 'default'),
+            'retry_after' => (int) env('REDIS_LONG_QUEUE_RETRY_AFTER', (int) env('MYMATE_IMPORT_JOB_TIMEOUT', 21600) + 300),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

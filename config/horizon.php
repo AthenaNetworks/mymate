@@ -257,7 +257,7 @@ return [
         // Firmware upgrades: isolated so a rebooting device never delays
         // polling/discovery. Long timeout -  waits for a device to come back.
         'supervisor-upgrade' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long', // retry_after must outlast these jobs (config/queue.php)
             'queue' => ['upgrade'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
@@ -273,7 +273,7 @@ return [
         // Device config backups: isolated + long timeout - a slow SSH
         // capture in the Rusted sidecar must never delay polling/discovery/upgrades.
         'supervisor-backup' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long', // retry_after must outlast these jobs (config/queue.php)
             'queue' => ['backup'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
@@ -291,7 +291,7 @@ return [
         // tries=1 - a killed/failed trace is surfaced as status=failed/stopped, never
         // silently retried into a run the operator already closed.
         'supervisor-trace' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long', // retry_after must outlast these jobs (config/queue.php)
             'queue' => ['trace'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
@@ -307,7 +307,7 @@ return [
         // Dude imports (FR-Dude): isolated + long timeout - extraction (Python) plus
         // upserting millions of history rows must never block polling/discovery.
         'supervisor-import' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long', // retry_after must outlast these jobs (config/queue.php)
             'queue' => ['import'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',

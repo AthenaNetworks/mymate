@@ -22,6 +22,18 @@ class BulkUpgradeJob implements ShouldQueue
 
     public int $tries = 1;
 
+    /**
+     * Sized to the selection: every device can take a reboot-wait plus the upgrade itself, so a
+     * flat worker timeout (900s) killed any run of more than about three devices part way.
+     */
+    public int $timeout;
+
+    /** Per device on top of the reboot-wait: package fetch/install and the reboot command. */
+    private const PER_DEVICE_EXTRA_S = 180;
+
+    /** Never past the long-queue retry_after (config/queue.php `redis-long`). */
+    private const MAX_TIMEOUT_S = 21600;
+
     /** @param list<int> $deviceIds */
     public function __construct(
         public array $deviceIds,
@@ -30,6 +42,8 @@ class BulkUpgradeJob implements ShouldQueue
         public string $source = 'mikrotik',
     ) {
         $this->onQueue('upgrade');
+        $perDevice = max(1, (int) config('mymate.upgrade.reboot_wait_s', 300)) + self::PER_DEVICE_EXTRA_S;
+        $this->timeout = min(self::MAX_TIMEOUT_S, max(900, count($deviceIds) * $perDevice));
     }
 
     public function handle(RunBulkUpgrade $run): void
@@ -40,7 +54,10 @@ class BulkUpgradeJob implements ShouldQueue
     /** @return array<int, object> */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping('bulk-upgrade'))->dontRelease()];
+        // The lock expires just after the job's own timeout: without it a run killed by the
+        // timeout (or a worker crash) held the lock forever and every later bulk upgrade was
+        // silently dropped.
+        return [(new WithoutOverlapping('bulk-upgrade'))->dontRelease()->expireAfter($this->timeout + 60)];
     }
 
     public function failed(Throwable $e): void

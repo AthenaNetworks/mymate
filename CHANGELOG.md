@@ -14,6 +14,12 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **Long jobs no longer run twice.** Backups, upgrades, traces and Dude imports could be picked up by a
+  second worker after 90 seconds while the first was still running them. Those queues now wait for the
+  job's full timeout.
+- **A big bulk upgrade no longer stops part way and jams later ones.** It had a flat 15 minute limit,
+  enough for about three devices, and the lock it left behind silently dropped every bulk upgrade after
+  it. The limit now scales with the number of devices and the lock expires with it.
 - **SNMP throughput on Cisco IOS-XE no longer swings between 0 and double (GitHub #55).** Those
   routers only refresh their interface counters every 20-30 seconds, so a 12 second poll saw no change
   one tick and two refreshes' worth the next. A read where neither counter has moved is now treated as
