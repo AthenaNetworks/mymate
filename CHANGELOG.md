@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Changed
+- **Hardened SSH command runs.** Command execution is admin-only and template-only by default, uses a long Redis lease to prevent duplicate execution, preserves operator identity after account deletion, and prunes captured output after the configured retention window.
+
+### Removed
+- Removed internal command-runner lab compose files and helper scripts from the release tree.
+
 ## [2.0.0] - 2026-10-31
 
 A big one: remote agent upgrades, your own images on the map, an editable geo map, a way back in

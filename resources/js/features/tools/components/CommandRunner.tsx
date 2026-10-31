@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Play, Stop, TerminalWindow, Warning } from '@phosphor-icons/react';
 import { useIsAdmin } from '../../auth/api/auth';
-import { useDevices } from '../../devices/api/getDevices';
+import { useDeviceList } from '../../devices/api/getDevices';
 import { CommandTemplateManager } from './CommandTemplateManager';
 import { useCommandTemplates } from '../api/commandTemplates';
 import { useCommandRun, useStartCommandRun, useStopCommandRun } from '../api/commandRuns';
@@ -10,7 +10,7 @@ const field = 'rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm t
 
 export function CommandRunner() {
     const isAdmin = useIsAdmin();
-    const devices = useDevices();
+    const devices = useDeviceList({ per_page: 100, fields: 'summary' }, { enabled: isAdmin });
     const templates = useCommandTemplates(isAdmin);
     const start = useStartCommandRun();
     const stop = useStopCommandRun();
@@ -34,13 +34,16 @@ export function CommandRunner() {
 
     const submit = () => {
         const template = templates.data?.find((item) => item.id === selectedTemplateId);
+        if (! template) return;
         start.mutate(
             {
                 device_ids: [...selected],
-                command: template ? template.command : command.trim(),
-                timeout: template?.timeout ?? timeout,
+                command: template.command,
+                timeout: template.timeout,
                 confirm: confirmed,
-                ...(template ? { template_id: template.id, command_hash: template.command_hash, template_updated_at: template.updated_at } : {}),
+                template_id: template.id,
+                command_hash: template.command_hash,
+                template_updated_at: template.updated_at,
             },
             { onSuccess: (data) => setRunId(data.run_id) },
         );
@@ -79,19 +82,19 @@ export function CommandRunner() {
                         setTimeoutSeconds(template.timeout);
                     }
                 }} className={`${field} mb-3 w-full`} disabled={running}>
-                    <option value="">Enter a command manually…</option>
+                    <option value="">Select a saved template…</option>
                     {(templates.data ?? []).filter((template) => template.enabled).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
                 </select>
 
                 <label className="mb-1 block text-xs font-medium text-white/55">Command</label>
-                <textarea value={command} onChange={(e) => setCommand(e.target.value)} maxLength={4096} rows={3} className={`${field} w-full font-mono`} placeholder="/system resource print" disabled={running || selectedTemplateId !== null} />
+                <textarea value={command} readOnly maxLength={4096} rows={3} className={`${field} w-full font-mono`} placeholder="Select a template to load its command" disabled />
 
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                     <label className="text-xs text-white/50">Timeout (seconds)
                         <input type="number" min={1} max={60} value={timeout} onChange={(e) => setTimeoutSeconds(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className={`${field} mt-1 block w-24`} disabled={running} />
                     </label>
                     <label className="flex max-w-md items-center gap-2 text-xs text-amber-100/70"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} disabled={running} className="accent-amber-400" /> I understand this executes the command on live devices.</label>
-                    <button onClick={submit} disabled={running || selected.size === 0 || command.trim() === '' || !confirmed} className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-35"><Play weight="fill" className="h-4 w-4" /> Run on {selected.size} device{selected.size === 1 ? '' : 's'}</button>
+                    <button onClick={submit} disabled={running || selected.size === 0 || selectedTemplateId === null || !confirmed} className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-35"><Play weight="fill" className="h-4 w-4" /> Run on {selected.size} device{selected.size === 1 ? '' : 's'}</button>
                     {running && runId && <button onClick={() => stop.mutate(runId)} className="inline-flex items-center gap-2 rounded-lg border border-rose-400/30 px-3 py-2 text-sm text-rose-200 hover:bg-rose-400/10"><Stop weight="fill" className="h-4 w-4" /> Stop</button>}
                 </div>
                 {start.isError && <p className="mt-3 text-xs text-rose-300">Could not start command run.</p>}
@@ -100,7 +103,7 @@ export function CommandRunner() {
             <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
                 <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold text-white">Targets</h3><span className="text-xs text-white/35">{selected.size} selected</span></div>
                 <div className="grid gap-2 sm:grid-cols-2">
-                    {(devices.data ?? []).map((device) => (
+                    {(devices.data?.data ?? []).map((device) => (
                         <label key={device.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.06] px-3 py-2 text-sm text-white/75 hover:bg-white/[0.04]">
                             <input type="checkbox" checked={selected.has(device.id)} onChange={() => toggle(device.id)} disabled={running} className="accent-emerald-400" />
                             <span>{device.name}</span><span className="ml-auto font-mono text-[11px] text-white/30">{device.mgmt_ip}</span>

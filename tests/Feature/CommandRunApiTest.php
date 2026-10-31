@@ -2,13 +2,17 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Backup\RegisterBackupDevice;
 use App\Jobs\Tools\RunCommandJob;
-use App\Models\Device;
-use App\Models\User;
-use App\Models\CommandTemplate;
 use App\Models\CommandRun;
 use App\Models\CommandRunTarget;
+use App\Models\CommandTemplate;
+use App\Models\Device;
+use App\Models\User;
+use App\Services\Backup\RustedClient;
+use App\Services\Tools\ToolRun;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -20,6 +24,7 @@ class CommandRunApiTest extends TestCase
     {
         config()->set('mymate.backup.url', 'http://127.0.0.1:8410');
         config()->set('mymate.backup.token', 'test-token');
+        config()->set('mymate.command.allow_free_text', true);
     }
 
     public function test_admin_can_start_a_command_for_selected_devices(): void
@@ -82,6 +87,20 @@ class CommandRunApiTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_command_run_requires_a_template_by_default(): void
+    {
+        $this->configureEngine();
+        config()->set('mymate.command.allow_free_text', false);
+        Queue::fake();
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+
+        $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->assertStatus(422)->assertJsonValidationErrors('template_id');
+        Queue::assertNothingPushed();
+    }
+
     public function test_only_the_starter_or_admin_can_view_a_command_run(): void
     {
         $this->configureEngine();
@@ -106,6 +125,104 @@ class CommandRunApiTest extends TestCase
 
         $this->postJson('/api/command-runs', ['device_ids' => [], 'command' => ''])->assertStatus(422);
         Queue::assertNothingPushed();
+    }
+
+    public function test_command_run_keeps_operator_identity_when_user_is_deleted(): void
+    {
+        $this->configureEngine();
+        Queue::fake();
+        $admin = $this->actingAsUser();
+        $device = Device::factory()->create();
+
+        $runId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+
+        $this->assertDatabaseHas('command_runs', [
+            'id' => $runId, 'user_id' => $admin->id,
+            'user_name' => $admin->name, 'user_email' => $admin->email,
+        ]);
+        $admin->delete();
+        $this->assertDatabaseHas('command_runs', [
+            'id' => $runId, 'user_id' => null,
+            'user_name' => $admin->name, 'user_email' => $admin->email,
+        ]);
+    }
+
+    public function test_redelivered_command_job_does_not_execute_a_started_target_twice(): void
+    {
+        $this->configureEngine();
+        Queue::fake();
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $runId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+
+        $client = \Mockery::mock(RustedClient::class);
+        $client->shouldReceive('execute')->once()->andReturn([
+            'status' => 'success', 'output' => 'router', 'duration_ms' => 10,
+        ]);
+        $register = \Mockery::mock(RegisterBackupDevice::class);
+        $register->shouldReceive('__invoke')->once();
+        $target = CommandRunTarget::query()->where('run_id', $runId)->firstOrFail();
+        $job = new RunCommandJob($runId, $target->id, $device->id, '/system identity print', 15);
+
+        $job->handle($client, $register);
+        $device->delete();
+        $job->handle($client, $register);
+
+        $this->assertDatabaseHas('command_run_targets', [
+            'run_id' => $runId, 'device_name' => $device->name, 'status' => 'success',
+        ]);
+
+        $deletedDevice = Device::factory()->create();
+        $deletedRunId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$deletedDevice->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+        $deletedTarget = CommandRunTarget::query()->where('run_id', $deletedRunId)->firstOrFail();
+        $deletedDevice->delete();
+        (new RunCommandJob($deletedRunId, $deletedTarget->id, $deletedDevice->id, '/system identity print', 15))->handle($client, $register);
+        $this->assertDatabaseHas('command_run_targets', [
+            'run_id' => $deletedRunId, 'status' => 'failed', 'error' => 'Device no longer exists.',
+        ]);
+    }
+
+    public function test_stale_worker_target_is_reconciled_and_published_to_the_polling_snapshot(): void
+    {
+        $this->configureEngine();
+        Queue::fake();
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $otherDevice = Device::factory()->create();
+        $runId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id, $otherDevice->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+        $target = CommandRunTarget::query()->where('run_id', $runId)->where('device_id', $device->id)->firstOrFail();
+        $target->update(['status' => 'running', 'started_at' => now()->subMinutes(10)]);
+        config()->set('mymate.command.stale_after_seconds', 60);
+
+        Artisan::call('mymate:command-runs:reconcile');
+
+        $this->assertDatabaseHas('command_run_targets', [
+            'id' => $target->id, 'status' => 'failed',
+            'error' => 'Worker timed out before the command completed.',
+        ]);
+        $this->assertDatabaseHas('command_runs', [
+            'id' => $runId, 'status' => 'running',
+        ]);
+        $snapshot = ToolRun::get($runId);
+        $this->assertSame('running', $snapshot['status']);
+        $this->assertFalse($snapshot['result']['complete']);
+        $this->assertSame('failed', $snapshot['result']['devices'][(string) $device->id]['status']);
+        $lateClient = \Mockery::mock(RustedClient::class);
+        $lateClient->shouldReceive('execute')->never();
+        $lateRegister = \Mockery::mock(RegisterBackupDevice::class);
+        $lateRegister->shouldReceive('__invoke')->never();
+        (new RunCommandJob($runId, $target->id, $device->id, '/system identity print', 15))->handle($lateClient, $lateRegister);
+        $this->assertDatabaseHas('command_run_targets', [
+            'id' => $target->id, 'status' => 'failed',
+        ]);
     }
 
     public function test_admin_can_create_and_list_command_templates(): void
@@ -155,7 +272,8 @@ class CommandRunApiTest extends TestCase
         $device = Device::factory()->create();
         $base = ['template_id' => $template->id, 'device_ids' => [$device->id], 'confirm' => true];
 
-        $this->postJson('/api/command-runs', $base)->assertStatus(422)->assertJsonValidationErrors('template_id');
+        $this->postJson('/api/command-runs', $base)->assertStatus(422)
+            ->assertJsonValidationErrors(['template_updated_at', 'command_hash']);
         $this->postJson('/api/command-runs', [...$base, 'template_updated_at' => $template->updated_at->toISOString(), 'command_hash' => 'wrong'])
             ->assertStatus(422)->assertJsonValidationErrors('command_hash');
         $this->postJson('/api/command-runs', [...$base, 'template_updated_at' => $template->updated_at->toISOString(), 'command_hash' => $template->commandHash()])
@@ -209,7 +327,10 @@ class CommandRunApiTest extends TestCase
         $device = Device::factory()->create();
 
         $this->postJson('/api/command-runs', [
-            'template_id' => $template->id, 'device_ids' => [$device->id], 'confirm' => true,
+            'template_id' => $template->id,
+            'template_updated_at' => $template->updated_at->toISOString(),
+            'command_hash' => $template->commandHash(),
+            'device_ids' => [$device->id], 'confirm' => true,
         ])->assertStatus(422)->assertJsonValidationErrors('template_id');
         Queue::assertNothingPushed();
     }

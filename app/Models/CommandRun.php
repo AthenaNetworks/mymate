@@ -13,7 +13,7 @@ class CommandRun extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
-        'id', 'user_id', 'template_id', 'command', 'command_hash', 'timeout_seconds',
+        'id', 'user_id', 'user_name', 'user_email', 'template_id', 'command', 'command_hash', 'timeout_seconds',
         'target_count', 'status', 'confirmed_at', 'completed_at',
     ];
 

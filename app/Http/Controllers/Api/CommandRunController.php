@@ -3,22 +3,24 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Command\StartCommandRunRequest;
 use App\Jobs\Tools\RunCommandJob;
-use App\Models\CommandTemplate;
 use App\Models\CommandRun;
 use App\Models\CommandRunTarget;
+use App\Models\CommandTemplate;
 use App\Models\Device;
 use App\Services\Tools\ToolRun;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use App\Support\BackupSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CommandRunController extends Controller
 {
-    public function start(Request $request, BackupSettings $settings): JsonResponse
+    public function start(StartCommandRunRequest $request, BackupSettings $settings): JsonResponse
     {
         if (! $settings->configured()) {
             return response()->json(['message' => 'The backup engine (Rusted) is not configured yet.'], 422);
@@ -44,6 +46,10 @@ class CommandRunController extends Controller
             if (! hash_equals($template->commandHash(), (string) $request->input('command_hash'))) {
                 throw ValidationException::withMessages(['command_hash' => 'The command template hash does not match.']);
             }
+        }
+
+        if ($template === null && ! config('mymate.command.allow_free_text', false)) {
+            throw ValidationException::withMessages(['template_id' => 'A command template is required.']);
         }
 
         $command = trim((string) ($template?->command ?? $request->input('command', '')));
@@ -92,26 +98,30 @@ class CommandRunController extends Controller
             ];
         }
 
-        CommandRun::create([
-            'id' => $runId,
-            'user_id' => $request->user()->id,
-            'template_id' => $template?->id,
-            'command' => $command,
-            'command_hash' => hash('sha256', $command),
-            'timeout_seconds' => $timeout,
-            'target_count' => count($rows),
-            'status' => 'running',
-            'confirmed_at' => now(),
-        ]);
-        foreach ($ids as $id) {
-            $device = $devices->get($id);
-            CommandRunTarget::create([
-                'run_id' => $runId,
-                'device_id' => $device->id,
-                'device_name' => $device->name,
-                'status' => 'queued',
+        DB::transaction(function () use ($runId, $request, $template, $command, $timeout, $rows, $ids, $devices): void {
+            CommandRun::create([
+                'id' => $runId,
+                'user_id' => $request->user()->id,
+                'user_name' => $request->user()->name,
+                'user_email' => $request->user()->email,
+                'template_id' => $template?->id,
+                'command' => $command,
+                'command_hash' => hash('sha256', $command),
+                'timeout_seconds' => $timeout,
+                'target_count' => count($rows),
+                'status' => 'running',
+                'confirmed_at' => now(),
             ]);
-        }
+            foreach ($ids as $id) {
+                $device = $devices->get($id);
+                CommandRunTarget::create([
+                    'run_id' => $runId,
+                    'device_id' => $device->id,
+                    'device_name' => $device->name,
+                    'status' => 'queued',
+                ]);
+            }
+        });
 
         ToolRun::start($runId, 'command', count($rows).' device(s)', $request->user()->id, [
             'command' => $command,
@@ -123,8 +133,13 @@ class CommandRunController extends Controller
             'devices' => $rows,
         ]);
 
+        $targets = CommandRunTarget::query()->where('run_id', $runId)->get()->keyBy('device_id');
         foreach ($ids as $id) {
-            RunCommandJob::dispatch($runId, $id, $command, $timeout);
+            $target = $targets->get($id);
+            if ($target === null) {
+                continue;
+            }
+            RunCommandJob::dispatch($runId, $target->id, $id, $command, $timeout)->afterCommit();
         }
 
         return response()->json(['run_id' => $runId, 'kind' => 'command', 'status' => 'running'], 202);

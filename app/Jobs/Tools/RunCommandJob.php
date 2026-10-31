@@ -3,9 +3,9 @@
 namespace App\Jobs\Tools;
 
 use App\Actions\Backup\RegisterBackupDevice;
-use App\Models\Device;
 use App\Models\CommandRun;
 use App\Models\CommandRunTarget;
+use App\Models\Device;
 use App\Services\Backup\RustedClient;
 use App\Services\Tools\ToolRun;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -25,6 +25,7 @@ class RunCommandJob implements ShouldQueue
 
     public function __construct(
         public string $runId,
+        public int $targetId,
         public int $deviceId,
         public string $command,
         public int $timeoutSeconds,
@@ -34,19 +35,28 @@ class RunCommandJob implements ShouldQueue
 
     public function handle(RustedClient $client, RegisterBackupDevice $register): void
     {
+        // Claim the durable target row before touching Rusted. A Redis visibility timeout,
+        // worker crash, or manual redelivery must not cause a router command to run twice.
+        if (! $this->claim()) {
+            return;
+        }
+
         $device = Device::find($this->deviceId);
         if ($device === null) {
             $this->finish('failed', 'Device no longer exists.', '');
+
+            return;
+        }
+
+        // Cancellation is a preflight gate only. Once the device command has started,
+        // the stop flag is deliberately ignored because Rusted cannot safely interrupt it.
+        if (ToolRun::stopRequested($this->runId)) {
+            $this->finish('stopped', 'Run cancelled before execution.', '');
+
             return;
         }
 
         $this->startedAt = microtime(true);
-        $this->setStatus('running');
-
-        if (ToolRun::stopRequested($this->runId)) {
-            $this->finish('stopped', 'Run cancelled before execution.', '');
-            return;
-        }
 
         try {
             ($register)($device);
@@ -59,24 +69,52 @@ class RunCommandJob implements ShouldQueue
         }
     }
 
-    private function setStatus(string $status): void
+    /** Atomically transition this target from queued to running. */
+    private function claim(): bool
     {
-        ToolRun::update($this->runId, function (array $result) use ($status): array {
+        $claimed = CommandRunTarget::query()
+            ->whereKey($this->targetId)
+            ->where('run_id', $this->runId)
+            ->where('status', 'queued')
+            ->update([
+                'status' => 'running',
+                'started_at' => now(),
+            ]);
+
+        if ($claimed !== 1) {
+            return false;
+        }
+
+        ToolRun::update($this->runId, function (array $result): array {
             if (isset($result['devices'][(string) $this->deviceId])) {
-                $result['devices'][(string) $this->deviceId]['status'] = $status;
+                $result['devices'][(string) $this->deviceId]['status'] = 'running';
             }
+
             return $result;
         });
-        CommandRunTarget::where('run_id', $this->runId)
-            ->where('device_id', $this->deviceId)
-            ->update([
-                'status' => $status,
-                'started_at' => $status === 'running' ? now() : null,
-            ]);
+
+        return true;
     }
 
     private function finish(string $status, string $error, string $output): void
     {
+        // Claim the terminal transition atomically. A reaper may finalize this target between
+        // the ownership check and this update; in that case the late worker must not publish.
+        $updated = CommandRunTarget::query()
+            ->whereKey($this->targetId)
+            ->where('run_id', $this->runId)
+            ->where('status', 'running')
+            ->update([
+                'status' => $status,
+                'output' => $output !== '' ? $output : null,
+                'error' => $error !== '' ? $error : null,
+                'duration_ms' => $this->startedAt === null ? null : max(0, (int) round((microtime(true) - $this->startedAt) * 1000)),
+                'finished_at' => now(),
+            ]);
+        if ($updated !== 1) {
+            return;
+        }
+
         ToolRun::update($this->runId, function (array $result) use ($status, $error, $output): array {
             if (isset($result['devices'][(string) $this->deviceId])) {
                 $row = &$result['devices'][(string) $this->deviceId];
@@ -88,21 +126,9 @@ class RunCommandJob implements ShouldQueue
             if ($statuses !== [] && count(array_diff($statuses, ['success', 'failed', 'stopped'])) === 0) {
                 $result['complete'] = true;
             }
+
             return $result;
         });
-
-        $target = CommandRunTarget::where('run_id', $this->runId)
-            ->where('device_id', $this->deviceId)
-            ->first();
-        if ($target !== null) {
-            $target->update([
-                'status' => $status,
-                'output' => $output !== '' ? $output : null,
-                'error' => $error !== '' ? $error : null,
-                'duration_ms' => $this->startedAt === null ? null : max(0, (int) round((microtime(true) - $this->startedAt) * 1000)),
-                'finished_at' => now(),
-            ]);
-        }
 
         $run = CommandRun::find($this->runId);
         if ($run !== null) {
@@ -126,6 +152,7 @@ class RunCommandJob implements ShouldQueue
     private function boundedError(string $error): string
     {
         $error = trim($error);
+
         return mb_substr($error !== '' ? $error : 'Command failed.', 0, 300);
     }
 }

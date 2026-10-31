@@ -1,5 +1,10 @@
 <?php
 
+use App\Jobs\EvaluateAlertsJob;
+use App\Jobs\PingSweepJob;
+use App\Jobs\PollDeviceMetricsBatchJob;
+use App\Jobs\PollInterfacesBatchJob;
+use App\Jobs\PollSensorsBatchJob;
 use Illuminate\Support\Str;
 
 return [
@@ -138,11 +143,11 @@ return [
     // lists (and the Redis they cost) with routine, uninteresting successes. Silence them so
     // Horizon stops recording their completed metadata - they still show up if they FAIL.
     'silenced' => [
-        \App\Jobs\PingSweepJob::class,
-        \App\Jobs\PollInterfacesBatchJob::class,
-        \App\Jobs\PollDeviceMetricsBatchJob::class,
-        \App\Jobs\PollSensorsBatchJob::class,
-        \App\Jobs\EvaluateAlertsJob::class,
+        PingSweepJob::class,
+        PollInterfacesBatchJob::class,
+        PollDeviceMetricsBatchJob::class,
+        PollSensorsBatchJob::class,
+        EvaluateAlertsJob::class,
     ],
 
     'silenced_tags' => [
@@ -321,9 +326,10 @@ return [
             'nice' => 0,
         ],
 
-        // SSH command runs: dedicated capacity so a batch cannot starve live diagnostics.
+        // SSH command runs: dedicated capacity and a lease longer than the 240-second worker
+        // ceiling, so a slow router command cannot be reclaimed and executed twice.
         'supervisor-command' => [
-            'connection' => 'redis',
+            'connection' => 'redis-long',
             'queue' => ['command'],
             'balance' => 'auto',
             'autoScalingStrategy' => 'time',
