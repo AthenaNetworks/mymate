@@ -65,6 +65,9 @@ of commit subjects.
   the error now includes what the device said instead of just "empty".
 
 ### Security
+- **Read-only operators can no longer see wallboard share links or config backup contents.** A share
+  link is a no-login view of the map that anyone can pass on, and a device config can carry secrets.
+  Both are admin-only now; read-only operators still see backup history and the list of versions.
 - **PHP 8.4.27 or newer is now required (GitHub #57).** 8.4.27 fixes two critical remote code
   execution bugs in PHP itself (CVE-2026-109618, CVE-2026-109619). The Docker image is built on
   8.4.27 and the Debian package won't install against an older PHP. If you upgrade PHP yourself

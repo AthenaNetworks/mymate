@@ -126,6 +126,16 @@ class PublicWallboardTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_non_admin_cannot_list_share_links(): void
+    {
+        // Each listed URL carries its token: a no-login view of the map a viewer could pass on.
+        [$map] = $this->mapWithDevice();
+        MapShare::create(['map_id' => $map->id, 'token' => MapShare::newToken(), 'enabled' => true]);
+
+        $this->actingAs(User::factory()->create(['is_admin' => false]))
+            ->getJson("/api/maps/{$map->id}/shares")->assertForbidden();
+    }
+
     public function test_revoking_a_share_kills_the_link(): void
     {
         $this->actingAsUser();

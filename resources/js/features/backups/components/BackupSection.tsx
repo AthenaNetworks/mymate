@@ -199,9 +199,12 @@ export function BackupSection({ device, isAdmin }: { device: Device; isAdmin: bo
                                 {running ? 'Backing up...' : 'Back up now'}
                             </button>
                         )}
-                        <button onClick={() => setViewing(true)} disabled={!device.backup_commit} className={actionBtn} title={device.backup_commit ? 'View the latest stored config' : 'No config stored yet'}>
-                            <Eye weight="light" className="h-3.5 w-3.5" /> View config
-                        </button>
+                        {/* The config text can carry secrets, so it's admin-only (the API refuses anyone else). */}
+                        {isAdmin && (
+                            <button onClick={() => setViewing(true)} disabled={!device.backup_commit} className={actionBtn} title={device.backup_commit ? 'View the latest stored config' : 'No config stored yet'}>
+                                <Eye weight="light" className="h-3.5 w-3.5" /> View config
+                            </button>
+                        )}
                     </div>
 
                     {/* Recent history. */}

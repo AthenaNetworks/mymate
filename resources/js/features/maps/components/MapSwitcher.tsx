@@ -173,13 +173,16 @@ export function MapSwitcher() {
                                             <option value="120">120s</option>
                                         </select>
                                     </div>
-                                    <button
-                                        disabled={!active}
-                                        onClick={() => { setSharing(true); setOpen(false); }}
-                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
-                                    >
-                                        <ShareNetwork weight="bold" className="h-3.5 w-3.5 text-emerald-300" /> Share wallboard
-                                    </button>
+                                    {/* Share links are admin-only: each carries a no-login view of the map. */}
+                                    {isAdmin && (
+                                        <button
+                                            disabled={!active}
+                                            onClick={() => { setSharing(true); setOpen(false); }}
+                                            className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left text-sm text-white/70 transition-colors hover:bg-white/5 disabled:opacity-40"
+                                        >
+                                            <ShareNetwork weight="bold" className="h-3.5 w-3.5 text-emerald-300" /> Share wallboard
+                                        </button>
+                                    )}
                                     <button
                                         disabled={!active}
                                         onClick={() => { setBackgroundEditorOpen(true); setOpen(false); }}

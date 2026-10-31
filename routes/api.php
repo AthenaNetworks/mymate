@@ -196,8 +196,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
 
     // Device config backups - control plane for the Rusted engine.
     // Config (opt-in + driver) and "back up now" are writes (admin-only via the group);
-    // history + latest-config are read-through proxies any operator can view. `run` is
-    // rate-limited (each hit SSHes to the device via Rusted).
+    // history + the version list are read-through proxies any operator can view; the config text
+    // itself (latest, an old version, a diff) is admin-only, since a device config can carry
+    // secrets (v6 exports, community strings, hashes). `run` is rate-limited (each hit SSHes to the
+    // device via Rusted).
     Route::put('devices/{device}/backup-config', [DeviceBackupController::class, 'config'])
         ->name('devices.backup.config');
     Route::post('devices/{device}/backups', [DeviceBackupController::class, 'run'])
@@ -207,15 +209,17 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->middleware('throttle:6,1')->name('devices.provision-ssh-key');
     Route::get('devices/{device}/backups', [DeviceBackupController::class, 'history'])
         ->name('devices.backups.history');
-    Route::get('devices/{device}/backups/latest', [DeviceBackupController::class, 'latest'])
-        ->name('devices.backups.latest');
     // Git-backed version history + view an old version + diff between versions.
     Route::get('devices/{device}/backups/versions', [DeviceBackupController::class, 'versions'])
         ->name('devices.backups.versions');
-    Route::get('devices/{device}/backups/config', [DeviceBackupController::class, 'configAt'])
-        ->name('devices.backups.config-at');
-    Route::get('devices/{device}/backups/diff', [DeviceBackupController::class, 'diff'])
-        ->name('devices.backups.diff');
+    Route::middleware('admin')->group(function (): void {
+        Route::get('devices/{device}/backups/latest', [DeviceBackupController::class, 'latest'])
+            ->name('devices.backups.latest');
+        Route::get('devices/{device}/backups/config', [DeviceBackupController::class, 'configAt'])
+            ->name('devices.backups.config-at');
+        Route::get('devices/{device}/backups/diff', [DeviceBackupController::class, 'diff'])
+            ->name('devices.backups.diff');
+    });
 
     // Recent history: a bucketed util/bps series for one interface, or the
     // whole device's total throughput (bps summed across its interfaces).
@@ -337,9 +341,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::post('maps/{map}/images', [MapController::class, 'storeMapImage'])->name('maps.images.store');
     Route::patch('maps/{map}/images/{mapImage}', [MapController::class, 'updateMapImage'])->name('maps.images.update');
     Route::delete('maps/{map}/images/{mapImage}', [MapController::class, 'destroyMapImage'])->name('maps.images.destroy');
-    // Public read-only wallboard share links (GitHub #15). Listing is read; minting/revoking are
-    // writes, so RestrictWritesToAdmins keeps them admin-only like the rest of the map API.
-    Route::get('maps/{map}/shares', [MapShareController::class, 'index'])->name('maps.shares.index');
+    // Public read-only wallboard share links (GitHub #15). Admin-only end to end, reads included:
+    // each listed URL carries its token, and a token is a no-login view of the map that anyone
+    // can pass on, so a read-only operator mustn't be able to hand one out.
+    Route::get('maps/{map}/shares', [MapShareController::class, 'index'])->middleware('admin')->name('maps.shares.index');
     Route::post('maps/{map}/shares', [MapShareController::class, 'store'])->name('maps.shares.store');
     Route::patch('maps/{map}/shares/{share}', [MapShareController::class, 'update'])->name('maps.shares.update');
     Route::delete('maps/{map}/shares/{share}', [MapShareController::class, 'destroy'])->name('maps.shares.destroy');

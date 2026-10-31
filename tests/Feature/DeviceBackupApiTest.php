@@ -153,4 +153,18 @@ class DeviceBackupApiTest extends TestCase
         Http::fake(['*/history' => Http::response([], 200)]);
         $this->getJson("/api/devices/{$device->id}/backups")->assertOk();
     }
+
+    public function test_non_admin_cannot_read_config_contents(): void
+    {
+        // A device config can carry secrets (v6 exports, communities, hashes): history and the
+        // version list stay readable, the text itself doesn't.
+        $this->configureEngine();
+        Http::fake(['*' => Http::response("secret\n", 200)]);
+        $device = Device::factory()->create();
+        $this->actingAs(User::factory()->create(['is_admin' => false]));
+
+        $this->getJson("/api/devices/{$device->id}/backups/latest")->assertForbidden();
+        $this->getJson("/api/devices/{$device->id}/backups/config?commit=abc123")->assertForbidden();
+        $this->getJson("/api/devices/{$device->id}/backups/diff?from=abc123")->assertForbidden();
+    }
 }

@@ -122,6 +122,9 @@ function ScheduleCard({ isAdmin }: { isAdmin: boolean }) {
 type PanelMode = 'diff' | 'compare' | 'config';
 
 export function VersionPanel({ device }: { device: Device }) {
+    // The config text (a version, a diff) can carry secrets, so only an admin gets it; everyone
+    // else sees the version list (when it changed) without the contents.
+    const isAdmin = useIsAdmin();
     const { data: versions, isLoading } = useDeviceVersions(device.id);
     const [focus, setFocus] = useState<string | null>(null);
     const [mode, setMode] = useState<PanelMode>('diff');
@@ -134,9 +137,9 @@ export function VersionPanel({ device }: { device: Device }) {
     const to = cmpTo ?? versions?.[0]?.commit ?? null;
     const compareReady = mode === 'compare' && from !== null && to !== null && from !== to;
 
-    const diff = useDeviceDiff(device.id, mode === 'diff' ? commit : null, null);
-    const compareDiff = useDeviceDiff(device.id, compareReady ? from : null, compareReady ? to : null);
-    const config = useDeviceConfigAt(device.id, mode === 'config' ? commit : null);
+    const diff = useDeviceDiff(device.id, isAdmin && mode === 'diff' ? commit : null, null);
+    const compareDiff = useDeviceDiff(device.id, isAdmin && compareReady ? from : null, compareReady ? to : null);
+    const config = useDeviceConfigAt(device.id, isAdmin && mode === 'config' ? commit : null);
 
     // In compare mode, clicking a version row sets the "to" end (compare an old version to it).
     function onRowClick(hash: string) {
@@ -156,7 +159,7 @@ export function VersionPanel({ device }: { device: Device }) {
                     <h2 className="text-base font-bold tracking-tight text-white">{device.name}</h2>
                     <p className="text-xs text-white/40">{device.mgmt_ip} - backup history</p>
                 </div>
-                <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 ring-1 ring-white/10">
+                {isAdmin && <div className="flex items-center gap-1 rounded-lg bg-white/[0.04] p-0.5 ring-1 ring-white/10">
                     {(['diff', 'compare', 'config'] as const).map((m) => (
                         <button
                             key={m}
@@ -166,7 +169,7 @@ export function VersionPanel({ device }: { device: Device }) {
                             {m === 'diff' ? 'Changes' : m === 'compare' ? 'Compare' : 'Full config'}
                         </button>
                     ))}
-                </div>
+                </div>}
             </div>
 
             {/* Compare: pick two versions (from -> to). */}
@@ -208,7 +211,9 @@ export function VersionPanel({ device }: { device: Device }) {
 
                 {/* Diff / config viewer. */}
                 <div className="min-w-0 flex-1 overflow-hidden rounded-xl bg-surface-deep ring-1 ring-white/10">
-                    {mode === 'config' ? (
+                    {!isAdmin ? (
+                        <p className="p-4 text-xs text-white/35">Config contents are only shown to administrators.</p>
+                    ) : mode === 'config' ? (
                         commit === null ? (
                             <p className="p-4 text-xs text-white/35">No version selected.</p>
                         ) : config.data ? (
