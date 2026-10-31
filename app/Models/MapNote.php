@@ -11,12 +11,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class MapNote extends Model
 {
-    protected $fillable = ['map_id', 'text', 'x', 'y', 'color', 'background', 'size'];
+    protected $fillable = ['map_id', 'text', 'x', 'y', 'color', 'background', 'size', 'latitude', 'longitude'];
 
     protected $casts = [
         'x' => 'float',
         'y' => 'float',
+        'latitude' => 'float', // where it sits on the geo map (GitHub #52); null = not there
+        'longitude' => 'float',
     ];
+
+    public const API_FIELDS = ['id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size', 'latitude', 'longitude'];
 
     public function map(): BelongsTo
     {

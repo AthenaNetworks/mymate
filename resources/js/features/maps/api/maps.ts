@@ -313,8 +313,11 @@ export function useImportMap() {
 export function useCreateMapNote() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: async ({ mapId, text, x, y }: { mapId: number; text: string; x?: number; y?: number }): Promise<MapNote> => {
-            const { data } = await apiClient.post<{ data: MapNote }>(`/maps/${mapId}/notes`, { text, x, y });
+        mutationFn: async (
+            { mapId, text, x, y, latitude, longitude }:
+            { mapId: number; text: string; x?: number; y?: number; latitude?: number; longitude?: number },
+        ): Promise<MapNote> => {
+            const { data } = await apiClient.post<{ data: MapNote }>(`/maps/${mapId}/notes`, { text, x, y, latitude, longitude });
             return data.data;
         },
         onSuccess: (_d, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
@@ -326,15 +329,16 @@ export function useUpdateMapNote() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: async (
-            { mapId, noteId, text, x, y, color, background, size }:
-            { mapId: number; noteId: number; text?: string; x?: number; y?: number; color?: string | null; background?: string | null; size?: MapNoteSize | null },
+            { mapId, noteId, text, x, y, color, background, size, latitude, longitude }:
+            { mapId: number; noteId: number; text?: string; x?: number; y?: number; color?: string | null; background?: string | null; size?: MapNoteSize | null; latitude?: number; longitude?: number },
         ): Promise<MapNote> => {
-            const { data } = await apiClient.patch<{ data: MapNote }>(`/maps/${mapId}/notes/${noteId}`, { text, x, y, color, background, size });
+            const { data } = await apiClient.patch<{ data: MapNote }>(`/maps/${mapId}/notes/${noteId}`, { text, x, y, color, background, size, latitude, longitude });
             return data.data;
         },
-        onSuccess: (_d, { mapId, text, color, background, size }) => {
-            // Only refetch on a content/style change; a drag-only save leaves the cache alone.
-            if (text !== undefined || color !== undefined || background !== undefined || size !== undefined) {
+        onSuccess: (_d, { mapId, text, color, background, size, latitude }) => {
+            // Only refetch on a content/style change; a drag-only save leaves the cache alone. A geo
+            // label move does refetch: the geo canvas rebuilds its nodes from the cached coordinates.
+            if (text !== undefined || color !== undefined || background !== undefined || size !== undefined || latitude !== undefined) {
                 qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) });
             }
         },

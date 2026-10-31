@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\DeviceMapPosition;
 use App\Models\Link;
 use App\Models\Map;
+use App\Models\MapNote;
 use App\Models\MapLinkPosition;
 
 /**
@@ -111,7 +112,7 @@ class MapDetail
                 'device_count' => $c->positions_count,
             ])->all();
         $mapLinks = MapLinkResource::collection($map->mapLinks()->get())->resolve();
-        $mapNotes = $map->mapNotes()->get(['id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size'])->all();
+        $mapNotes = $map->mapNotes()->get(MapNote::API_FIELDS)->all();
         $mapImages = $map->mapImages()->with('asset')->get()->map->meta()->values()->all();
 
         return [

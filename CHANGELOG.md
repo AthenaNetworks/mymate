@@ -14,6 +14,10 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Edit the geo map directly (GitHub #52).** On a map in geographic mode an admin can now pin devices
+  that have no location yet ("not pinned" at the bottom left drops one in the middle of the view, then
+  drag it into place), draw links between devices just like on the regular map, and add text labels at a
+  spot on the map. Geo labels stay on the geo view, and a logical-only wallboard link never includes them.
 - **Your own images: custom device icons and pictures on the map (GitHub #53).** Upload PNG, JPEG,
   WebP or SVG images to a shared library. Pick one as a device's icon (the new image button in the icon
   picker), or use "Add image" on the map toolbar to place a logo, legend or photo. Placed images drag

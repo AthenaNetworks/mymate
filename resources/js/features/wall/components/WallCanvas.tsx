@@ -53,7 +53,7 @@ export function WallCanvas() {
     );
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
-    const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]);
+    const mapNotes = useMemo(() => (mapDetail?.map_notes ?? []).filter((n) => n.latitude == null), [mapDetail]); // geo labels belong to the geo view
     const mapImages = useMemo(() => mapDetail?.map_images ?? [], [mapDetail]); // GitHub #53
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]);
     const background = mapDetail?.background ?? null; // custom map image (GitHub #37)

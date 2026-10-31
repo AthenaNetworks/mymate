@@ -1,12 +1,13 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { GeoFlow } from './GeoFlow';
+import { GeoFlow, type GeoNoteHandlers } from './GeoFlow';
+import { LinkBinderDialog, type PendingLink } from '../../topology/components/LinkBinderDialog';
 import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { useMapDevices } from '../../devices/api/getDevices';
 import { useMapLinks } from '../../topology/api/getLinks';
 import { useUpdateDevice } from '../../devices/api/updateDevice';
 import { useIsAdmin } from '../../auth/api/auth';
-import { useMap } from '../../maps/api/maps';
+import { useCreateMapNote, useDeleteMapNote, useMap, useUpdateMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../../topology/hooks/useMapChannel';
 import { useMapConfig } from '../api/geo';
 import { usePlayback } from '../hooks/usePlayback';
@@ -29,6 +30,30 @@ function GeoFlowInner() {
     const pb = usePlayback(activeMapId, devices, links);
     const nameById = useMemo(() => new Map((devices ?? []).map((d) => [d.id, d.name])), [devices]);
 
+    // Editing on the geo map (GitHub #52): admins only, and never while looking at history.
+    const editable = isAdmin && !pb.active && activeMapId !== null;
+    const [pending, setPending] = useState<PendingLink | null>(null);
+    const createNote = useCreateMapNote();
+    const updateNote = useUpdateMapNote();
+    const deleteNote = useDeleteMapNote();
+    const noteHandlers = useMemo<GeoNoteHandlers | undefined>(() => {
+        if (!editable || activeMapId === null) return undefined;
+        const mapId = activeMapId;
+        return {
+            onAdd: (latitude, longitude) => createNote.mutate({ mapId, text: 'New label', latitude, longitude }),
+            onMove: (noteId, latitude, longitude) => updateNote.mutate({ mapId, noteId, latitude, longitude }),
+            onSave: (noteId, text) => updateNote.mutate({ mapId, noteId, text }),
+            onStyle: (noteId, patch) => updateNote.mutate({ mapId, noteId, ...patch }),
+            onRemove: (noteId) => deleteNote.mutate({ mapId, noteId }),
+        };
+        // The mutation objects change identity every render; their mutate is stable enough here.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editable, activeMapId]);
+    const unplaced = useMemo(
+        () => (devices ?? []).filter((d) => memberIds.has(d.id) && (d.geo_latitude == null || d.geo_longitude == null)),
+        [devices, memberIds],
+    );
+
     if (config && !config.enabled) {
         return <div className="grid h-full place-items-center text-sm text-white/50">Geo mode needs a tile URL (MYMATE_MAP_TILE_URL) set.</div>;
     }
@@ -47,7 +72,12 @@ function GeoFlowInner() {
                 // Moving a pin is a write, so only an admin gets to drag (the API refuses anyone
                 // else), and not while looking at history.
                 onDevicesMoved={isAdmin && !pb.active ? (moves) => moves.forEach((m) => update.mutate({ id: m.id, latitude: m.lat, longitude: m.lng })) : undefined}
-                emptyHint="Set a location on a device (its editor), then it shows here."
+                emptyHint={editable ? 'Use "not pinned" at the bottom left to drop devices on the map, or set a location in the device editor.' : 'Set a location on a device (its editor), then it shows here.'}
+                notes={mapDetail?.map_notes}
+                noteHandlers={noteHandlers}
+                onConnectDevices={editable ? ({ a, b, aHandle, bHandle }) => setPending({ aDeviceId: a, bDeviceId: b, aHandle, bHandle }) : undefined}
+                unplaced={editable ? unplaced : undefined}
+                onPlaceDevice={editable ? (id, latitude, longitude) => update.mutate({ id, latitude, longitude }) : undefined}
                 topLeft={
                     <>
                         <MapSwitcher />
@@ -56,6 +86,7 @@ function GeoFlowInner() {
                 }
             />
             {pb.active && <PlaybackBar pb={pb} deviceName={(id) => nameById.get(id) ?? `device ${id}`} />}
+            {pending && devices && <LinkBinderDialog pending={pending} devices={devices} onClose={() => setPending(null)} />}
         </div>
     );
 }

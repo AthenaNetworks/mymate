@@ -1,8 +1,9 @@
 import { displayName } from '../../../lib/deviceName';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ReactFlow, useReactFlow, useNodesState, useEdgesState, type Node, type Edge } from '@xyflow/react';
+import { ReactFlow, useReactFlow, useNodesState, useEdgesState, type Connection, type Node, type Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { MapPin } from '@phosphor-icons/react';
+import { MapPin, Note } from '@phosphor-icons/react';
+import { MapNoteNode, type MapNoteStylePatch } from '../../topology/nodes/MapNoteNode';
 import { DeviceNode } from '../../topology/nodes/DeviceNode';
 import { UtilEdge } from '../../topology/edges/UtilEdge';
 import { OspfCostControl } from '../../topology/components/OspfCostControl';
@@ -11,9 +12,10 @@ import { GeoStackNode } from './GeoStackNode';
 import { GeoTileLayer } from './GeoTileLayer';
 import { LayerToggle, loadLayerPrefs, persistLayerPrefs, type LayerPrefs } from './geoLayers';
 import { project, unproject, computeBaseZoom } from '../lib/mercator';
-import type { Device, DeviceStatus, Link } from '../../../types';
+import type { Device, DeviceStatus, Link, MapNote } from '../../../types';
 
-const nodeTypes = { device: DeviceNode, stack: GeoStackNode };
+const nodeTypes = { device: DeviceNode, stack: GeoStackNode, note: MapNoteNode };
+const NOTE_PREFIX = 'note:';
 const edgeTypes = { util: UtilEdge };
 
 /** DeviceNode data from a device row (native card; live cpu/mem/status come from the query). */
@@ -30,6 +32,15 @@ const coordKey = (lat: number, lng: number) => `${lat.toFixed(5)},${lng.toFixed(
 
 export type GeoMove = { id: number; lat: number; lng: number };
 
+/** Editing labels on the geo map (GitHub #52). Omit for a read-only view. */
+export type GeoNoteHandlers = {
+    onAdd: (lat: number, lng: number) => void;
+    onMove: (id: number, lat: number, lng: number) => void;
+    onSave: (id: number, text: string) => void;
+    onStyle: (id: number, patch: MapNoteStylePatch) => void;
+    onRemove: (id: number) => void;
+};
+
 type Props = {
     devices: Device[] | undefined;
     links: Link[] | undefined;
@@ -42,6 +53,11 @@ type Props = {
     onDevicesMoved?: (moves: GeoMove[]) => void; // omit for a read-only view (public wallboard)
     emptyHint: string;
     topLeft?: ReactNode;
+    notes?: MapNote[]; // labels with a geo position are drawn (GitHub #52)
+    noteHandlers?: GeoNoteHandlers;
+    onConnectDevices?: (c: { a: number; b: number; aHandle: string | null; bHandle: string | null }) => void; // draw a link
+    unplaced?: Device[]; // the map's devices with no position yet, offered for pinning
+    onPlaceDevice?: (id: number, lat: number, lng: number) => void;
 };
 
 /**
@@ -56,9 +72,11 @@ type Props = {
  */
 export function GeoFlow({
     devices, links, memberIds, tileUrl, attribution, fitKey, selectedDeviceId = null,
-    onDeviceClick, onDevicesMoved, emptyHint, topLeft,
+    onDeviceClick, onDevicesMoved, emptyHint, topLeft, notes, noteHandlers, onConnectDevices, unplaced, onPlaceDevice,
 }: Props) {
-    const { fitView } = useReactFlow();
+    const { fitView, screenToFlowPosition } = useReactFlow();
+    const wrapRef = useRef<HTMLDivElement>(null);
+    const [showUnplaced, setShowUnplaced] = useState(false);
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -80,6 +98,7 @@ export function GeoFlow({
         () => (devices ?? []).filter((d) => memberIds.has(d.id) && d.geo_latitude != null && d.geo_longitude != null),
         [devices, memberIds],
     );
+    const geoNotes = useMemo(() => (notes ?? []).filter((n) => n.latitude != null && n.longitude != null), [notes]);
     const intraLinks = useMemo(
         () => (links ?? []).filter((l) => memberIds.has(l.a_device_id) && memberIds.has(l.b_device_id)),
         [links, memberIds],
@@ -121,8 +140,9 @@ export function GeoFlow({
     // Rebuild nodes when the placement/stacks change (positions from coords; drag is preserved by
     // React Flow between rebuilds). A rebuild signature keeps this off the every-tick path.
     const nodeSig = useMemo(
-        () => placed.map((d) => `${d.id}:${d.geo_latitude}:${d.geo_longitude}:${d.status}`).join('|') + '#' + [...expanded].sort().join(',') + '#' + baseZoom.toFixed(3),
-        [placed, expanded, baseZoom],
+        () => placed.map((d) => `${d.id}:${d.geo_latitude}:${d.geo_longitude}:${d.status}`).join('|') + '#' + [...expanded].sort().join(',') + '#' + baseZoom.toFixed(3)
+            + '#' + geoNotes.map((n) => `${n.id}:${n.latitude}:${n.longitude}:${n.text}:${n.color ?? ''}:${n.background ?? ''}:${n.size ?? ''}`).join('|') + '#' + (noteHandlers ? 'e' : ''),
+        [placed, expanded, baseZoom, geoNotes, noteHandlers],
     );
     useEffect(() => {
         const built: Node[] = [];
@@ -143,9 +163,31 @@ export function GeoFlow({
                 built.push({ id: String(g[0].id), type: 'device', position: at, data: deviceData(g[0]), selected: g[0].id === selectedDeviceId, draggable: !readOnly });
             }
         }
+        for (const n of geoNotes) {
+            built.push({
+                id: `${NOTE_PREFIX}${n.id}`,
+                type: 'note',
+                position: project(n.latitude as number, n.longitude as number, baseZoom),
+                draggable: !!noteHandlers,
+                data: {
+                    noteId: n.id, text: n.text, color: n.color, background: n.background, size: n.size, editable: !!noteHandlers,
+                    onSave: noteHandlers ? (text: string) => noteHandlers.onSave(n.id, text) : undefined,
+                    onSaveStyle: noteHandlers ? (patch: MapNoteStylePatch) => noteHandlers.onStyle(n.id, patch) : undefined,
+                    onRemove: noteHandlers ? () => noteHandlers.onRemove(n.id) : undefined,
+                },
+            });
+        }
         setNodes(built);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [nodeSig, setNodes]);
+
+    /** The real-world point at the middle of what's on screen, where new things get dropped. */
+    const centre = useCallback(() => {
+        const r = wrapRef.current?.getBoundingClientRect();
+        const p = screenToFlowPosition({ x: (r?.left ?? 0) + (r?.width ?? window.innerWidth) / 2, y: (r?.top ?? 0) + (r?.height ?? window.innerHeight) / 2 });
+        const { lat, lng } = unproject(p.x, p.y, baseZoom);
+        return { lat: Number(lat.toFixed(7)), lng: Number(lng.toFixed(7)) };
+    }, [screenToFlowPosition, baseZoom]);
 
     // Live cpu/mem/temp/status patch without moving nodes.
     useEffect(() => {
@@ -188,7 +230,7 @@ export function GeoFlow({
     }, [nodes, fitKey, fitView]);
 
     return (
-        <div className="relative h-full">
+        <div ref={wrapRef} className="relative h-full">
             {tileUrl && <GeoTileLayer baseZoom={baseZoom} tileUrl={tileUrl} />}
             <ReactFlow
                 nodes={nodes}
@@ -199,7 +241,14 @@ export function GeoFlow({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 nodesDraggable={!readOnly}
-                nodesConnectable={false}
+                nodesConnectable={!!onConnectDevices}
+                onConnect={(c: Connection) => {
+                    // Device to device only - a collapsed stack or a label isn't a link end.
+                    const a = Number(c.source);
+                    const b = Number(c.target);
+                    if (!onConnectDevices || !Number.isInteger(a) || !Number.isInteger(b) || a === b) return;
+                    onConnectDevices({ a, b, aHandle: c.sourceHandle ?? null, bHandle: c.targetHandle ?? null });
+                }}
                 elementsSelectable={clickable}
                 onNodeClick={(_, node) => node.type === 'device' && onDeviceClick?.(Number(node.id))}
                 onNodeDragStop={(_, node, dragged) => {
@@ -208,9 +257,10 @@ export function GeoFlow({
                     // under the cursor (GitHub #44).
                     const moves: GeoMove[] = [];
                     for (const n of dragged.length ? dragged : [node]) {
-                        if (n.type !== 'device') continue;
                         const { lat, lng } = unproject(n.position.x, n.position.y, baseZoom);
-                        moves.push({ id: Number(n.id), lat: Number(lat.toFixed(7)), lng: Number(lng.toFixed(7)) });
+                        const at = { lat: Number(lat.toFixed(7)), lng: Number(lng.toFixed(7)) };
+                        if (n.type === 'device') moves.push({ id: Number(n.id), ...at });
+                        else if (n.type === 'note') noteHandlers?.onMove(Number(n.id.slice(NOTE_PREFIX.length)), at.lat, at.lng);
                     }
                     if (moves.length) onDevicesMoved(moves);
                 }}
@@ -219,6 +269,52 @@ export function GeoFlow({
                 style={{ background: 'transparent' }}
             />
             {topLeft && <div className="absolute left-4 top-4 z-10 flex items-center gap-2">{topLeft}</div>}
+
+            {/* Editing on the geo map (GitHub #52): pin a device that has no position yet where you're
+                looking, then drag it into place; drop a label. */}
+            {(noteHandlers || (onPlaceDevice && (unplaced?.length ?? 0) > 0)) && (
+                <div className="absolute bottom-6 left-4 z-10 flex max-w-[18rem] flex-col items-start gap-1.5">
+                    {showUnplaced && onPlaceDevice && unplaced && unplaced.length > 0 && (
+                        <div className="max-h-64 w-full overflow-y-auto rounded-xl bg-zinc-900/95 p-1.5 ring-1 ring-white/10">
+                            <p className="px-1.5 pb-1 pt-0.5 text-[10px] text-white/45">Click one to pin it in the middle of the view, then drag it into place.</p>
+                            {unplaced.map((d) => (
+                                <button
+                                    key={d.id}
+                                    onClick={() => {
+                                        const c = centre();
+                                        onPlaceDevice(d.id, c.lat, c.lng);
+                                        if (unplaced.length === 1) setShowUnplaced(false);
+                                    }}
+                                    className="block w-full truncate rounded-lg px-2 py-1 text-left text-xs text-white/80 hover:bg-white/10"
+                                >
+                                    {displayName(d)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex gap-1.5">
+                        {onPlaceDevice && unplaced && unplaced.length > 0 && (
+                            <button
+                                onClick={() => setShowUnplaced((v) => !v)}
+                                className="flex items-center gap-1.5 rounded-full bg-zinc-900/90 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 hover:bg-zinc-800"
+                                title="Devices on this map that don't have a position yet"
+                            >
+                                <MapPin weight="light" className="h-4 w-4 text-emerald-300" />
+                                {unplaced.length} not pinned
+                            </button>
+                        )}
+                        {noteHandlers && (
+                            <button
+                                onClick={() => { const c = centre(); noteHandlers.onAdd(c.lat, c.lng); }}
+                                className="flex items-center gap-1.5 rounded-full bg-zinc-900/90 px-3 py-1.5 text-xs font-medium text-white/80 ring-1 ring-white/15 hover:bg-zinc-800"
+                                title="Add a text label at this spot on the map"
+                            >
+                                <Note weight="light" className="h-4 w-4 text-amber-300" /> Add label
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {/* Link layers (GitHub #22): the lines, their bandwidth labels and the OSPF costs can each
                 be switched off, eg to plan against the costs alone. Only offered when there's a link. */}

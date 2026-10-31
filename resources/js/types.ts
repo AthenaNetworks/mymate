@@ -364,6 +364,8 @@ export interface MapNote {
     color: string | null; // text colour; null = theme default
     background: string | null; // panel colour; null = theme default
     size: MapNoteSize | null; // null = md
+    latitude?: number | null; // where it sits on the geo map (GitHub #52); null = not there
+    longitude?: number | null;
 }
 
 // An image in the library (GitHub #53): a device icon ("img:<id>") or a picture placed on maps.

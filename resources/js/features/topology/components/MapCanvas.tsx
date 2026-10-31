@@ -197,7 +197,8 @@ export function MapCanvas() {
     // Child-map nodes placed on this canvas + the manual links between them (GitHub #9).
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
-    const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]); // free-text annotations (GitHub #11)
+    // Free-text annotations (GitHub #11). A label placed on the geo map (GitHub #52) belongs there.
+    const mapNotes = useMemo(() => (mapDetail?.map_notes ?? []).filter((n) => n.latitude == null), [mapDetail]);
     const mapImages = useMemo(() => mapDetail?.map_images ?? [], [mapDetail]); // placed pictures (GitHub #53)
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]); // real device links crossing child maps (GitHub #9)
 

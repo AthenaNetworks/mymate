@@ -27,6 +27,7 @@ export function WallGeoCanvas() {
             attribution={config?.attribution}
             fitKey={mapDetail?.id ?? null}
             emptyHint="Devices show up here once they have a location."
+            notes={mapDetail?.map_notes}
         />
     );
 }

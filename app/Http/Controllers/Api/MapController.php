@@ -337,14 +337,18 @@ class MapController extends Controller
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'background' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'size' => ['sometimes', 'nullable', 'in:sm,md,lg'],
+            // A label on the geo map (GitHub #52): both or neither.
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
         ]);
 
         $note = $map->mapNotes()->create([
             'text' => $data['text'], 'x' => $data['x'] ?? 0, 'y' => $data['y'] ?? 0,
             'color' => $data['color'] ?? null, 'background' => $data['background'] ?? null, 'size' => $data['size'] ?? null,
+            'latitude' => $data['latitude'] ?? null, 'longitude' => $data['longitude'] ?? null,
         ]);
 
-        return response()->json(['data' => $note->only('id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size')], Response::HTTP_CREATED);
+        return response()->json(['data' => $note->only(MapNote::API_FIELDS)], Response::HTTP_CREATED);
     }
 
     /** Update a note's text / position / colour. */
@@ -358,10 +362,13 @@ class MapController extends Controller
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'background' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'size' => ['sometimes', 'nullable', 'in:sm,md,lg'],
+            // A label on the geo map (GitHub #52): both or neither.
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
         ]);
         $mapNote->update($data);
 
-        return response()->json(['data' => $mapNote->only('id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size')]);
+        return response()->json(['data' => $mapNote->only(MapNote::API_FIELDS)]);
     }
 
     /** Delete a note. */

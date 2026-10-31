@@ -8,6 +8,7 @@ use App\Http\Resources\LinkResource;
 use App\Models\Device;
 use App\Models\ImageAsset;
 use App\Models\Link;
+use App\Models\MapNote;
 use App\Models\MapShare;
 use App\Support\DeviceGeo;
 use App\Support\MapDetail;
@@ -45,6 +46,14 @@ class PublicWallController extends Controller
         // canvas reads it from its own endpoint so editing it never churns the node data).
         // `share.view` tells the page which view(s) this link may show (GitHub #37).
         $data = MapDetail::build($share->map) + ['background' => $share->map->backgroundMeta()];
+        if (! $share->showsGeo()) {
+            // Nothing geographic leaves through a link that wasn't made for it: labels pinned on
+            // the geo map (GitHub #52) are dropped, and the rest lose their (null) coordinates.
+            $data['map_notes'] = collect($data['map_notes'])
+                ->filter(fn ($n) => $n->latitude === null)
+                ->map(fn ($n) => collect($n->only(MapNote::API_FIELDS))->except(['latitude', 'longitude'])->all())
+                ->values()->all();
+        }
 
         return response()->json(['data' => $data, 'share' => ['view' => $share->view]])
             ->header('Cache-Control', 'no-store');
