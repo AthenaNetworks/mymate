@@ -17,7 +17,7 @@ PORT="${HUB_PORT:-9402}"
 WORK=$(mktemp -d)
 export LARAVEL_STORAGE_PATH="$WORK/storage"
 mkdir -p "$LARAVEL_STORAGE_PATH"/{logs,app,framework/{cache/data,sessions,views}}
-HUB=""; AGENT=""; AID=""
+HUB=""; AGENT=""; AID=""; WORKER=""
 
 q() { php artisan tinker --execute="$1" 2>/dev/null | tail -1; }
 say() { printf '\033[36m>>>\033[0m %s\n' "$*"; }
@@ -28,6 +28,7 @@ fail() {
     cleanup; exit 1
 }
 cleanup() {
+    [ -n "$WORKER" ] && kill "$WORKER" 2>/dev/null
     [ -n "$AGENT" ] && kill "$AGENT" 2>/dev/null
     [ -n "$HUB" ] && kill "$HUB" 2>/dev/null
     [ -n "$AID" ] && q "\App\Models\Agent::destroy($AID);" >/dev/null 2>&1
@@ -57,6 +58,8 @@ TOKEN=$(php artisan mymate:agent:create "ci-upgrade" 2>&1 | grep -oE 'mma_[A-Za-
 AID=$(q 'echo \App\Models\Agent::where("name","ci-upgrade")->value("id");')
 
 php artisan mymate:agent-hub --port="$PORT" >"$WORK/hub.log" 2>&1 & HUB=$!
+# The hub queues what agents send (the `agent` queue); in production Horizon works it.
+php artisan queue:work --queue=agent --sleep=1 --tries=1 >"$WORK/worker.log" 2>&1 & WORKER=$!
 sleep 2
 env MYMATE_URL="http://127.0.0.1:$PORT" MYMATE_AGENT_TOKEN="$TOKEN" MYMATE_AGENT_LOG=debug \
     MYMATE_AGENT_STATE_DIR="$WORK/state" MYMATE_AGENT_HEALTH_DEADLINE=10s MYMATE_AGENT_HEALTHY_AFTER=3s "$WORK/base/mymate-agent" >"$WORK/agent.log" 2>&1 & AGENT=$!

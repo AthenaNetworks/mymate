@@ -13,6 +13,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.." # repo root
 PORT="${HUB_PORT:-9401}"
 BIN=agent/bin/mymate-agent
 HUB=""
+WORKER=""
 AGENT=""
 AID=""
 SID=""
@@ -28,6 +29,7 @@ fail() {
 }
 
 cleanup() {
+    [ -n "$WORKER" ] && kill "$WORKER" 2>/dev/null
     [ -n "$AGENT" ] && kill "$AGENT" 2>/dev/null
     [ -n "$HUB" ] && kill "$HUB" 2>/dev/null
     [ -n "$SID" ] && q "\App\Models\Subnet::destroy($SID);" >/dev/null 2>&1
@@ -54,6 +56,8 @@ AID=$(q 'echo \App\Models\Agent::where("name","ci-integration")->value("id");')
 [ -n "$AID" ] || fail "could not resolve agent id"
 
 start_hub() { php artisan mymate:agent-hub --port="$PORT" >/tmp/agent-hub.log 2>&1 & HUB=$!; }
+# The hub queues what agents send (the `agent` queue); in production Horizon works it.
+php artisan queue:work --queue=agent --sleep=1 --tries=1 >/tmp/agent-worker.log 2>&1 & WORKER=$!
 start_agent() {
     env MYMATE_URL="http://127.0.0.1:$PORT" MYMATE_AGENT_TOKEN="$TOKEN" MYMATE_AGENT_LOG=debug \
         "$BIN" >/tmp/agent.log 2>&1 & AGENT=$!
