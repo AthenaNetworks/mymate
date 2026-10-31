@@ -5,6 +5,7 @@ namespace App\Actions\Polling;
 use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Services\Polling\DevicePollResult;
+use App\Services\Polling\InterfaceSample;
 use App\Services\Polling\LiveInterfaceFrame;
 use App\Services\Polling\PortStats;
 use App\Services\Polling\PortStatsDriver;
@@ -80,21 +81,37 @@ class PollDeviceInterfaces
                 $lastIn = $lastOut = $lastTs = $last32 = null;
             } else {
                 // SNMP: rate = delta octetsx8/delta t (RateCalculator owns the reset guard).
+                // Fractional seconds both ends: truncating the stored ts made every rate read up
+                // to a second's worth (~8% on a 12s poll) low.
                 $dt = $iface->last_ts !== null
-                    ? (float) $sample->ts - (float) $iface->last_ts->getTimestamp()
+                    ? (float) $sample->ts - (float) $iface->last_ts->format('U.u')
                     : 0.0;
                 $bits = $sample->counter32 ? 32 : 64;
                 // The stored counters are from the other width (HC walk dropped out or came
                 // back): the delta means nothing, so no rate this tick and start over from here.
                 $widthChanged = $iface->last_counter32 !== null && $iface->last_counter32 !== $sample->counter32;
-                $bpsIn = $widthChanged ? null : $this->rates->bps($iface->last_in, $sample->inOctets, $dt, $bits);
-                $bpsOut = $widthChanged ? null : $this->rates->bps($iface->last_out, $sample->outOctets, $dt, $bits);
-                // Always store the new raw counters + ts (even on a reset tick) so the
-                // next delta is computed from current reality.
-                $lastIn = $sample->inOctets;
-                $lastOut = $sample->outOctets;
-                $lastTs = Carbon::createFromTimestamp((int) $sample->ts)->format('Y-m-d H:i:s');
-                $last32 = $sample->counter32;
+
+                if (! $widthChanged && $this->countersNotRefreshed($iface, $sample, $dt)) {
+                    // Both counters identical to the last read, a moment ago: the device hasn't
+                    // refreshed them yet (Cisco IOS-XE only does every ~20-30s, GitHub #55). Keep
+                    // the old baseline so the next real change is spread over the whole time since
+                    // it, and carry the last rate, instead of a 0 now and a 2x spike next tick.
+                    $bpsIn = $iface->bps_in === null ? null : (float) $iface->bps_in;
+                    $bpsOut = $iface->bps_out === null ? null : (float) $iface->bps_out;
+                    $lastIn = $iface->last_in;
+                    $lastOut = $iface->last_out;
+                    $lastTs = $iface->last_ts->format('Y-m-d H:i:s.u');
+                    $last32 = $iface->last_counter32;
+                } else {
+                    $bpsIn = $widthChanged ? null : $this->rates->bps($iface->last_in, $sample->inOctets, $dt, $bits);
+                    $bpsOut = $widthChanged ? null : $this->rates->bps($iface->last_out, $sample->outOctets, $dt, $bits);
+                    // Always store the new raw counters + ts (even on a reset tick) so the
+                    // next delta is computed from current reality.
+                    $lastIn = $sample->inOctets;
+                    $lastOut = $sample->outOctets;
+                    $lastTs = Carbon::createFromTimestamp($sample->ts)->format('Y-m-d H:i:s.u');
+                    $last32 = $sample->counter32;
+                }
             }
 
             // Per-PORT utilisation vs the physical interface speed (shown in the device
@@ -168,6 +185,16 @@ class PollDeviceInterfaces
      *                                             back), or null when there was no read this tick
      * @return array{0: array<string, ?float>, 1: ?array<string, mixed>, 2: bool} [rates, state to store, read now?]
      */
+    private function countersNotRefreshed(NetworkInterface $iface, InterfaceSample $sample, float $dt): bool
+    {
+        // Past this window an unchanged pair is a genuinely idle port, so it reads 0 as before.
+        $window = (float) config('mymate.poll.counter_stale_window', 60);
+
+        return $iface->last_in !== null && $iface->last_out !== null
+            && $sample->inOctets === $iface->last_in && $sample->outOctets === $iface->last_out
+            && $dt > 0.0 && $dt < $window;
+    }
+
     private function portRates(NetworkInterface $iface, ?array $counters, bool $wide, float $ts): array
     {
         if ($counters === null) {

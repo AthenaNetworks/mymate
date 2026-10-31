@@ -12,7 +12,14 @@ type counterState struct {
 	in, out uint64
 	ts      time.Time
 	is32    bool // the 32-bit ifTable octets (v1 / no HC counters), which wrap
+	// the rate last returned, carried while the device hasn't refreshed its counters
+	inBps, outBps *float64
 }
+
+// staleWindow: both counters unchanged since a read less than this long ago means the device
+// hasn't refreshed them yet (Cisco IOS-XE only does every ~20-30s, GitHub #55), not an idle port.
+// Same as the server's poll.counter_stale_window default.
+const staleWindow = 60 * time.Second
 
 // portState is the same idea for the port counters (packets / errors / discards), kept apart
 // because they're read on their own, slower, cadence over SNMP.
@@ -41,7 +48,15 @@ func (s *state) rate(ifID int, in, out uint64, is32 bool, now time.Time) (inBps,
 	defer s.mu.Unlock()
 
 	prev, ok := s.m[ifID]
-	s.m[ifID] = counterState{in: in, out: out, ts: now, is32: is32}
+	if ok && prev.is32 == is32 && in == prev.in && out == prev.out {
+		if age := now.Sub(prev.ts); age > 0 && age < staleWindow {
+			// Not refreshed yet: keep the old baseline so the next change is spread over the
+			// whole time since it, and repeat the last rate instead of a 0 then a 2x spike.
+			return prev.inBps, prev.outBps
+		}
+	}
+	cur := counterState{in: in, out: out, ts: now, is32: is32}
+	defer func() { s.m[ifID] = cur }()
 	if !ok || prev.is32 != is32 {
 		return nil, nil
 	}
@@ -56,6 +71,7 @@ func (s *state) rate(ifID int, in, out uint64, is32 bool, now time.Time) (inBps,
 	}
 	i := float64(di) * 8 / dt
 	o := float64(do) * 8 / dt
+	cur.inBps, cur.outBps = &i, &o
 	return &i, &o
 }
 

@@ -97,6 +97,10 @@ return [
         // hands the same counters over with every tick at no extra cost, so this doesn't
         // apply there. Remote agents follow the same cadence.
         'port_stats_interval' => (int) env('MYMATE_PORT_STATS_INTERVAL', 60),
+        // Some devices (Cisco IOS-XE) only refresh their SNMP octet counters every 20-30s. A read
+        // where both counters haven't moved since the last one, less than this many seconds ago,
+        // is taken as "not refreshed yet" and skipped instead of read as 0 (GitHub #55).
+        'counter_stale_window' => (int) env('MYMATE_COUNTER_STALE_WINDOW', 60),
 
         // Scale-out: throughput work is sharded into N batch jobs by
         // crc32(device_id) % shards, each guarded by a per-shard overlap lock.

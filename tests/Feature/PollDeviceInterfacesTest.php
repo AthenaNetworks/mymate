@@ -147,4 +147,71 @@ class PollDeviceInterfacesTest extends TestCase
         $this->assertNull($result->upsertRows[0]['last_in']);  // no counter state stored
         $this->assertNull($result->upsertRows[0]['last_ts']);
     }
+
+    // GitHub #55: Cisco IOS-XE refreshes its SNMP octet counters every ~20-30s. A read that sees
+    // them unchanged mustn't be a 0, with the whole jump then landing on the next read as ~2x.
+    public function test_unrefreshed_counters_carry_the_last_rate_and_keep_the_baseline(): void
+    {
+        [$device] = $this->deviceWithInterface([
+            'speed_mbps' => 100,
+            'last_in' => 5_000_000, 'last_out' => 7_000_000,
+            'last_ts' => Carbon::createFromTimestamp(self::T0),
+            'bps_in' => 60_000_000, 'bps_out' => 40_000_000,
+        ]);
+        $this->fakeDriver([1 => InterfaceSample::counters(5_000_000, 7_000_000, (float) (self::T0 + 12))]);
+
+        $result = app(PollDeviceInterfaces::class)($device);
+
+        $row = $result->upsertRows[0];
+        $this->assertSame(60_000_000, $row['bps_in']);
+        $this->assertSame(40_000_000, $row['bps_out']);
+        $this->assertEqualsWithDelta(60.0, $row['util_in'], 0.001);
+        $this->assertSame(5_000_000, $row['last_in']);
+        $this->assertSame(Carbon::createFromTimestamp(self::T0)->format('Y-m-d H:i:s.u'), $row['last_ts']);
+    }
+
+    public function test_the_next_refresh_is_spread_over_the_whole_time_since_the_baseline(): void
+    {
+        // Baseline kept from 24s ago (one unrefreshed read in between): 180 MB in arrived since.
+        [$device] = $this->deviceWithInterface([
+            'speed_mbps' => 100,
+            'last_in' => 0, 'last_out' => 0,
+            'last_ts' => Carbon::createFromTimestamp(self::T0),
+        ]);
+        $this->fakeDriver([1 => InterfaceSample::counters(180_000_000, 120_000_000, (float) (self::T0 + 24))]);
+
+        $row = app(PollDeviceInterfaces::class)($device)->upsertRows[0];
+
+        $this->assertSame(60_000_000, $row['bps_in']); // 180e6 * 8 / 24, not / 12
+        $this->assertSame(40_000_000, $row['bps_out']);
+    }
+
+    public function test_an_idle_port_still_reads_zero_after_the_stale_window(): void
+    {
+        [$device] = $this->deviceWithInterface([
+            'last_in' => 5_000, 'last_out' => 5_000,
+            'last_ts' => Carbon::createFromTimestamp(self::T0),
+            'bps_in' => 1_000, 'bps_out' => 1_000,
+        ]);
+        $this->fakeDriver([1 => InterfaceSample::counters(5_000, 5_000, (float) (self::T0 + 61))]);
+
+        $row = app(PollDeviceInterfaces::class)($device)->upsertRows[0];
+
+        $this->assertSame(0, $row['bps_in']);
+        $this->assertSame(0, $row['bps_out']);
+    }
+
+    public function test_rates_use_fractional_seconds(): void
+    {
+        [$device, $iface] = $this->deviceWithInterface(['last_in' => 0, 'last_out' => 0]);
+        // Stored and read back through the real column, so its precision is part of the test.
+        \Illuminate\Support\Facades\DB::table('interfaces')->where('id', $iface->id)
+            ->update(['last_ts' => Carbon::createFromTimestamp(self::T0 + 0.9)->format('Y-m-d H:i:s.u')]);
+        // 1.25 MB over 10.0s (not the 10.9s a truncated last_ts would give).
+        $this->fakeDriver([1 => InterfaceSample::counters(1_250_000, 1_250_000, self::T0 + 10.9)]);
+
+        $row = app(PollDeviceInterfaces::class)($device->fresh())->upsertRows[0];
+
+        $this->assertSame(1_000_000, $row['bps_in']);
+    }
 }

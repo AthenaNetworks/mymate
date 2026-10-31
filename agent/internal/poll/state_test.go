@@ -28,3 +28,32 @@ func TestStateRate(t *testing.T) {
 		t.Error("counter reset should yield no rate")
 	}
 }
+
+// GitHub #55: a device that only refreshes its counters every ~25s, polled every 12s.
+func TestStateRateRidesOutUnrefreshedCounters(t *testing.T) {
+	s := newState()
+	t0 := time.Unix(1_700_000_000, 0)
+	s.rate(1, 0, 0, false, t0)
+	in, _ := s.rate(1, 90_000_000, 0, false, t0.Add(12*time.Second)) // 60 Mbps
+	if in == nil || *in != 60_000_000 {
+		t.Fatalf("first rate = %v", in)
+	}
+
+	// Counters frozen 12s later: repeat the last rate, don't read 0.
+	in, _ = s.rate(1, 90_000_000, 0, false, t0.Add(24*time.Second))
+	if in == nil || *in != 60_000_000 {
+		t.Fatalf("unrefreshed read = %v, want the carried 60 Mbps", in)
+	}
+
+	// The next refresh covers both intervals: 180 MB over the 24s since the baseline, not 12s.
+	in, _ = s.rate(1, 270_000_000, 0, false, t0.Add(36*time.Second))
+	if in == nil || *in != 60_000_000 {
+		t.Fatalf("after refresh = %v, want 60 Mbps not a 2x spike", in)
+	}
+
+	// Genuinely idle past the window: 0.
+	in, _ = s.rate(1, 270_000_000, 0, false, t0.Add(36*time.Second+staleWindow))
+	if in == nil || *in != 0 {
+		t.Fatalf("idle port = %v, want 0", in)
+	}
+}

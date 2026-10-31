@@ -14,6 +14,13 @@ of commit subjects.
 ## [Unreleased]
 
 ### Fixed
+- **SNMP throughput on Cisco IOS-XE no longer swings between 0 and double (GitHub #55).** Those
+  routers only refresh their interface counters every 20-30 seconds, so a 12 second poll saw no change
+  one tick and two refreshes' worth the next. A read where neither counter has moved is now treated as
+  "not refreshed yet" and the rate is worked out over the whole gap, on the server and the agent. An
+  idle port still reads 0 after a minute (`MYMATE_COUNTER_STALE_WINDOW`).
+- **SNMP rates were up to ~8% low.** The time of the previous counter read was stored to the whole
+  second; it's now kept to the microsecond.
 - **Custom SNMP sensors work on devices behind a remote agent (GitHub #51).** They were only ever read
   from the central server, so agent devices never got a reading (and graphs of those sensors stayed
   empty). The agent now reads them on the same cadence, and "Test OID" on an agent device runs from
