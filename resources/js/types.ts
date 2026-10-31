@@ -366,6 +366,26 @@ export interface MapNote {
     size: MapNoteSize | null; // null = md
 }
 
+// An image in the library (GitHub #53): a device icon ("img:<id>") or a picture placed on maps.
+export interface ImageAsset {
+    id: number;
+    name: string;
+    mime: string;
+    version: string;
+    width: number; // natural size, px
+    height: number;
+}
+
+// A library image placed on a map. Height follows the image's aspect ratio.
+export interface MapImage {
+    id: number;
+    map_id: number;
+    x: number;
+    y: number;
+    width: number;
+    asset: ImageAsset | null;
+}
+
 // Aggregated count of real device links crossing between two child maps on an overview.
 export interface ChildDeviceLink {
     a_map_id: number;
@@ -384,6 +404,7 @@ export interface MapDetail {
     child_device_links: ChildDeviceLink[];
     map_links: MapLink[];
     map_notes: MapNote[];
+    map_images?: MapImage[]; // GitHub #53
     // Only on the public wallboard payload (GitHub #37). The logged-in canvas reads the background
     // from its own endpoint instead, so editing it never touches this object.
     background?: MapBackground | null;

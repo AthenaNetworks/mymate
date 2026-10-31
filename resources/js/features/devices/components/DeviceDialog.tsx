@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from '@phosphor-icons/react';
+import { ImageSquare, X } from '@phosphor-icons/react';
+import { iconImageId, imageAssetUrl, IMAGE_ICON_PREFIX } from '../../../lib/imageAssets';
+import { ImageLibraryDialog } from '../../maps/components/ImageLibraryDialog';
 import { useCreateDevice } from '../api/createDevice';
 import { useUpdateDevice } from '../api/updateDevice';
 import { useAgents } from '../../settings/api/agents';
@@ -71,6 +73,7 @@ export function DeviceDialog({
     const [pingSource, setPingSource] = useState<string>(device?.ping_source ?? '');
     const [icon, setIcon] = useState<string | null>(device?.icon ?? null);
     const [iconColor, setIconColor] = useState<string | null>(device?.icon_color ?? null);
+    const [pickImage, setPickImage] = useState(false); // custom icon from the image library (GitHub #53)
     // Latency quality thresholds (internet/upstream card). Empty string = use the card default.
     const [latencyGood, setLatencyGood] = useState<string>(device?.latency_good_ms != null ? String(device.latency_good_ms) : '');
     const [latencyBad, setLatencyBad] = useState<string>(device?.latency_bad_ms != null ? String(device.latency_bad_ms) : '');
@@ -348,6 +351,16 @@ export function DeviceDialog({
                                 >
                                     Auto
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPickImage(true)}
+                                    title="Use your own image from the library"
+                                    className={`grid h-8 place-items-center overflow-hidden rounded-lg ring-1 transition ${iconImageId(icon) !== null ? 'bg-emerald-500/20 ring-emerald-400/40' : 'text-white/50 ring-white/10 hover:bg-white/5'}`}
+                                >
+                                    {iconImageId(icon) !== null
+                                        ? <img src={imageAssetUrl(iconImageId(icon)!)} alt="" className="h-5 w-5 object-contain" />
+                                        : <ImageSquare weight="duotone" className="h-4 w-4" />}
+                                </button>
                                 {DEVICE_ICON_KEYS.map((key) => {
                                     const I = DEVICE_ICONS[key];
                                     return (
@@ -410,6 +423,16 @@ export function DeviceDialog({
                     {isError && <p className="text-xs text-rose-400/90">{serverError ?? "Couldn't save - check the fields (a valid, routable IP is required)."}</p>}
                 </div>
             </form>
+            {pickImage && (
+                <ImageLibraryDialog
+                    title="Pick an icon"
+                    onClose={() => setPickImage(false)}
+                    onPick={(asset) => {
+                        setIcon(`${IMAGE_ICON_PREFIX}${asset.id}`);
+                        setPickImage(false);
+                    }}
+                />
+            )}
         </div>,
         document.body,
     );

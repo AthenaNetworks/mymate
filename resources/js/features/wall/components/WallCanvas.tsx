@@ -13,6 +13,7 @@ import '@xyflow/react/dist/style.css';
 import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../../topology/nodes/DeviceNode';
 import { ChildMapNode } from '../../topology/nodes/ChildMapNode';
+import { MapImageNode } from '../../topology/nodes/MapImageNode';
 import { MapNoteNode } from '../../topology/nodes/MapNoteNode';
 import { UtilEdge } from '../../topology/edges/UtilEdge';
 import { MapLinkEdge } from '../../topology/edges/MapLinkEdge';
@@ -26,7 +27,7 @@ import type { DeviceStatus } from '../../../types';
 // Read-only presentation of one map for the public wallboard (GitHub #15). Reuses the exact node
 // and edge components the interactive canvas uses, so it looks identical, but builds everything
 // straight from the polled public data - no drag, no edit, no admin controls, no subscriptions.
-const nodeTypes = { device: DeviceNode, childmap: ChildMapNode, note: MapNoteNode };
+const nodeTypes = { device: DeviceNode, childmap: ChildMapNode, note: MapNoteNode, image: MapImageNode };
 const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge, childLink: ChildLinkEdge };
 
 const CHILD_PREFIX = 'childmap:';
@@ -53,6 +54,7 @@ export function WallCanvas() {
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
     const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]);
+    const mapImages = useMemo(() => mapDetail?.map_images ?? [], [mapDetail]); // GitHub #53
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]);
     const background = mapDetail?.background ?? null; // custom map image (GitHub #37)
 
@@ -107,8 +109,20 @@ export function WallCanvas() {
             connectable: false,
             data: { noteId: n.id, text: n.text, color: n.color, editable: false },
         }));
-        return [...deviceNodes, ...childNodes, ...noteNodes];
-    }, [mapDevices, posById, childMaps, mapNotes]);
+        const imageNodes: Node[] = mapImages.filter((i) => i.asset).map((i) => ({
+            id: `image:${i.id}`,
+            type: 'image',
+            position: { x: i.x, y: i.y },
+            zIndex: -1,
+            draggable: false,
+            connectable: false,
+            data: {
+                imageId: i.id, assetId: i.asset!.id, name: i.asset!.name, width: i.width,
+                aspect: i.asset!.width > 0 ? i.asset!.height / i.asset!.width : 1, editable: false,
+            },
+        }));
+        return [...imageNodes, ...deviceNodes, ...childNodes, ...noteNodes];
+    }, [mapDevices, posById, childMaps, mapNotes, mapImages]);
 
     const edges = useMemo<Edge[]>(() => {
         const utilEdges: Edge[] = intraLinks.map((l) => ({

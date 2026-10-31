@@ -112,6 +112,7 @@ class MapDetail
             ])->all();
         $mapLinks = MapLinkResource::collection($map->mapLinks()->get())->resolve();
         $mapNotes = $map->mapNotes()->get(['id', 'map_id', 'text', 'x', 'y', 'color', 'background', 'size'])->all();
+        $mapImages = $map->mapImages()->with('asset')->get()->map->meta()->values()->all();
 
         return [
             'id' => $map->id,
@@ -126,6 +127,7 @@ class MapDetail
             'child_device_links' => self::childDeviceLinks($map),
             'map_links' => $mapLinks,
             'map_notes' => $mapNotes,
+            'map_images' => $mapImages,
         ];
     }
 

@@ -17,6 +17,7 @@ use App\Models\Map;
 use App\Models\MapLayoutSnapshot;
 use App\Models\MapLink;
 use App\Models\MapLinkPosition;
+use App\Models\MapImage;
 use App\Models\MapNote;
 use App\Support\DeviceGeo;
 use App\Support\MapDetail;
@@ -128,6 +129,10 @@ class MapController extends Controller
             'notes.*.id' => ['required', 'integer', Rule::exists('map_notes', 'id')->where('map_id', $map->id)],
             'notes.*.x' => ['required', 'numeric'],
             'notes.*.y' => ['required', 'numeric'],
+            'images' => ['sometimes', 'array', 'max:2000'],
+            'images.*.id' => ['required', 'integer', Rule::exists('map_images', 'id')->where('map_id', $map->id)],
+            'images.*.x' => ['required', 'numeric'],
+            'images.*.y' => ['required', 'numeric'],
         ]);
 
         $saved = DB::transaction(function () use ($data, $map): int {
@@ -152,6 +157,10 @@ class MapController extends Controller
             }
             foreach ($data['notes'] ?? [] as $note) {
                 MapNote::whereKey($note['id'])->where('map_id', $map->id)->update(['x' => $note['x'], 'y' => $note['y']]);
+                $n++;
+            }
+            foreach ($data['images'] ?? [] as $image) {
+                MapImage::whereKey($image['id'])->where('map_id', $map->id)->update(['x' => $image['x'], 'y' => $image['y']]);
                 $n++;
             }
 
@@ -360,6 +369,47 @@ class MapController extends Controller
     {
         abort_unless($mapNote->map_id === $map->id, Response::HTTP_NOT_FOUND);
         $mapNote->delete();
+
+        return response()->noContent();
+    }
+
+    /** Place a library image on this map (GitHub #53). */
+    public function storeMapImage(Request $request, Map $map): JsonResponse
+    {
+        $data = $request->validate([
+            'image_asset_id' => ['required', 'integer', 'exists:image_assets,id'],
+            'x' => ['nullable', 'numeric'],
+            'y' => ['nullable', 'numeric'],
+            'width' => ['sometimes', 'numeric', 'between:8,4000'],
+        ]);
+
+        $image = $map->mapImages()->create([
+            'image_asset_id' => $data['image_asset_id'],
+            'x' => $data['x'] ?? 0, 'y' => $data['y'] ?? 0, 'width' => $data['width'] ?? 160,
+        ]);
+
+        return response()->json(['data' => $image->load('asset')->meta()], Response::HTTP_CREATED);
+    }
+
+    /** Move / resize a placed image. */
+    public function updateMapImage(Request $request, Map $map, MapImage $mapImage): JsonResponse
+    {
+        abort_unless($mapImage->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $data = $request->validate([
+            'x' => ['sometimes', 'numeric'],
+            'y' => ['sometimes', 'numeric'],
+            'width' => ['sometimes', 'numeric', 'between:8,4000'],
+        ]);
+        $mapImage->update($data);
+
+        return response()->json(['data' => $mapImage->load('asset')->meta()]);
+    }
+
+    /** Take an image off this map (the library keeps it). */
+    public function destroyMapImage(Map $map, MapImage $mapImage): Response
+    {
+        abort_unless($mapImage->map_id === $map->id, Response::HTTP_NOT_FOUND);
+        $mapImage->delete();
 
         return response()->noContent();
     }

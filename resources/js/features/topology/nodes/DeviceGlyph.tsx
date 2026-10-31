@@ -1,3 +1,4 @@
+import { iconImageId, imageAssetUrl } from '../../../lib/imageAssets';
 import { useEffect, useState } from 'react';
 import { Globe, WifiHigh, Broadcast, HardDrives, ShareNetwork, StackSimple, Cube, type Icon } from '@phosphor-icons/react';
 import type { DeviceType } from '../../../types';
@@ -114,7 +115,12 @@ export function DeviceGlyph({
         return () => clearTimeout(t);
     }, [errored, attempt]);
 
-    // An explicit operator-chosen icon wins over the auto photo/monogram/family glyph.
+    // An image from the library (GitHub #53) or an explicit operator-chosen glyph wins over the
+    // auto photo/monogram/family glyph.
+    const libraryImage = iconImageId(icon);
+    if (libraryImage !== null) {
+        return <img src={imageAssetUrl(libraryImage)} alt="" draggable={false} className={`${className} object-contain`} />;
+    }
     const Custom = deviceIcon(icon);
     if (Custom) {
         return <Custom weight="duotone" className={className} style={iconColor ? { color: iconColor } : undefined} />;

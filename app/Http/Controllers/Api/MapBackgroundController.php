@@ -4,11 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Map;
-use App\Support\SvgSanitizer;
+use App\Support\ImageUpload;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -28,13 +27,6 @@ class MapBackgroundController extends Controller
 {
     public const DIR = 'map-backgrounds';
 
-    /** mime => file extension for everything we accept. */
-    private const TYPES = [
-        'image/png' => 'png',
-        'image/jpeg' => 'jpg',
-        'image/webp' => 'webp',
-        'image/svg+xml' => 'svg',
-    ];
 
     public function show(Map $map): JsonResponse
     {
@@ -55,10 +47,10 @@ class MapBackgroundController extends Controller
             'image.max' => "The image is larger than the {$maxKb} KB limit.",
         ]);
 
-        [$mime, $bytes, $width, $height] = $this->inspect($request->file('image'));
+        [$mime, $bytes, $width, $height] = ImageUpload::inspect($request->file('image'), (int) config('mymate.map.background_max_px', 16384));
 
         $old = $map->background_path;
-        $path = self::DIR.'/'.$map->id.'-'.Str::random(16).'.'.self::TYPES[$mime];
+        $path = self::DIR.'/'.$map->id.'-'.Str::random(16).'.'.ImageUpload::TYPES[$mime];
         Storage::disk('local')->put($path, $bytes);
 
         // A fresh image keeps the admin's placement (swapping a floor plan for an updated one
@@ -140,74 +132,5 @@ class MapBackgroundController extends Controller
             'Content-Security-Policy' => "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
             'X-Content-Type-Options' => 'nosniff',
         ]);
-    }
-
-    /**
-     * Work out what the upload really is from its bytes, and hand back what to store.
-     *
-     * @return array{0:string, 1:string, 2:int, 3:int} [mime, bytes, width, height]
-     */
-    private function inspect(UploadedFile $file): array
-    {
-        $bytes = (string) file_get_contents($file->getRealPath());
-        $maxPx = (int) config('mymate.map.background_max_px', 16384);
-        $reject = fn (string $msg) => abort(response()->json([
-            'message' => $msg,
-            'errors' => ['image' => [$msg]],
-        ], Response::HTTP_UNPROCESSABLE_ENTITY));
-
-        $raster = match (true) {
-            str_starts_with($bytes, "\x89PNG\r\n\x1a\n") => 'image/png',
-            str_starts_with($bytes, "\xFF\xD8\xFF") => 'image/jpeg',
-            substr($bytes, 0, 4) === 'RIFF' && substr($bytes, 8, 4) === 'WEBP' => 'image/webp',
-            default => null,
-        };
-
-        if ($raster !== null) {
-            $info = @getimagesizefromstring($bytes);
-            if ($info === false || ($info['mime'] ?? null) !== $raster || $info[0] < 1 || $info[1] < 1) {
-                $reject('That image looks damaged - it could not be read.');
-            }
-            if ($info[0] > $maxPx || $info[1] > $maxPx) {
-                $reject("That image is too large - keep each side under {$maxPx} pixels.");
-            }
-
-            return [$raster, $bytes, (int) $info[0], (int) $info[1]];
-        }
-
-        // Not a raster we know; the only other thing we take is SVG.
-        $svg = SvgSanitizer::sanitize($bytes);
-        if ($svg === null) {
-            $reject('Use a PNG, JPEG, WebP or SVG image.');
-        }
-        [$w, $h] = $this->svgSize($svg);
-
-        return ['image/svg+xml', $svg, $w, $h];
-    }
-
-    /**
-     * An SVG's intrinsic size from width/height, else its viewBox, else a sane default. Only used to
-     * lay the image out before it loads - the browser still renders the vector at any scale.
-     *
-     * @return array{0:int, 1:int}
-     */
-    private function svgSize(string $svg): array
-    {
-        $doc = new \DOMDocument;
-        $doc->loadXML($svg, LIBXML_NONET);
-        $root = $doc->documentElement;
-
-        $num = fn (?string $v) => $v !== null && preg_match('/^\s*([0-9.]+)\s*(px)?\s*$/', $v, $m) ? (float) $m[1] : null;
-        $w = $num($root?->getAttribute('width') ?: null);
-        $h = $num($root?->getAttribute('height') ?: null);
-
-        if (($w === null || $h === null) && $root && preg_match('/^\s*[-0-9.]+[\s,]+[-0-9.]+[\s,]+([0-9.]+)[\s,]+([0-9.]+)\s*$/', $root->getAttribute('viewBox'), $m)) {
-            $w ??= (float) $m[1];
-            $h ??= (float) $m[2];
-        }
-
-        $clamp = fn (?float $v) => (int) max(1, min((int) config('mymate.map.background_max_px', 16384), round($v ?? 1000)));
-
-        return [$clamp($w), $clamp($h)];
     }
 }

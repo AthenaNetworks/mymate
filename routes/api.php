@@ -21,6 +21,7 @@ use App\Http\Controllers\Api\GeoController;
 use App\Http\Controllers\Api\GraphController;
 use App\Http\Controllers\Api\GraphSettingController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\ImageAssetController;
 use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\InterfaceController;
 use App\Http\Controllers\Api\InterfaceSampleController;
@@ -80,6 +81,7 @@ Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAre
         Route::get('links', [PublicWallController::class, 'links'])->name('public.wall.links');
         Route::get('map-config', [PublicWallController::class, 'mapConfig'])->name('public.wall.map-config');
         Route::get('background', [PublicWallController::class, 'background'])->name('public.wall.background');
+        Route::get('images/{imageAsset}', [PublicWallController::class, 'image'])->name('public.wall.image');
     });
 
 // Login/logout live on the web group (session + CSRF) - see routes/web.php.
@@ -332,6 +334,9 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
     Route::post('maps/{map}/notes', [MapController::class, 'storeMapNote'])->name('maps.notes.store');
     Route::patch('maps/{map}/notes/{mapNote}', [MapController::class, 'updateMapNote'])->name('maps.notes.update');
     Route::delete('maps/{map}/notes/{mapNote}', [MapController::class, 'destroyMapNote'])->name('maps.notes.destroy');
+    Route::post('maps/{map}/images', [MapController::class, 'storeMapImage'])->name('maps.images.store');
+    Route::patch('maps/{map}/images/{mapImage}', [MapController::class, 'updateMapImage'])->name('maps.images.update');
+    Route::delete('maps/{map}/images/{mapImage}', [MapController::class, 'destroyMapImage'])->name('maps.images.destroy');
     // Public read-only wallboard share links (GitHub #15). Listing is read; minting/revoking are
     // writes, so RestrictWritesToAdmins keeps them admin-only like the rest of the map API.
     Route::get('maps/{map}/shares', [MapShareController::class, 'index'])->name('maps.shares.index');
@@ -347,6 +352,16 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
             ->middleware('throttle:20,1')->name('maps.background.store');
         Route::patch('maps/{map}/background', [MapBackgroundController::class, 'update'])->name('maps.background.update');
         Route::delete('maps/{map}/background', [MapBackgroundController::class, 'destroy'])->name('maps.background.destroy');
+    });
+
+    // Image library (GitHub #53): device icons and pictures placed on maps. Named under maps.* so a
+    // restricted operator's map still draws them; changing the library is admin-only.
+    Route::get('image-assets', [ImageAssetController::class, 'index'])->name('maps.image-assets.index');
+    Route::get('image-assets/{imageAsset}/file', [ImageAssetController::class, 'file'])->name('maps.image-assets.file');
+    Route::middleware('admin')->group(function (): void {
+        Route::post('image-assets', [ImageAssetController::class, 'store'])
+            ->middleware('throttle:30,1')->name('maps.image-assets.store');
+        Route::delete('image-assets/{imageAsset}', [ImageAssetController::class, 'destroy'])->name('maps.image-assets.destroy');
     });
 
     // Outage timeline - ?device_id= , ?state=open|closed.

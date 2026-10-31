@@ -67,10 +67,11 @@ export interface MapPositionBatch {
     portals?: { link_id: number; x: number; y: number }[];
     child_maps?: { id: number; x: number; y: number }[];
     notes?: { id: number; x: number; y: number }[];
+    images?: { id: number; x: number; y: number }[]; // pictures placed on the map (GitHub #53)
 }
 
 export function isEmptyBatch(b: MapPositionBatch): boolean {
-    return !b.devices?.length && !b.portals?.length && !b.child_maps?.length && !b.notes?.length;
+    return !b.devices?.length && !b.portals?.length && !b.child_maps?.length && !b.notes?.length && !b.images?.length;
 }
 
 /** Fold a batch of moves into a cached MapDetail so the canvas and the cache agree immediately. */
@@ -102,6 +103,13 @@ function applyBatch(detail: MapDetail, b: MapPositionBatch): MapDetail {
         next.map_notes = detail.map_notes.map((n) => {
             const m = byId.get(n.id);
             return m ? { ...n, x: m.x, y: m.y } : n;
+        });
+    }
+    if (b.images?.length && detail.map_images) {
+        const byId = new Map(b.images.map((i) => [i.id, i]));
+        next.map_images = detail.map_images.map((i) => {
+            const m = byId.get(i.id);
+            return m ? { ...i, x: m.x, y: m.y } : i;
         });
     }
     return next;

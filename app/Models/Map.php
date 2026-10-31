@@ -110,6 +110,12 @@ class Map extends Model
         return $this->hasMany(MapNote::class);
     }
 
+    /** Library images placed on this map (GitHub #53). */
+    public function mapImages(): HasMany
+    {
+        return $this->hasMany(MapImage::class);
+    }
+
     /** Public read-only wallboard links for this map (GitHub #15). */
     public function shares(): HasMany
     {

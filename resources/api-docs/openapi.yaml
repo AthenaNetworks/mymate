@@ -1236,6 +1236,124 @@ paths:
       description: Admin only.
       responses:
         "204": { description: Deleted. }
+  /maps/{map}/images:
+    parameters: [ { $ref: "#/components/parameters/MapId" } ]
+    post:
+      tags: [Maps]
+      summary: Place a library image on a map
+      description: Admin only. Height follows the image's aspect ratio.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image_asset_id]
+              properties:
+                image_asset_id: { type: integer }
+                x: { type: number }
+                y: { type: number }
+                width: { type: number, minimum: 8, maximum: 4000, default: 160 }
+      responses:
+        "201":
+          description: Placed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MapImage" } }
+  /maps/{map}/images/{mapImage}:
+    parameters:
+      - $ref: "#/components/parameters/MapId"
+      - name: mapImage
+        in: path
+        required: true
+        schema: { type: integer }
+    patch:
+      tags: [Maps]
+      summary: Move or resize a placed image
+      description: Admin only.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                x: { type: number }
+                y: { type: number }
+                width: { type: number, minimum: 8, maximum: 4000 }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/MapImage" } }
+    delete:
+      tags: [Maps]
+      summary: Take an image off a map
+      description: Admin only. The image stays in the library.
+      responses:
+        "204": { description: Removed. }
+  /image-assets:
+    get:
+      tags: [Maps]
+      summary: List the image library
+      description: Images usable as a device icon (`icon` = `img:<id>`) or placed on maps.
+      responses:
+        "200":
+          description: The library.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: array, items: { $ref: "#/components/schemas/ImageAsset" } } }
+    post:
+      tags: [Maps]
+      summary: Upload an image to the library
+      description: Admin only. PNG, JPEG, WebP or SVG, checked by content; SVG is sanitised.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+                name: { type: string, maxLength: 120 }
+      responses:
+        "201":
+          description: Uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/ImageAsset" } }
+  /image-assets/{imageAsset}:
+    parameters:
+      - name: imageAsset
+        in: path
+        required: true
+        schema: { type: integer }
+    delete:
+      tags: [Maps]
+      summary: Delete an image from the library
+      description: Admin only. Removes it from every map, and devices using it as their icon go back to the automatic one.
+      responses:
+        "204": { description: Deleted. }
+  /image-assets/{imageAsset}/file:
+    parameters:
+      - name: imageAsset
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Maps]
+      summary: The image file
+      responses:
+        "200": { description: The image, served with a sandboxed CSP. }
   /maps/{map}/shares:
     parameters: [ { $ref: "#/components/parameters/MapId" } ]
     get:
@@ -2653,6 +2771,24 @@ components:
         b_handle: { type: string, nullable: true }
         media_type: { type: string, nullable: true, enum: [fiber, ethernet, wireless, other, null] }
         label: { type: string, nullable: true }
+    ImageAsset:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        mime: { type: string }
+        version: { type: string }
+        width: { type: integer }
+        height: { type: integer }
+    MapImage:
+      type: object
+      properties:
+        id: { type: integer }
+        map_id: { type: integer }
+        x: { type: number }
+        y: { type: number }
+        width: { type: number }
+        asset: { $ref: "#/components/schemas/ImageAsset" }
     MapNote:
       type: object
       properties:

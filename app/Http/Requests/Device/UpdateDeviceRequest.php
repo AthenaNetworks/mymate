@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Device;
 
+use App\Models\ImageAsset;
 use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Rules\ManageableIp;
@@ -45,7 +46,13 @@ class UpdateDeviceRequest extends FormRequest
             'site_id' => ['sometimes', 'nullable', 'integer', 'exists:sites,id'],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
             // Icon override: a named glyph key + a hex colour (both nullable = auto).
-            'icon' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'icon' => ['sometimes', 'nullable', 'string', 'max:40', function (string $attr, mixed $value, \Closure $fail): void {
+                // "img:<id>" points at an image in the library (GitHub #53) - it has to be there.
+                if (is_string($value) && str_starts_with($value, ImageAsset::ICON_PREFIX)
+                    && ! ImageAsset::whereKey((int) substr($value, strlen(ImageAsset::ICON_PREFIX)))->exists()) {
+                    $fail('That image is no longer in the library.');
+                }
+            }],
             'icon_color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'vendor' => ['sometimes', 'nullable', 'string', 'max:255'],
             'model' => ['sometimes', 'nullable', 'string', 'max:255'],

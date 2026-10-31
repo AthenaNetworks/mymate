@@ -217,6 +217,10 @@ return [
         // largest side (px) we'll accept, so a 30k-pixel scan can't stall every browser that opens it.
         'background_max_kb' => (int) env('MYMATE_MAP_BACKGROUND_MAX_KB', 10240),
         'background_max_px' => (int) env('MYMATE_MAP_BACKGROUND_MAX_PX', 16384),
+        // The image library (device icons, pictures on maps, GitHub #53): smaller limits, these
+        // are icons and logos.
+        'image_max_kb' => (int) env('MYMATE_MAP_IMAGE_MAX_KB', 2048),
+        'image_max_px' => (int) env('MYMATE_MAP_IMAGE_MAX_PX', 4096),
     ],
 
     // Public wallboard embedding (GitHub #15). Default origins allowed to frame /wall/{token} in an

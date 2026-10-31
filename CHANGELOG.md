@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- **Your own images: custom device icons and pictures on the map (GitHub #53).** Upload PNG, JPEG,
+  WebP or SVG images to a shared library. Pick one as a device's icon (the new image button in the icon
+  picker), or use "Add image" on the map toolbar to place a logo, legend or photo. Placed images drag
+  like any card and resize from the corners. Wallboards show them too, and a public wallboard only
+  serves the images its map actually uses. SVGs are sanitised the same way as map backgrounds.
 - **Tile a map's background image (GitHub #53).** A new "Tile it across the whole map" option in the
   background panel repeats the image like wallpaper, on the map and its wallboard.
 - **Device alias (GitHub #53).** Give a device a friendly name and the map card, the geo map, the

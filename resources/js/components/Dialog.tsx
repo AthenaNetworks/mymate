@@ -8,7 +8,7 @@ import { X } from '@phosphor-icons/react';
  * (backdrop blur - floating glass card - emerald primary). Escape and the backdrop
  * both dismiss; Enter submits the prompt.
  */
-function ModalShell({ icon, title, onClose, children }: { icon?: ReactNode; title: string; onClose: () => void; children: ReactNode }) {
+export function ModalShell({ icon, title, onClose, children }: { icon?: ReactNode; title: string; onClose: () => void; children: ReactNode }) {
     // Escape closes, regardless of focus.
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {

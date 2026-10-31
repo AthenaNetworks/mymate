@@ -14,13 +14,16 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Cube, DotsThreeVertical, Globe, Graph, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Cube, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { ChildMapNode } from '../nodes/ChildMapNode';
 import { MapNoteNode, type MapNoteStylePatch } from '../nodes/MapNoteNode';
+import { MapImageNode } from '../nodes/MapImageNode';
+import { ImageLibraryDialog } from '../../maps/components/ImageLibraryDialog';
+import { useCreateMapImage, useDeleteMapImage, useUpdateMapImage } from '../../maps/api/imageAssets';
 import { UtilEdge, type UtilEdgeData } from '../edges/UtilEdge';
 import { MapLinkEdge } from '../edges/MapLinkEdge';
 import { ChildLinkEdge } from '../edges/ChildLinkEdge';
@@ -68,7 +71,7 @@ function sameFace(a: FaceSensorReading[], b: FaceSensorReading[]): boolean {
 }
 
 // Defined at module level so React Flow doesn\'t re-render the whole graph each render.
-const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode, note: MapNoteNode };
+const nodeTypes = { device: DeviceNode, portal: MapPortalNode, childmap: ChildMapNode, note: MapNoteNode, image: MapImageNode };
 const edgeTypes = { util: UtilEdge, mapLink: MapLinkEdge, childLink: ChildLinkEdge };
 
 // Child-map nodes are keyed with this prefix so they never collide with device ids.
@@ -79,6 +82,9 @@ const childMapId = (nodeId: string) => Number(nodeId.slice(CHILD_PREFIX.length))
 const NOTE_PREFIX = 'note:';
 const noteNodeId = (id: number) => `${NOTE_PREFIX}${id}`;
 const noteId = (nodeId: string) => Number(nodeId.slice(NOTE_PREFIX.length));
+const IMAGE_PREFIX = 'image:'; // pictures placed on the map (GitHub #53)
+const imageNodeId = (id: number) => `${IMAGE_PREFIX}${id}`;
+const imageId = (nodeId: string) => Number(nodeId.slice(IMAGE_PREFIX.length));
 
 const miniColor: Record<DeviceStatus, string> = {
     up: '#34d399',
@@ -133,6 +139,9 @@ export function MapCanvas() {
     const createMapNote = useCreateMapNote();
     const updateMapNote = useUpdateMapNote();
     const deleteMapNote = useDeleteMapNote();
+    const createMapImage = useCreateMapImage();
+    const updateMapImage = useUpdateMapImage();
+    const deleteMapImage = useDeleteMapImage();
     const deleteLink = useDeleteLink();
     const addToMap = useAddDeviceToMap();
     const removeFromMap = useRemoveDeviceFromMap();
@@ -151,6 +160,7 @@ export function MapCanvas() {
     const [historyLinkId, setHistoryLinkId] = useState<number | null>(null);
     const [deleteLinkId, setDeleteLinkId] = useState<number | null>(null);
     const [addChildMap, setAddChildMap] = useState(false); // "Add map" dialog (place a child map)
+    const [addImage, setAddImage] = useState(false); // image library picker (GitHub #53)
     const [deleteMapLinkId, setDeleteMapLinkId] = useState<number | null>(null);
     const [editMapLinkId, setEditMapLinkId] = useState<number | null>(null);
     const [detachChildId, setDetachChildId] = useState<number | null>(null); // remove a child-map node from this canvas
@@ -188,6 +198,7 @@ export function MapCanvas() {
     const childMaps = useMemo(() => mapDetail?.child_maps ?? [], [mapDetail]);
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
     const mapNotes = useMemo(() => mapDetail?.map_notes ?? [], [mapDetail]); // free-text annotations (GitHub #11)
+    const mapImages = useMemo(() => mapDetail?.map_images ?? [], [mapDetail]); // placed pictures (GitHub #53)
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]); // real device links crossing child maps (GitHub #9)
 
     // Live throughput -> util map (folded by useMapChannel from InterfaceUtilUpdated).
@@ -356,6 +367,8 @@ export function MapCanvas() {
     childMapsRef.current = childMaps;
     const mapNotesRef = useRef(mapNotes);
     mapNotesRef.current = mapNotes;
+    const mapImagesRef = useRef(mapImages);
+    mapImagesRef.current = mapImages;
     const faceSensorsRef = useRef(faceSensors);
     faceSensorsRef.current = faceSensors;
     const activeMapIdRef = useRef(activeMapId);
@@ -378,8 +391,10 @@ export function MapCanvas() {
             '#' +
             childMaps.map((c) => `${c.id}@${Math.round(c.node_x ?? 0)},${Math.round(c.node_y ?? 0)}`).join('|') +
             '#' +
-            mapNotes.map((n) => `${n.id}@${Math.round(n.x)},${Math.round(n.y)}:${n.color ?? ''}:${n.background ?? ''}:${n.size ?? ''}:${n.text}`).join('|'),
-        [mapDevices, posById, interMapLinks, childMaps, mapNotes],
+            mapNotes.map((n) => `${n.id}@${Math.round(n.x)},${Math.round(n.y)}:${n.color ?? ''}:${n.background ?? ''}:${n.size ?? ''}:${n.text}`).join('|') +
+            '#' +
+            mapImages.map((i) => `${i.id}@${Math.round(i.x)},${Math.round(i.y)}:${Math.round(i.width)}`).join('|'),
+        [mapDevices, posById, interMapLinks, childMaps, mapNotes, mapImages],
     );
 
     // Map devices -> nodes, positioned per-map; plus a portal node per inter-map link. Rebuilds
@@ -457,13 +472,29 @@ export function MapCanvas() {
             draggable: canDrag,
             selectable: true,
         }));
+        // Pictures from the image library (GitHub #53), drawn under the devices.
+        const imageNodes: Node[] = mapImagesRef.current.filter((i) => i.asset).map((i) => ({
+            id: imageNodeId(i.id),
+            type: 'image',
+            position: { x: i.x, y: i.y },
+            zIndex: -1,
+            data: {
+                imageId: i.id, assetId: i.asset!.id, name: i.asset!.name, width: i.width,
+                aspect: i.asset!.width > 0 ? i.asset!.height / i.asset!.width : 1,
+                editable: isAdmin,
+                onResized: isAdmin ? (width: number, x: number, y: number) => { const m = activeMapIdRef.current; if (m !== null) updateMapImage.mutate({ mapId: m, imageId: i.id, width, x, y }); } : undefined,
+                onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapImage.mutate({ mapId: m, imageId: i.id }); } : undefined,
+            },
+            draggable: canDrag,
+            selectable: true,
+        }));
         // Carry each node's selection and measured size across the rebuild. A position save patches
         // the cached positions (and so membershipKey) the moment a drag ends; a fresh node object
         // without `measured` makes React Flow re-measure it (edges jump until it does), and losing
         // the selection would make a group impossible to nudge twice in a row (GitHub #44).
         setNodes((prev) => {
             const prevById = new Map(prev.map((n) => [n.id, n]));
-            return [...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes].map((n) => {
+            return [...imageNodes, ...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes].map((n) => {
                 const p = prevById.get(n.id);
                 return p ? { ...n, measured: p.measured, selected: p.selected } : n;
             });
@@ -742,13 +773,14 @@ export function MapCanvas() {
                     // under the cursor as `node` - the full set is the third argument. Persist ALL of
                     // them, in one request; saving only `node` left the rest of the group unsaved and
                     // they snapped back on the next refetch (GitHub #44).
-                    const batch: Required<MapPositionBatch> = { devices: [], portals: [], child_maps: [], notes: [] };
+                    const batch: Required<MapPositionBatch> = { devices: [], portals: [], child_maps: [], notes: [], images: [] };
                     for (const n of dragged.length ? dragged : [node]) {
                         const { x, y } = n.position;
                         if (n.type === 'device') batch.devices.push({ id: Number(n.id), x, y });
                         else if (n.type === 'portal') { const linkId = Number(n.id.replace('portal:', '')); if (linkId) batch.portals.push({ link_id: linkId, x, y }); }
                         else if (n.type === 'childmap') batch.child_maps.push({ id: childMapId(n.id), x, y });
                         else if (n.type === 'note') batch.notes.push({ id: noteId(n.id), x, y });
+                        else if (n.type === 'image') batch.images.push({ id: imageId(n.id), x, y });
                     }
                     if (!isEmptyBatch(batch)) savePositions.mutate({ mapId: activeMapId, ...batch });
                 }}
@@ -961,6 +993,14 @@ export function MapCanvas() {
                             >
                                 <Note weight="light" className="h-4 w-4 text-amber-300" />
                                 <span className="hidden md:inline">Add note</span>
+                            </button>
+                            <button
+                                onClick={() => setAddImage(true)}
+                                title="Place a picture on this map - a logo, a legend, a photo"
+                                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium text-white/75 transition-colors duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                            >
+                                <ImageSquare weight="light" className="h-4 w-4 text-sky-300" />
+                                <span className="hidden md:inline">Add image</span>
                             </button>
                         </div>
                     )}
@@ -1208,6 +1248,18 @@ export function MapCanvas() {
                 })()}
 
             {/* Place a map as a node on this overview (GitHub #9). */}
+            {addImage && activeMapId !== null && (
+                <ImageLibraryDialog
+                    title="Add an image to this map"
+                    onClose={() => setAddImage(false)}
+                    onPick={(asset) => {
+                        const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                        const width = Math.min(240, Math.max(32, asset.width));
+                        createMapImage.mutate({ mapId: activeMapId, image_asset_id: asset.id, x: pos.x - width / 2, y: pos.y, width });
+                        setAddImage(false);
+                    }}
+                />
+            )}
             {addChildMap && activeMapId !== null && (
                 <AddChildMapDialog mapId={activeMapId} onClose={() => setAddChildMap(false)} />
             )}

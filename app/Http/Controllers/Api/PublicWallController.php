@@ -6,6 +6,7 @@ use App\Actions\Devices\FetchMikrotikIcon;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LinkResource;
 use App\Models\Device;
+use App\Models\ImageAsset;
 use App\Models\Link;
 use App\Models\MapShare;
 use App\Support\DeviceGeo;
@@ -53,6 +54,21 @@ class PublicWallController extends Controller
     public function background(string $token)
     {
         return MapBackgroundController::serve($this->share($token)->map);
+    }
+
+    /**
+     * A library image (GitHub #53), only when the shared map actually uses it: placed on the map,
+     * or the icon of a device on it. Anything else in the library stays private.
+     */
+    public function image(string $token, ImageAsset $imageAsset)
+    {
+        $map = $this->share($token)->map;
+        $used = $map->mapImages()->where('image_asset_id', $imageAsset->id)->exists()
+            || Device::whereIn('id', $map->positions()->select('device_id'))
+                ->where('icon', ImageAsset::ICON_PREFIX.$imageAsset->id)->exists();
+        abort_unless($used, 404);
+
+        return ImageAssetController::serve($imageAsset);
     }
 
     /**
