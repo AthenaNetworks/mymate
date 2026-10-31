@@ -10,6 +10,9 @@ web app you can run anywhere.
 
 **Free and open source, MIT licensed.** No device limits, no license keys, nothing to unlock.
 
+**Join the community:** come and say hi in the [My Mate Facebook group](https://www.facebook.com/groups/1469496181701680)
+to ask questions, share your maps and setups, and hear about new releases first.
+
 ## What it does
 
 - Up/down monitoring with a batched fping sweep every few seconds, pushed live to the map.
@@ -166,6 +169,13 @@ running RouterOS 7 can host the agent itself, see [agent/ROUTEROS.md](agent/ROUT
 | [agent/README.md](agent/README.md) | The remote agent: deploy, configure, discover |
 | [agent/ROUTEROS.md](agent/ROUTEROS.md) | Running the agent in a MikroTik RouterOS 7 container |
 | [deploy/demo/README.md](deploy/demo/README.md) | The public sales demo: synthetic topology, simulator, deploy/troubleshooting |
+
+## Community
+
+The [My Mate Facebook group](https://www.facebook.com/groups/1469496181701680) is the place to get
+help, swap tips with other operators, show off your maps and suggest what comes next. If My Mate is
+useful to you, join up and share it with anyone still running The Dude. Bugs and feature requests
+are best raised as [GitHub issues](../../issues) so they don't get lost.
 
 ## Contributing
 
