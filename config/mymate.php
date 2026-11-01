@@ -480,6 +480,14 @@ return [
         ],
     ],
 
+    // Command runs are template-only unless an administrator explicitly enables the
+    // compatibility escape hatch in configuration. Arbitrary commands are disabled by default.
+    'command' => [
+        'allow_free_text' => (bool) env('MYMATE_COMMAND_ALLOW_FREE_TEXT', false),
+        'output_retention_days' => (int) env('MYMATE_COMMAND_OUTPUT_RETENTION_DAYS', 30),
+        'stale_after_seconds' => (int) env('MYMATE_COMMAND_STALE_AFTER_SECONDS', 300),
+    ],
+
     // Device config backups. My Mate is the control plane for the
     // external **Rusted** backup engine (a Go sidecar that captures configs over SSH,
     // versions them in git, and exposes an HTTP API). These are the *defaults* - the

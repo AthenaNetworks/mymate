@@ -165,6 +165,29 @@ class RustedClient
     }
 
     /**
+     * Execute one non-interactive SSH command on a registered device.
+     *
+     * @return array{device:string,status:string,output:string,duration_ms:int}
+     */
+    public function execute(string $name, string $command, int $timeout = 30): array
+    {
+        $res = $this->client()
+            ->timeout(max(15, $timeout + 15))
+            ->post('/api/devices/'.rawurlencode($name).'/execute', [
+                'command' => $command,
+                'timeout' => $timeout,
+            ]);
+        $body = $res->json();
+        if (is_array($body) && isset($body['status'])) {
+            return $body;
+        }
+
+        $res->throw();
+
+        return is_array($body) ? $body : [];
+    }
+
+    /**
      * Trigger a backup now and return Rusted's result ({status, message, commit, bytes, ...}).
      * Synchronous - Rusted SSHes to the device and captures the config before responding,
      * which is why callers run this on the isolated `backup` queue with a long timeout.

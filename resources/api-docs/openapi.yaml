@@ -85,6 +85,8 @@ tags:
     description: Custom SNMP OID sensors.
   - name: Backups
     description: Device config backups (via the Rusted engine).
+  - name: Commands
+    description: Admin-only bounded SSH command templates and runs.
   - name: Discovery
     description: Auto-discovered devices awaiting review.
   - name: Imports
@@ -139,6 +141,88 @@ x-tagGroups:
     tags: [System]
 
 paths:
+  # ------------------------------------------------------------------ Command execution
+  /command-templates:
+    get:
+      tags: [Commands]
+      summary: List command templates
+      description: Admin only. Templates are the default command execution path.
+      responses:
+        "200": { description: Templates returned. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Commands]
+      summary: Create a command template
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/CommandTemplateWrite" } }
+      responses:
+        "201": { description: Template created. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /command-templates/{commandTemplate}:
+    parameters:
+      - name: commandTemplate
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [Commands]
+      summary: Update a command template
+      description: Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/CommandTemplateWrite" } }
+      responses:
+        "200": { description: Template updated. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Commands]
+      summary: Delete a command template
+      description: Admin only.
+      responses:
+        "200": { description: Template deleted. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+  /command-runs:
+    post:
+      tags: [Commands]
+      summary: Start a command run
+      description: Admin only. Requires a confirmed enabled template and exact version/hash confirmation. Free-text commands are disabled by default.
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: "#/components/schemas/CommandRunStart" } }
+      responses:
+        "202": { description: One queued job per selected device. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /command-runs/{runId}:
+    parameters:
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Commands]
+      summary: Show a command run
+      description: Admin only.
+      responses:
+        "200": { description: Current per-device run snapshot. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Run not found or expired. }
+    delete:
+      tags: [Commands]
+      summary: Request stopping a command run
+      description: Admin only. Stop is honored only before an individual device command starts.
+      responses:
+        "200": { description: Stop requested. }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Run not found or expired. }
+
   # ------------------------------------------------------------------ Devices
   /devices:
     get:
@@ -2407,6 +2491,42 @@ components:
           schema: { $ref: "#/components/schemas/ValidationError" }
 
   schemas:
+    CommandTemplateWrite:
+      type: object
+      required: [name, command, timeout]
+      properties:
+        name: { type: string, maxLength: 120 }
+        command: { type: string, maxLength: 4096 }
+        timeout: { type: integer, minimum: 1, maximum: 60 }
+        enabled: { type: boolean, default: true }
+    CommandRunStart:
+      type: object
+      required: [template_id, template_updated_at, command_hash, device_ids, confirm]
+      properties:
+        template_id: { type: integer }
+        template_updated_at: { type: string, format: date-time }
+        command_hash: { type: string, minLength: 64, maxLength: 64 }
+        device_ids: { type: array, minItems: 1, maxItems: 100, items: { type: integer } }
+        timeout: { type: integer, minimum: 1, maximum: 60 }
+        confirm: { type: boolean, const: true }
+        command: { type: string, maxLength: 4096, description: "Only accepted when free-text execution is explicitly enabled." }
+    CommandRunTarget:
+      type: object
+      properties:
+        device_id: { type: integer, nullable: true }
+        device_name: { type: string }
+        status: { type: string, enum: [queued, running, success, failed, stopped] }
+        output: { type: string, nullable: true, description: "Expired output is pruned by retention policy." }
+        error: { type: string, nullable: true }
+        duration_ms: { type: integer, nullable: true }
+    CommandRun:
+      type: object
+      properties:
+        run_id: { type: string, format: uuid }
+        kind: { type: string, const: command }
+        status: { type: string, enum: [running, done] }
+        result: { type: object }
+
     Error:
       type: object
       properties:

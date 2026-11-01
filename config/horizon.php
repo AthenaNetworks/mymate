@@ -1,5 +1,10 @@
 <?php
 
+use App\Jobs\EvaluateAlertsJob;
+use App\Jobs\PingSweepJob;
+use App\Jobs\PollDeviceMetricsBatchJob;
+use App\Jobs\PollInterfacesBatchJob;
+use App\Jobs\PollSensorsBatchJob;
 use Illuminate\Support\Str;
 
 return [
@@ -138,11 +143,11 @@ return [
     // lists (and the Redis they cost) with routine, uninteresting successes. Silence them so
     // Horizon stops recording their completed metadata - they still show up if they FAIL.
     'silenced' => [
-        \App\Jobs\PingSweepJob::class,
-        \App\Jobs\PollInterfacesBatchJob::class,
-        \App\Jobs\PollDeviceMetricsBatchJob::class,
-        \App\Jobs\PollSensorsBatchJob::class,
-        \App\Jobs\EvaluateAlertsJob::class,
+        PingSweepJob::class,
+        PollInterfacesBatchJob::class,
+        PollDeviceMetricsBatchJob::class,
+        PollSensorsBatchJob::class,
+        EvaluateAlertsJob::class,
     ],
 
     'silenced_tags' => [
@@ -321,6 +326,22 @@ return [
             'nice' => 0,
         ],
 
+        // SSH command runs: dedicated capacity and a lease longer than the 240-second worker
+        // ceiling, so a slow router command cannot be reclaimed and executed twice.
+        'supervisor-command' => [
+            'connection' => 'redis-long',
+            'queue' => ['command'],
+            'balance' => 'auto',
+            'autoScalingStrategy' => 'time',
+            'maxProcesses' => (int) env('MYMATE_COMMAND_PROCESSES', 4),
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 128,
+            'tries' => 1,
+            'timeout' => 240,
+            'nice' => 0,
+        ],
+
         // Dude imports (FR-Dude): isolated + long timeout - extraction (Python) plus
         // upserting millions of history rows must never block polling/discovery.
         'supervisor-import' => [
@@ -349,6 +370,7 @@ return [
             'supervisor-upgrade' => ['maxProcesses' => 4],
             'supervisor-backup' => ['maxProcesses' => 3],
             'supervisor-trace' => ['maxProcesses' => 3],
+            'supervisor-command' => ['maxProcesses' => 8],
             'supervisor-import' => ['maxProcesses' => 1],
             'supervisor-agent' => ['maxProcesses' => 1],
         ],
@@ -360,6 +382,7 @@ return [
             'supervisor-upgrade' => ['maxProcesses' => 1],
             'supervisor-backup' => ['maxProcesses' => 1],
             'supervisor-trace' => ['maxProcesses' => 1],
+            'supervisor-command' => ['maxProcesses' => 2],
             'supervisor-import' => ['maxProcesses' => 1],
             'supervisor-agent' => ['maxProcesses' => 1],
         ],

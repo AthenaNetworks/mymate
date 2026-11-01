@@ -39,6 +39,14 @@ Schedule::command('mymate:cmr:sync')->everyMinute()->name('cmr-sync')->withoutOv
 // Sweep cached RouterOS upgrade packages past the retention window (default 90 days).
 Schedule::command('mymate:routeros:prune-packages')->daily()->name('routeros-package-prune')->withoutOverlapping();
 
+// Reconcile targets abandoned by a worker timeout. The target claim is durable, so this keeps a
+// killed worker from leaving a run permanently stuck in `running`.
+Schedule::command('mymate:command-runs:reconcile')->everyMinute()->name('command-run-reconcile')->withoutOverlapping();
+
+// Command output may contain router credentials or other sensitive values. Keep the audit row but
+// enforce a bounded retention window for captured output and error text.
+Schedule::command('mymate:command-runs:prune-output')->daily()->name('command-output-prune')->withoutOverlapping();
+
 // Reap silent agents. A connected agent heartbeats via the hub keepalive every ~30s; if an
 // "online" one hasn't been heard from in 90s its socket is dead (e.g. a blackholed link that
 // never sent a TCP close, which the raised /agent proxy timeout would otherwise mask for up to

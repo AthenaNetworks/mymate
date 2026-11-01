@@ -6,8 +6,9 @@ import { SweepTool } from './SweepTool';
 import { PortScanTool } from './PortScanTool';
 import { SubnetCalculator } from './SubnetCalculator';
 import { BgpLookup } from './BgpLookup';
+import { CommandRunner } from './CommandRunner';
 
-type TabId = 'ping' | 'trace' | 'sweep' | 'portscan' | 'calc' | 'bgp';
+type TabId = 'ping' | 'trace' | 'sweep' | 'portscan' | 'calc' | 'bgp' | 'command';
 
 const TABS: { id: TabId; label: string; icon: Icon }[] = [
     { id: 'ping', label: 'Ping', icon: Broadcast },
@@ -16,6 +17,7 @@ const TABS: { id: TabId; label: string; icon: Icon }[] = [
     { id: 'portscan', label: 'Port map', icon: GridFour },
     { id: 'calc', label: 'Subnet calc', icon: Calculator },
     { id: 'bgp', label: 'BGP lookup', icon: Globe },
+    { id: 'command', label: 'SSH command', icon: Wrench },
 ];
 
 /**
@@ -66,6 +68,7 @@ export function ToolsView() {
                     {tab === 'portscan' && <PortScanTool />}
                     {tab === 'calc' && <SubnetCalculator />}
                     {tab === 'bgp' && <BgpLookup />}
+                    {tab === 'command' && <CommandRunner />}
                 </div>
             </div>
         </div>
