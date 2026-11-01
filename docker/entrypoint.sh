@@ -105,6 +105,11 @@ if [ -x /usr/local/bin/rusted ]; then
         rusted --config /etc/rusted/config.toml init >/dev/null 2>&1 || true
         chown -R www-data:www-data /etc/rusted /var/lib/rusted 2>/dev/null || true
     fi
+    # My Mate runs SSH commands through Rusted's execute API, which is off unless api_exec = true.
+    # Add it to new and existing configs, but leave an api_exec line that's already set alone.
+    if [ -f /etc/rusted/config.toml ] && ! grep -qE '^[[:space:]]*api_exec[[:space:]]*=' /etc/rusted/config.toml; then
+        printf '\n# Lets My Mate run SSH commands on devices through the API.\napi_exec = true\n' >> /etc/rusted/config.toml
+    fi
     # Always re-point My Mate at the current token so the two never drift apart.
     php artisan mymate:backup:configure --url http://127.0.0.1:8410 --from-rusted /etc/rusted/config.toml >/dev/null 2>&1 \
         || echo "mymate: backup engine not auto-configured - set it in Settings"

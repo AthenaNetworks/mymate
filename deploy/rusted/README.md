@@ -90,6 +90,9 @@ Key points:
   token never leaves the host and Rusted needs no public exposure/TLS. (Change from the
   stock `:8080`, which is taken on this box.)
 - **`api_token`** - the value My Mate must send (next step); copy it from the config.
+- **`api_exec = true`** - turns on Rusted's command execution API, which My Mate uses to run
+  SSH commands on devices. Rusted ships it off; `provision.sh` adds the line (on upgrades too)
+  unless an `api_exec` line is already there, so set `api_exec = false` to keep it off.
 
 ## 3. Run it as a service
 

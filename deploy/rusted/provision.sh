@@ -79,6 +79,15 @@ if [ ! -f "$CONFIG" ]; then
 else
     say "Config already at $CONFIG (leaving it untouched)"
 fi
+# My Mate runs SSH commands through Rusted's execute API, which Rusted keeps off unless
+# api_exec = true. Add it to new and existing configs alike (upgrades included), but leave an
+# api_exec line someone has already set alone, so an explicit "false" sticks. The config is
+# flat key = value, so appending is safe. The API stays loopback-only behind the token.
+if ! $SUDO grep -qE '^\s*api_exec\s*=' "$CONFIG"; then
+    say "Enabling Rusted's command execution API (api_exec = true)"
+    printf '\n# Lets My Mate run SSH commands on devices through the API.\napi_exec = true\n' \
+        | $SUDO tee -a "$CONFIG" >/dev/null
+fi
 
 # --- 4. init db + backup git repo, then hand ownership to the rusted user ----
 say "Initialising database + backup git repository"

@@ -22,6 +22,13 @@ of commit subjects.
 ### Changed
 - Docker: `docker-compose.yml` publishes port 54321 and adds a `cmr-data` volume for the
   controller's identity. Copy both into your compose file to use CMR.
+- The bundled Rusted backup engine is now v0.2.1 (was v0.1.1): telnet transport, an OpenWrt
+  driver, Fortinet masking and device name validation. Turning backups off for a device now also
+  removes its current config file from the backup repository (older versions stay in its git
+  history).
+- Rusted's command execution API is switched on (`api_exec = true`) so My Mate can run SSH
+  commands on devices. The installers add it to new and existing Rusted configs; an `api_exec`
+  line you've already set is left alone. The API stays on loopback behind its token.
 
 ### Fixed
 - Settings > Agents went blank with `latency_ms.toFixed is not a function` when an agent was

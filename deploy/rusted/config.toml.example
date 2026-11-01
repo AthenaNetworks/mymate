@@ -24,3 +24,7 @@ api_token = "CHANGE-ME-openssl-rand-hex-32"
 # Encryption key for credentials-at-rest inside Rusted's SQLite DB (AES-256-GCM).
 # Generate with: openssl rand -hex 32
 secret = "CHANGE-ME-openssl-rand-hex-32"
+
+# Lets My Mate run SSH commands on devices through POST /api/devices/{name}/execute. Rusted
+# keeps it off by default; provision.sh adds this line unless you've set api_exec already.
+api_exec = true
