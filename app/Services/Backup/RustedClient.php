@@ -181,6 +181,10 @@ class RustedClient
         if (is_array($body) && isset($body['status'])) {
             return $body;
         }
+        // Refusals (execution switched off, unknown device) carry the reason in `error`.
+        if (is_array($body) && is_string($body['error'] ?? null)) {
+            throw new RuntimeException('Rusted: '.$body['error']);
+        }
 
         $res->throw();
 
@@ -206,6 +210,10 @@ class RustedClient
         // propagate for the caller ({@see RunDeviceBackup}) to record as the failure message.
         if (is_array($body) && isset($body['status'])) {
             return $body;
+        }
+        // Refusals (execution switched off, unknown device) carry the reason in `error`.
+        if (is_array($body) && is_string($body['error'] ?? null)) {
+            throw new RuntimeException('Rusted: '.$body['error']);
         }
 
         $res->throw();

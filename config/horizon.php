@@ -1,10 +1,5 @@
 <?php
 
-use App\Jobs\EvaluateAlertsJob;
-use App\Jobs\PingSweepJob;
-use App\Jobs\PollDeviceMetricsBatchJob;
-use App\Jobs\PollInterfacesBatchJob;
-use App\Jobs\PollSensorsBatchJob;
 use Illuminate\Support\Str;
 
 return [
@@ -143,11 +138,11 @@ return [
     // lists (and the Redis they cost) with routine, uninteresting successes. Silence them so
     // Horizon stops recording their completed metadata - they still show up if they FAIL.
     'silenced' => [
-        PingSweepJob::class,
-        PollInterfacesBatchJob::class,
-        PollDeviceMetricsBatchJob::class,
-        PollSensorsBatchJob::class,
-        EvaluateAlertsJob::class,
+        \App\Jobs\PingSweepJob::class,
+        \App\Jobs\PollInterfacesBatchJob::class,
+        \App\Jobs\PollDeviceMetricsBatchJob::class,
+        \App\Jobs\PollSensorsBatchJob::class,
+        \App\Jobs\EvaluateAlertsJob::class,
     ],
 
     'silenced_tags' => [

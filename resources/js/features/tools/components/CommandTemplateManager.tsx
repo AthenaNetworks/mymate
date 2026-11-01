@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FloppyDisk, PencilSimple, Trash, X } from '@phosphor-icons/react';
+import { ConfirmDialog } from '../../../components/Dialog';
 import { useCommandTemplates, useCreateCommandTemplate, useDeleteCommandTemplate, useUpdateCommandTemplate, type CommandTemplate } from '../api/commandTemplates';
 
 const field = 'rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-emerald-400/50';
@@ -14,6 +15,7 @@ export function CommandTemplateManager() {
     const remove = useDeleteCommandTemplate();
     const [draft, setDraft] = useState<Draft>(blank);
     const [editing, setEditing] = useState<CommandTemplate | null>(null);
+    const [deleting, setDeleting] = useState<CommandTemplate | null>(null);
 
     const save = () => {
         const input = { ...draft, name: draft.name.trim(), command: draft.command.trim(), timeout: Math.max(1, Math.min(60, draft.timeout)) };
@@ -46,10 +48,22 @@ export function CommandTemplateManager() {
                     <span className={`h-2 w-2 rounded-full ${template.enabled ? 'bg-emerald-400' : 'bg-white/20'}`} />
                     <span className="font-medium text-white">{template.name}</span><code className="min-w-0 flex-1 truncate text-xs text-white/45">{template.command}</code>
                     <button onClick={() => edit(template)} className="text-white/45 hover:text-white" title="Edit"><PencilSimple className="h-4 w-4" /></button>
-                    <button onClick={() => remove.mutate(template.id)} className="text-rose-300/60 hover:text-rose-300" title="Delete"><Trash className="h-4 w-4" /></button>
+                    <button onClick={() => setDeleting(template)} className="text-rose-300/60 hover:text-rose-300" title="Delete"><Trash className="h-4 w-4" /></button>
                 </div>)}
                 {!templates.isLoading && (templates.data ?? []).length === 0 && <p className="text-xs text-white/35">No templates saved yet.</p>}
             </div>
+            {deleting && (
+                <ConfirmDialog
+                    title="Delete template"
+                    icon={<Trash weight="light" className="h-5 w-5" />}
+                    message={<>Delete the template <span className="font-semibold text-white/85">{deleting.name}</span>? Past runs keep their record of the command.</>}
+                    confirmLabel="Delete"
+                    tone="danger"
+                    busy={remove.isPending}
+                    onConfirm={() => remove.mutate(deleting.id, { onSettled: () => setDeleting(null) })}
+                    onClose={() => setDeleting(null)}
+                />
+            )}
         </section>
     );
 }

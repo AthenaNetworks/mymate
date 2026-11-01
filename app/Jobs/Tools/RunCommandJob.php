@@ -63,7 +63,9 @@ class RunCommandJob implements ShouldQueue
             $result = $client->execute(RegisterBackupDevice::rustedName($device), $this->command, $this->timeoutSeconds);
             $status = ($result['status'] ?? '') === 'success' ? 'success' : 'failed';
             $output = is_string($result['output'] ?? null) ? $result['output'] : '';
-            $this->finish($status, $status === 'success' ? '' : $this->bounded($output), $this->bounded($output));
+            // Rusted reports why a run failed (unreachable, auth, timeout) in `error`, not `output`.
+            $error = is_string($result['error'] ?? null) ? $result['error'] : '';
+            $this->finish($status, $status === 'success' ? '' : $this->boundedError($error !== '' ? $error : $output), $this->bounded($output));
         } catch (Throwable $e) {
             $this->finish('failed', $this->boundedError($e->getMessage()), '');
         }

@@ -13,6 +13,7 @@ use App\Services\Backup\RustedClient;
 use App\Services\Tools\ToolRun;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -333,5 +334,92 @@ class CommandRunApiTest extends TestCase
             'device_ids' => [$device->id], 'confirm' => true,
         ])->assertStatus(422)->assertJsonValidationErrors('template_id');
         Queue::assertNothingPushed();
+    }
+
+    public function test_deleting_a_user_who_wrote_a_template_keeps_the_template(): void
+    {
+        $author = User::factory()->create(['is_admin' => true]);
+        $id = $this->actingAs($author)->postJson('/api/command-templates', [
+            'name' => 'Identity', 'command' => '/system identity print', 'timeout' => 15,
+        ])->assertCreated()->json('template.id');
+
+        $this->actingAsUser();
+        $this->deleteJson("/api/users/{$author->id}")->assertSuccessful();
+
+        $this->assertDatabaseHas('command_templates', ['id' => $id, 'created_by' => null, 'updated_by' => null]);
+    }
+
+    public function test_a_deleted_templates_name_can_be_reused(): void
+    {
+        $this->actingAsUser();
+        $payload = ['name' => 'Identity', 'command' => '/system identity print', 'timeout' => 15];
+        $id = $this->postJson('/api/command-templates', $payload)->assertCreated()->json('template.id');
+        $this->deleteJson("/api/command-templates/{$id}")->assertOk();
+
+        $this->postJson('/api/command-templates', $payload)->assertCreated();
+        // Still unique among live templates.
+        $this->postJson('/api/command-templates', $payload)->assertStatus(422)->assertJsonValidationErrors('name');
+    }
+
+    public function test_a_failed_run_records_the_reason_rusted_gives(): void
+    {
+        $this->configureEngine();
+        Queue::fake();
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $runId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+
+        // Rusted v0.2's execute response: the reason is in `error`, `output` is empty.
+        $client = \Mockery::mock(RustedClient::class);
+        $client->shouldReceive('execute')->once()->andReturn([
+            'device' => 'mymate-1', 'status' => 'failed', 'output' => '',
+            'error' => 'connect: dial tcp 192.0.2.1:22: i/o timeout', 'duration_ms' => 3002,
+        ]);
+        $register = \Mockery::mock(RegisterBackupDevice::class);
+        $register->shouldReceive('__invoke')->once();
+        $target = CommandRunTarget::query()->where('run_id', $runId)->firstOrFail();
+        (new RunCommandJob($runId, $target->id, $device->id, '/system identity print', 15))->handle($client, $register);
+
+        $this->assertDatabaseHas('command_run_targets', [
+            'id' => $target->id, 'status' => 'failed', 'error' => 'connect: dial tcp 192.0.2.1:22: i/o timeout',
+        ]);
+        $this->getJson("/api/command-runs/{$runId}")
+            ->assertJsonPath("result.devices.{$device->id}.error", 'connect: dial tcp 192.0.2.1:22: i/o timeout');
+    }
+
+    public function test_execute_surfaces_the_refusal_when_execution_is_switched_off(): void
+    {
+        $this->configureEngine();
+        Http::fake(['127.0.0.1:8410/api/devices/*/execute' => Http::response(
+            ['error' => 'command execution is disabled; enable it with api_exec = true or rusted serve --allow-exec'], 403,
+        )]);
+
+        $this->expectExceptionMessage('Rusted: command execution is disabled');
+        app(RustedClient::class)->execute('mymate-1', '/system identity print', 5);
+    }
+
+    public function test_run_status_comes_from_the_durable_rows_when_the_snapshot_missed_an_update(): void
+    {
+        $this->configureEngine();
+        Queue::fake();
+        $this->actingAsUser();
+        $device = Device::factory()->create();
+        $runId = $this->postJson('/api/command-runs', [
+            'device_ids' => [$device->id], 'command' => '/system identity print', 'confirm' => true,
+        ])->json('run_id');
+
+        // The job finished, but its cache write was dropped (lock contention).
+        CommandRunTarget::query()->where('run_id', $runId)->update([
+            'status' => 'success', 'output' => 'name: core', 'started_at' => now(), 'finished_at' => now(),
+        ]);
+        $this->assertSame('queued', ToolRun::get($runId)['result']['devices'][(string) $device->id]['status']);
+
+        $this->getJson("/api/command-runs/{$runId}")->assertOk()
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('result.complete', true)
+            ->assertJsonPath("result.devices.{$device->id}.status", 'success')
+            ->assertJsonPath("result.devices.{$device->id}.output", 'name: core');
     }
 }

@@ -56,7 +56,7 @@ class CommandTemplateController extends Controller
         $data = $request->validate([
             'name' => [
                 'required', 'string', 'max:120',
-                Rule::unique('command_templates', 'name')->ignore($existing?->id),
+                Rule::unique('command_templates', 'name')->withoutTrashed()->ignore($existing?->id),
             ],
             'command' => ['required', 'string', 'max:4096'],
             'timeout' => ['required', 'integer', 'min:1', 'max:60'],

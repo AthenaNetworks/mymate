@@ -152,7 +152,41 @@ class CommandRunController extends Controller
         $owner = ToolRun::owner($runId);
         abort_unless($request->user()->isAdmin() || ($owner !== null && $owner === $request->user()->id), 403);
 
-        return response()->json($snapshot);
+        return response()->json($this->withDurableTargets($snapshot, $runId));
+    }
+
+    /**
+     * Overlay each target's status from its durable row. A cache update can be skipped (the
+     * snapshot lock is best effort), but the row's terminal transition always lands, so the
+     * run never shows "running" forever for a device that has finished.
+     */
+    private function withDurableTargets(array $snapshot, string $runId): array
+    {
+        $targets = CommandRunTarget::query()->where('run_id', $runId)->get();
+        if ($targets->isEmpty()) {
+            return $snapshot;
+        }
+
+        foreach ($targets as $target) {
+            $key = (string) ($target->device_id ?? '');
+            if ($key === '' || ! isset($snapshot['result']['devices'][$key])) {
+                continue;
+            }
+            $row = &$snapshot['result']['devices'][$key];
+            $row['status'] = $target->status;
+            if ($target->finished_at !== null) {
+                $row['output'] = (string) ($target->output ?? '');
+                $row['error'] = $target->error;
+            }
+            unset($row);
+        }
+
+        if ($targets->every(fn (CommandRunTarget $t): bool => in_array($t->status, ['success', 'failed', 'stopped'], true))) {
+            $snapshot['result']['complete'] = true;
+            $snapshot['status'] = 'done';
+        }
+
+        return $snapshot;
     }
 
     public function stop(Request $request, string $runId): JsonResponse

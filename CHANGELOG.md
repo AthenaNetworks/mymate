@@ -18,6 +18,12 @@ of commit subjects.
   on tcp/54321 and they pair, then wait in Discovery for an admin to add them. Settings -> CMR
   shows the address and the fingerprint to put on the device. The .deb, LXC and Docker image
   bundle and set up the `cmr-ctrl` daemon. Config push comes later. See deploy/cmr/README.md.
+- SSH command runner under Tools (admins only). Save reviewed commands as templates, pick
+  devices, confirm, and each device runs the command over SSH through the Rusted engine in its
+  own job, with a timeout and bounded output. Runs execute saved templates only: the command
+  can't be edited at run time, and a template that changed since you opened it is refused. Every
+  run is recorded with who ran it, the command and each device's result; captured output is
+  pruned after 30 days (`MYMATE_COMMAND_OUTPUT_RETENTION_DAYS`). Thanks to Mr-Jerf (#46).
 
 ### Changed
 - Docker: `docker-compose.yml` publishes port 54321 and adds a `cmr-data` volume for the

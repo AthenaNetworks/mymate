@@ -10,7 +10,8 @@ const field = 'rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm t
 
 export function CommandRunner() {
     const isAdmin = useIsAdmin();
-    const devices = useDeviceList({ per_page: 100, fields: 'summary' }, { enabled: isAdmin });
+    const [search, setSearch] = useState('');
+    const devices = useDeviceList({ per_page: 100, fields: 'summary', q: search.trim() || undefined }, { enabled: isAdmin });
     const templates = useCommandTemplates(isAdmin);
     const start = useStartCommandRun();
     const stop = useStopCommandRun();
@@ -39,7 +40,7 @@ export function CommandRunner() {
             {
                 device_ids: [...selected],
                 command: template.command,
-                timeout: template.timeout,
+                timeout: Math.min(timeout, template.timeout),
                 confirm: confirmed,
                 template_id: template.id,
                 command_hash: template.command_hash,
@@ -59,6 +60,8 @@ export function CommandRunner() {
     }
 
     const running = run.data?.status === 'running' || start.isPending;
+    // A template run can be shortened but never run longer than the template allows.
+    const maxTimeout = templates.data?.find((item) => item.id === selectedTemplateId)?.timeout ?? 60;
 
     return (
         <div className="space-y-4">
@@ -77,10 +80,8 @@ export function CommandRunner() {
                     const id = e.target.value ? Number(e.target.value) : null;
                     const template = templates.data?.find((item) => item.id === id);
                     setSelectedTemplateId(id);
-                    if (template) {
-                        setCommand(template.command);
-                        setTimeoutSeconds(template.timeout);
-                    }
+                    setCommand(template?.command ?? '');
+                    if (template) setTimeoutSeconds(template.timeout);
                 }} className={`${field} mb-3 w-full`} disabled={running}>
                     <option value="">Select a saved template…</option>
                     {(templates.data ?? []).filter((template) => template.enabled).map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
@@ -91,7 +92,7 @@ export function CommandRunner() {
 
                 <div className="mt-3 flex flex-wrap items-end gap-3">
                     <label className="text-xs text-white/50">Timeout (seconds)
-                        <input type="number" min={1} max={60} value={timeout} onChange={(e) => setTimeoutSeconds(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className={`${field} mt-1 block w-24`} disabled={running} />
+                        <input type="number" min={1} max={maxTimeout} value={timeout} onChange={(e) => setTimeoutSeconds(Math.max(1, Math.min(maxTimeout, Number(e.target.value) || 1)))} className={`${field} mt-1 block w-24`} disabled={running} />
                     </label>
                     <label className="flex max-w-md items-center gap-2 text-xs text-amber-100/70"><input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} disabled={running} className="accent-amber-400" /> I understand this executes the command on live devices.</label>
                     <button onClick={submit} disabled={running || selected.size === 0 || selectedTemplateId === null || !confirmed} className="inline-flex items-center gap-2 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-35"><Play weight="fill" className="h-4 w-4" /> Run on {selected.size} device{selected.size === 1 ? '' : 's'}</button>
@@ -102,6 +103,7 @@ export function CommandRunner() {
 
             <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
                 <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold text-white">Targets</h3><span className="text-xs text-white/35">{selected.size} selected</span></div>
+                <input value={search} onChange={(e) => setSearch(e.target.value)} maxLength={200} className={`${field} mb-3 w-full`} placeholder="Search devices by name or IP" />
                 <div className="grid gap-2 sm:grid-cols-2">
                     {(devices.data?.data ?? []).map((device) => (
                         <label key={device.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-white/[0.06] px-3 py-2 text-sm text-white/75 hover:bg-white/[0.04]">
@@ -111,6 +113,7 @@ export function CommandRunner() {
                     ))}
                 </div>
                 {devices.isLoading && <p className="text-xs text-white/40">Loading devices…</p>}
+                {(devices.data?.meta.total ?? 0) > (devices.data?.data.length ?? 0) && <p className="mt-2 text-xs text-white/35">Showing the first {devices.data?.data.length} of {devices.data?.meta.total}. Search to narrow it down.</p>}
             </section>
 
             {run.data && <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
