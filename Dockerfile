@@ -63,6 +63,13 @@ RUN apt-get update \
         nginx supervisor tini postgresql-client procps libcap2-bin ca-certificates git mtr-tiny iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
+# Every My Mate process (php-fpm, Horizon, Reverb, the loop, the scheduler, the agent hub, and the
+# Rusted and CMR sidecars) runs as `mymate`, never root. A fixed UID/GID keeps the named volumes'
+# ownership stable across image rebuilds. nginx keeps its own www-data workers.
+RUN groupadd --system --gid 990 mymate \
+    && useradd --system --uid 990 --gid mymate --home-dir /app --no-create-home \
+        --shell /usr/sbin/nologin --comment "My Mate" mymate
+
 # PHP extensions via the maintained installer - it pulls the right C libraries, builds redis
 # from source (pecl.php.net is flaky), and cleans up build deps so the image stays lean.
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
@@ -100,21 +107,22 @@ RUN setcap cap_net_raw+ep /usr/local/sbin/fping
 # Rusted backup engine + its data dirs (the entrypoint generates the config on first start).
 COPY --from=rusted /rusted /usr/local/bin/rusted
 RUN mkdir -p /var/lib/rusted/backups /etc/rusted \
-    && chown -R www-data:www-data /var/lib/rusted /etc/rusted
+    && chown -R mymate:mymate /var/lib/rusted /etc/rusted
 
 # CMR controller + its state dir (identity key, registry, admin token - the entrypoint makes them).
 COPY --from=cmr /cmr-ctrl /usr/local/bin/cmr-ctrl
-RUN mkdir -p /var/lib/mymate-cmr && chown www-data:www-data /var/lib/mymate-cmr && chmod 0700 /var/lib/mymate-cmr
+RUN mkdir -p /var/lib/mymate-cmr && chown mymate:mymate /var/lib/mymate-cmr && chmod 0700 /var/lib/mymate-cmr
 
 # Container config + entrypoint.
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/php-uploads.ini /usr/local/etc/php/conf.d/zz-mymate-uploads.ini
+COPY docker/php-fpm-pool.conf /usr/local/etc/php-fpm.d/zz-mymate.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/mymate.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && mkdir -p storage/logs storage/framework/cache/data storage/framework/sessions \
         storage/framework/views bootstrap/cache \
-    && chown -R www-data:www-data storage bootstrap/cache
+    && chown -R mymate:mymate storage bootstrap/cache
 
 EXPOSE 80
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

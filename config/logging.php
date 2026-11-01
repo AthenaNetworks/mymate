@@ -58,11 +58,15 @@ return [
             'ignore_exceptions' => false,
         ],
 
+        // Log files are created 0664: the services run as mymate, and an operator in the mymate
+        // group running artisan has to be able to append to the same day's file (and the other
+        // way round), or whoever creates it first locks the other out until midnight.
         'single' => [
             'driver' => 'single',
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'daily' => [
@@ -71,6 +75,7 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         // My Mate engine log: one file to tail for the pollers/discovery/loop -
@@ -82,6 +87,7 @@ return [
             'level' => env('MYMATE_LOG_LEVEL', 'info'),
             'days' => env('MYMATE_LOG_DAYS', 14),
             'replace_placeholders' => true,
+            'permission' => 0664,
         ],
 
         'slack' => [

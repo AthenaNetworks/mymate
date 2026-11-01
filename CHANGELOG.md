@@ -35,6 +35,22 @@ of commit subjects.
 - Rusted's command execution API is switched on (`api_exec = true`) so My Mate can run SSH
   commands on devices. The installers add it to new and existing Rusted configs; an `api_exec`
   line you've already set is left alone. The API stays on loopback behind its token.
+- Every install path now runs My Mate as a dedicated `mymate` user, never root or `www-data`.
+  The Debian package and LXC template already did; now the Docker image and from-source
+  installs do too.
+  - Docker: the image creates `mymate` (UID/GID 990). php-fpm, Horizon, Reverb, the loop, the
+    scheduler, the agent hub and the Rusted and CMR sidecars all run as it. On every start the
+    entrypoint hands it `storage/` and the Rusted and CMR volumes, so volumes from older images
+    (owned by `www-data`) are taken over on upgrade. Run one-off artisan commands with
+    `docker compose exec -u mymate app php artisan ...`.
+  - From source: `deploy/mymate-user.sh` creates the user and gives it `storage/`,
+    `bootstrap/cache/` and `.env` (mode 640). It can also add login users to the `mymate`
+    group, and it removes world write access from the code. The supervisor templates run every
+    program as `mymate`.
+  - On a host, Rusted and the CMR controller keep their own `rusted` and `mymate-cmr` users.
+    Their provisioning scripts now run artisan as `mymate` when that user exists.
+  - Log files are created 0664, so the services and an operator in the `mymate` group can both
+    append to the same day's log.
 
 ### Fixed
 - Settings > Agents went blank with `latency_ms.toFixed is not a function` when an agent was

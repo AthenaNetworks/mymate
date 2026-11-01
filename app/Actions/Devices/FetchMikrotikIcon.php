@@ -116,9 +116,9 @@ class FetchMikrotikIcon
 
     /**
      * The `local` disk is private (0700 dirs / 0600 files by default), but these are public
-     * product photos that the web-server process must be able to read - and on a packaged
-     * install that process (php-fpm pool) runs as www-data, not the queue-worker user that
-     * wrote the file. Widen the cache dir chain + file so any local user can serve it.
+     * product photos that php-fpm must be able to read - and a from-source install can run its
+     * pool as a different user from the queue worker that wrote the file. Widen the cache dir
+     * chain + file so any local user can serve it.
      */
     private static function makeReadable(string $path): void
     {

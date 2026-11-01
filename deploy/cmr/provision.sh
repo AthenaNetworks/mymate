@@ -14,7 +14,8 @@
 # re-run keeps both.
 #
 # Env knobs: CMR_ADMIN_PORT (default 8411), APP_DIR (default /opt/mymate),
-#            APP_USER (user to run artisan as; default: the owner of APP_DIR).
+#            APP_USER (user to run artisan as; default: mymate if it exists, else the owner
+#            of APP_DIR).
 set -euo pipefail
 
 ADMIN_PORT="${CMR_ADMIN_PORT:-8411}"
@@ -107,7 +108,9 @@ done
 
 # --- 6. wire My Mate up to it (token saved encrypted; the app user never reads $ETC) ---
 if [ -f "$APP_DIR/artisan" ]; then
-    APP_USER="${APP_USER:-$(stat -c '%U' "$APP_DIR")}"
+    if [ -z "${APP_USER:-}" ]; then
+        if id mymate >/dev/null 2>&1; then APP_USER=mymate; else APP_USER="$(stat -c '%U' "$APP_DIR")"; fi
+    fi
     say "Configuring My Mate to use it (as ${APP_USER})"
     run_as_app php "$APP_DIR/artisan" mymate:cmr:configure --url "http://${ADMIN_ADDR}" --token "$TOKEN"
 fi

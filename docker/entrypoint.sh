@@ -14,7 +14,11 @@ export BROADCAST_CONNECTION="${BROADCAST_CONNECTION:-reverb}"
 
 # A .env so artisan is happy; real container env vars take precedence over it in Laravel,
 # so this only supplies defaults for anything you didn't set.
-[ -f .env ] || cp .env.example .env
+# It holds APP_KEY, so only root and the mymate group can read it.
+if [ ! -f .env ]; then
+    cp .env.example .env
+    chown root:mymate .env && chmod 640 .env || true
+fi
 
 # Self-signed cert for the HTTPS listener, unless you've mounted your own at /etc/mymate/tls.
 # Browsers warn once on a self-signed cert; for a trusted one, mount tls.crt/tls.key there or
@@ -90,7 +94,6 @@ php artisan migrate --force || echo "mymate: migrate failed - will retry next bo
 php artisan config:clear >/dev/null 2>&1 || true
 php artisan view:clear >/dev/null 2>&1 || true
 php artisan event:clear >/dev/null 2>&1 || true
-chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
 
 # Backup engine (Rusted): generate a config with its own token on first start, init the
 # db + git backup repo, and point My Mate at it so backups just work. Mount /etc/rusted and
@@ -103,7 +106,6 @@ if [ -x /usr/local/bin/rusted ]; then
         # Rusted defaults to :8080 (taken by Reverb here) - bind loopback:8410 instead.
         sed -i 's|^api_addr[[:space:]]*=.*|api_addr  = "127.0.0.1:8410"|' /etc/rusted/config.toml 2>/dev/null || true
         rusted --config /etc/rusted/config.toml init >/dev/null 2>&1 || true
-        chown -R www-data:www-data /etc/rusted /var/lib/rusted 2>/dev/null || true
     fi
     # My Mate runs SSH commands through Rusted's execute API, which is off unless api_exec = true.
     # Add it to new and existing configs, but leave an api_exec line that's already set alone.
@@ -122,10 +124,16 @@ if [ -x /usr/local/bin/cmr-ctrl ]; then
     if [ ! -s /var/lib/mymate-cmr/admin.token ]; then
         (umask 077; head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > /var/lib/mymate-cmr/admin.token)
     fi
-    chown -R www-data:www-data /var/lib/mymate-cmr 2>/dev/null || true
     php artisan mymate:cmr:configure --url http://127.0.0.1:8411 --token-file /var/lib/mymate-cmr/admin.token >/dev/null 2>&1 \
         || echo "mymate: CMR controller not auto-configured - set it in Settings"
 fi
+
+# Everything runs as mymate (docker/supervisord.conf). Hand it what it writes on every start, after
+# the root-run artisan calls above, so a log file they created can't lock the services out, and so
+# volumes from older images (owned by www-data) are taken over on upgrade.
+chown -R mymate:mymate storage bootstrap/cache 2>/dev/null || true
+[ -d /etc/rusted ] && chown -R mymate:mymate /etc/rusted /var/lib/rusted 2>/dev/null || true
+[ -d /var/lib/mymate-cmr ] && chown -R mymate:mymate /var/lib/mymate-cmr 2>/dev/null || true
 
 echo "mymate: starting services"
 exec "$@"

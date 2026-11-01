@@ -78,7 +78,7 @@ up the app together with Postgres and Redis:
 
 ```sh
 docker compose up -d
-docker compose exec app php artisan mymate:user:create --admin
+docker compose exec -u mymate app php artisan mymate:user:create --admin
 # open https://localhost:9443   (self-signed cert, so the browser warns once)
 ```
 

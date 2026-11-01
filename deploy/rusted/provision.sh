@@ -12,7 +12,8 @@
 # into My Mate (encrypted), so no manual Settings step is needed.
 #
 # Env knobs: RUSTED_PORT (default 8410), APP_DIR (default /opt/mymate),
-#            APP_USER (user to run artisan as; default: the owner of APP_DIR).
+#            APP_USER (user to run artisan as; default: mymate if it exists, else the owner
+#            of APP_DIR).
 set -euo pipefail
 
 RUSTED_PORT="${RUSTED_PORT:-8410}"
@@ -123,7 +124,9 @@ done
 # Read the token as root (the config is root:rusted 640, so the app user can't) and
 # hand it to artisan run as the app user - the app user never needs to read /etc/rusted.
 if [ -f "$APP_DIR/artisan" ]; then
-    APP_USER="${APP_USER:-$(stat -c '%U' "$APP_DIR")}"
+    if [ -z "${APP_USER:-}" ]; then
+        if id mymate >/dev/null 2>&1; then APP_USER=mymate; else APP_USER="$(stat -c '%U' "$APP_DIR")"; fi
+    fi
     TOKEN="$($SUDO grep -oP '^\s*api_token\s*=\s*"\K[^"]+' "$CONFIG" || true)"
     if [ -n "$TOKEN" ]; then
         say "Configuring My Mate to use it (as ${APP_USER})"

@@ -125,16 +125,24 @@ supervisor. Cron can't do it, it can't hold a socket open and its one minute flo
 coarse for a five second loop. There's a config to start from at
 [deploy/supervisor/mymate.conf](deploy/supervisor/mymate.conf).
 
+Everything runs as a dedicated `mymate` user, the same as the Debian package, never as root.
+`deploy/mymate-user.sh` creates it and hands it `storage/`, `bootstrap/cache/` and `.env`. Name
+any login users who should be able to run artisan and read the logs without sudo; they join the
+`mymate` group from their next login.
+
 ```bash
+sudo deploy/mymate-user.sh "$USER"
 sudo apt-get install -y supervisor
 sudo systemctl enable --now supervisor
 sudo cp deploy/supervisor/mymate.conf /etc/supervisor/conf.d/mymate.conf
-sudo mkdir -p /var/log/mymate
 sudo supervisorctl reread && sudo supervisorctl update && sudo supervisorctl status
 ```
 
-The shipped config runs as `www-data`. If you use a different user, chown `storage/` and
-`bootstrap/cache/` to it and give fping raw sockets with `setcap` as above.
+Run php-fpm as `mymate` too: set `user = mymate` and `group = mymate` in the pool nginx talks
+to (`/etc/php/8.4/fpm/pool.d/www.conf` for the shipped `deploy/nginx/mymate.conf`). Run
+one-off artisan commands as it, `sudo -u mymate php artisan ...`, or as a member of the group.
+fping needs raw sockets for that user, so keep the `setcap` above. The Rusted and CMR sidecars
+make their own `rusted` and `mymate-cmr` users when you run their `provision.sh`.
 
 A couple of things to keep in mind:
 

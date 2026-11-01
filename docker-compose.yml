@@ -1,7 +1,7 @@
 # My Mate, ready to run: the app plus its Postgres and Redis.
 #
 #   docker compose up -d
-#   docker compose exec app php artisan mymate:user:create --admin
+#   docker compose exec -u mymate app php artisan mymate:user:create --admin
 #   open https://localhost:9443    (self-signed cert, so your browser warns once)
 #
 # Ports: HTTPS is exposed on 9443 by default and listens on all interfaces. Override with
