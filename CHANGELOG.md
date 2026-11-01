@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-01
+
 ### Added
 - MikroTik CMR controller. Point devices in controller-managed mode (RouterOS 7.26+) at My Mate
   on tcp/54321 and they pair, then wait in Discovery for an admin to add them. Settings -> CMR
@@ -1196,7 +1198,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/AthenaNetworks/mymate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/AthenaNetworks/mymate/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AthenaNetworks/mymate/compare/v1.7.2...v1.8.0
