@@ -13,6 +13,9 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- The sign-in screen has an eye button to show or hide the password as you type it.
+
 ## [2.1.0] - 2026-11-01
 
 ### Added

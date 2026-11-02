@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { SignIn } from '@phosphor-icons/react';
+import { Eye, EyeSlash, SignIn } from '@phosphor-icons/react';
 import { useLogin } from '../api/auth';
 import { Logomark } from '../../../components/Logomark';
 
@@ -12,6 +12,7 @@ export function LoginScreen() {
     const login = useLogin();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
 
     const ready = email.trim() !== '' && password !== '' && !login.isPending;
 
@@ -51,14 +52,25 @@ export function LoginScreen() {
                         </label>
                         <label className="block space-y-1.5">
                             <span className="px-1 text-[11px] font-medium text-white/55">Password</span>
-                            <input
-                                type="password"
-                                autoComplete="current-password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className={field}
-                                placeholder="••••••••••••"
-                            />
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    autoComplete="current-password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className={field + ' pr-10'}
+                                    placeholder="••••••••••••"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword((v) => !v)}
+                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    aria-pressed={showPassword}
+                                    className="absolute inset-y-0 right-0 grid w-10 place-items-center text-white/40 transition-colors hover:text-white/80"
+                                >
+                                    {showPassword ? <EyeSlash weight="bold" className="h-4 w-4" /> : <Eye weight="bold" className="h-4 w-4" />}
+                                </button>
+                            </div>
                         </label>
                     </div>
 
