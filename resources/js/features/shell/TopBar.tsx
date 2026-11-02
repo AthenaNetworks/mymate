@@ -6,6 +6,7 @@ import { setView, setNavOpen, setWallboard } from '../../lib/shellStore';
 import { useCurrentUser, useLogout } from '../auth/api/auth';
 import { Logomark } from '../../components/Logomark';
 import { ThemeToggle } from '../../components/ThemeToggle';
+import { ContrastToggle } from '../../components/ContrastToggle';
 
 const PING_S = 5; // mirrors config/mymate.php (MYMATE_PING_INTERVAL) - cosmetic label
 
@@ -40,7 +41,7 @@ export function TopBar() {
     };
 
     return (
-        <header className="z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.02] px-3 backdrop-blur-2xl sm:gap-5 sm:px-4">
+        <header className="mm-header z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.02] px-3 backdrop-blur-2xl sm:gap-5 sm:px-4">
             {/* Hamburger - opens the off-canvas nav drawer below lg. */}
             <button
                 onClick={() => setNavOpen(true)}
@@ -80,6 +81,7 @@ export function TopBar() {
 
             {/* Light/dark toggle (GitHub #34). */}
             <ThemeToggle />
+            <ContrastToggle />
 
             {/* Wallboard / TV mode - chrome-free fullscreen for a NOC big screen. */}
             <button

@@ -14,7 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- High-contrast setting: a contrast button next to the light/dark toggle (top bar and sign-in screen) switches to pure black or white surfaces, solid 2px borders, a secondary-text colour that meets AAA, the Atkinson Hyperlegible font, a larger base size, status shapes (circle, square, hollow ring) and a labelled minimap and zoom readout, in either theme. It is remembered per browser and the standard look is unchanged.
 - The sign-in screen has an eye button to show or hide the password as you type it.
+
+### Changed
+- Dark and light themes follow the new Topology designs: flat panels and canvas, a toolbar strip with a divider above the map (left-aligned rows), single-border node cards with tinted device tiles, and muted text mapped onto the designs' solid greys. The sidebar rail now scrolls instead of running off short windows.
 
 ## [2.1.0] - 2026-11-01
 

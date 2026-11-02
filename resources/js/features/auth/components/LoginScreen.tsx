@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Eye, EyeSlash, SignIn } from '@phosphor-icons/react';
 import { useLogin } from '../api/auth';
 import { Logomark } from '../../../components/Logomark';
+import { ThemeToggle } from '../../../components/ThemeToggle';
+import { ContrastToggle } from '../../../components/ContrastToggle';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3.5 py-2.5 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -24,6 +26,10 @@ export function LoginScreen() {
 
     return (
         <div className="grid min-h-screen place-items-center p-6">
+            <div className="fixed right-4 top-4 flex items-center gap-1">
+                <ThemeToggle />
+                <ContrastToggle />
+            </div>
             <form
                 onSubmit={submit}
                 className="animate-rise w-full max-w-sm rounded-[1.5rem] bg-white/[0.05] p-1 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10"

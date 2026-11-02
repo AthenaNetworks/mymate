@@ -158,7 +158,7 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
         // screen. Down devices otherwise pulse a rose glow (same `cardpulse` as the Dashboard);
         // never colour-alone (the status dot pairs it). Honours prefers-reduced-motion.
         <div
-            className={`relative rounded-[1.25rem] bg-white/[0.04] p-1 ring-1 transition-all duration-300 ease-fluid ${
+            className={`mm-node relative rounded-[1.25rem] bg-white/[0.04] p-1 ring-1 transition-all duration-300 ease-fluid ${
                 selected
                     ? 'z-10 scale-[1.02] ring-2 ring-emerald-400/90 shadow-[0_0_0_5px_rgba(16,185,129,0.14),0_18px_55px_-12px_rgba(16,185,129,0.55)]'
                     : down
@@ -170,7 +170,7 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
             {selected && (
                 <span className="pointer-events-none absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(16,185,129,0.8)]" />
             )}
-            <div className="min-w-[12.5rem] rounded-[calc(1.25rem-0.25rem)] bg-surface px-3 py-2.5 ring-1 ring-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
+            <div className="mm-node-core min-w-[12.5rem] rounded-[calc(1.25rem-0.25rem)] bg-surface px-3 py-2.5 ring-1 ring-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)]">
                 <SideHandles />
 
                 <div className="flex items-center gap-2.5">
@@ -181,8 +181,8 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                         <DeviceGlyph deviceId={Number(id)} vendor={d.vendor} model={d.model} type={d.device_type} icon={d.icon} iconColor={d.icon_color} className="h-5 w-5" />
                     </span>
                     <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-white/90">{d.label}</div>
-                        <div className="truncate text-[11px] tabular-nums text-white/40">{d.mgmt_ip ?? <span className="italic">static object</span>}</div>
+                        <div className="mm-node-label truncate text-sm font-semibold text-white/90">{d.label}</div>
+                        <div className="mm-node-ip truncate text-[11px] tabular-nums text-white/40">{d.mgmt_ip ?? <span className="italic">static object</span>}</div>
                     </div>
                     <StatusDot status={d.status} className="mt-0.5 self-start" />
                 </div>
@@ -192,10 +192,10 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                     /* Internet/upstream: a fixed LATENCY readout (rtt + optional loss badge),
                        coloured by the device's quality thresholds. No metric cycling. */
                     <div className="mt-2.5 flex items-center gap-2">
-                        <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10">
+                        <span className="mm-node-chip shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10">
                             LATENCY
                         </span>
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                        <div className="mm-node-bar h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                             <div
                                 className="h-full rounded-full transition-all duration-500 ease-fluid"
                                 style={{ width: `${latBarPct}%`, background: latColor }}
@@ -206,7 +206,7 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                                 {d.loss_pct! < 10 ? d.loss_pct!.toFixed(1) : Math.round(d.loss_pct!)}% loss
                             </span>
                         )}
-                        <span className="w-11 shrink-0 text-right text-[10px] tabular-nums" style={{ color: latColor }}>
+                        <span className="mm-node-val w-11 shrink-0 text-right text-[10px] tabular-nums" style={{ color: latColor }}>
                             {latValue}
                         </span>
                     </div>
@@ -218,17 +218,17 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                             type="button"
                             onClick={(e) => { e.stopPropagation(); cycle(); }}
                             title="Click to change the metric shown"
-                            className="nodrag shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white/70"
+                            className="mm-node-chip nodrag shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-white/45 ring-1 ring-white/10 transition-colors hover:bg-white/10 hover:text-white/70"
                         >
                             {METRIC_LABEL[metric]}
                         </button>
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                        <div className="mm-node-bar h-1 flex-1 overflow-hidden rounded-full bg-white/10">
                             <div
                                 className="h-full rounded-full transition-all duration-500 ease-fluid"
                                 style={{ width: `${barPct}%`, background: barColor }}
                             />
                         </div>
-                        <span className="w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
+                        <span className="mm-node-val w-10 shrink-0 text-right text-[10px] tabular-nums text-white/45">
                             {valueLabel}
                         </span>
                     </div>

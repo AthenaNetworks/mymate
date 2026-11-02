@@ -11,6 +11,7 @@ import { linkColor, linkWidth } from '../lib/linkColor';
 import { getFloatingParams } from '../lib/floatingEdge';
 import { mediaDash } from '../lib/mediaType';
 import { formatMbps } from '../../../lib/formatRate';
+import { useContrast } from '../../../lib/theme';
 import { useEdgeStyle, useEdgeAttach, useOspfCostSize, useOspfCostColor, type OspfCostSize } from '../../../lib/shellStore';
 import type { LinkMediaType } from '../../../types';
 
@@ -89,6 +90,7 @@ export function UtilEdge({
 }: EdgeProps) {
     const d = (data ?? { util: null, mbps: null, down: false }) as UtilEdgeData;
     const edgeStyle = useEdgeStyle(); // curved (default) or straight
+    const highContrast = useContrast() === 'high';
     const edgeAttach = useEdgeAttach(); // 'auto' floats every link; 'fixed' honours pinned handles
     const ospfSize = useOspfCostSize(); // OSPF cost badge size (operator pref, GitHub #22)
     const ospfColor = useOspfCostColor();
@@ -149,6 +151,8 @@ export function UtilEdge({
                 : getBezierPath({ sourceX: sx, sourceY: sy, targetX: tx, targetY: ty, sourcePosition: sPos, targetPosition: tPos });
     }
 
+    // High contrast keeps every link at full strength: fading unselected links hides them from low-vision users.
+    const dimmed = d.dimmed && !highContrast;
     const color = linkColor(d.util, d.down);
     // On-screen direction of source -> target, for the tx/rx arrows in the label.
     const angle = (Math.atan2(ty - sy, tx - sx) * 180) / Math.PI;
@@ -157,7 +161,7 @@ export function UtilEdge({
     const flowDur = Math.max(0.4, 1.4 - (d.util ?? 0) / 100);
     // Selection focus: a selected device's links come forward, the rest fade back.
     const baseOpacity = d.down ? 0.5 : 0.9;
-    const opacity = d.dimmed ? baseOpacity * 0.22 : baseOpacity;
+    const opacity = dimmed ? baseOpacity * 0.22 : baseOpacity;
 
     return (
         <>
@@ -182,7 +186,7 @@ export function UtilEdge({
             {/* Flow accent (up only): a slim white shimmer gliding over the solid wire - shows
                 the link is live + the throughput direction, without the chunky-dash "motorway".
                 Period 12 divides the keyframe\'s -24 offset -> seamless loop. */}
-            {!d.down && !d.dimmed && (
+            {!d.down && !dimmed && (
                 <path
                     className="mm-edge-flow"
                     d={path}
@@ -204,10 +208,10 @@ export function UtilEdge({
                     style={{
                         transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                         borderColor: color,
-                        opacity: d.dimmed ? 0.3 : 1,
+                        opacity: dimmed ? 0.3 : 1,
                         transition: 'opacity 400ms var(--ease-fluid)',
                     }}
-                    className="group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
+                    className="mm-edge-label group pointer-events-auto absolute flex items-center gap-1 rounded-full border bg-surface/90 px-2 py-0.5 text-[10px] font-medium tabular-nums text-white/85 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.85)] ring-1 ring-white/10"
                 >
                     {d.down ? (
                         <span>down</span>
@@ -240,7 +244,7 @@ export function UtilEdge({
             {/* OSPF cost per end (directional). Lifted off the wire (perpendicular to the link)
                 so it doesn't sit on the line or collide with the centred load label - the readability
                 gripe in GitHub #22. Size + colour are operator prefs. */}
-            {!d.dimmed && (d.aCost != null || d.bCost != null) && (() => {
+            {!dimmed && (d.aCost != null || d.bCost != null) && (() => {
                 // Unit perpendicular to the link, pointing "up" for a left-to-right link (screen
                 // y is down), so the badge floats above the wire rather than on it.
                 const dx = tx - sx, dy = ty - sy;

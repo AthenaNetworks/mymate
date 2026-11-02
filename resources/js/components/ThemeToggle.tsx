@@ -12,10 +12,11 @@ export function ThemeToggle({ className }: { className?: string }) {
             aria-label="Toggle light or dark mode"
             className={
                 className ??
-                'rounded-lg p-1.5 text-white/45 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80'
+                'mm-hc-btn rounded-lg p-1.5 text-white/45 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80'
             }
         >
             {theme === 'dark' ? <Sun weight="bold" className="h-4 w-4" /> : <Moon weight="bold" className="h-4 w-4" />}
+            <span className="mm-hc-label">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
         </button>
     );
 }

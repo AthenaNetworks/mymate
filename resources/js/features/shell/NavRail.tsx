@@ -42,7 +42,8 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
                                     setView(it.id);
                                     setNavOpen(false);
                                 }}
-                                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-300 ease-fluid ${
+                                data-active={active || undefined}
+                                className={`mm-nav group flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm transition-all duration-300 ease-fluid ${
                                     active
                                         ? 'bg-white/[0.06] text-white ring-1 ring-white/10'
                                         : 'text-white/55 hover:bg-white/[0.03] hover:text-white/85'
@@ -54,12 +55,12 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
                                 />
                                 <span className="flex-1 text-left">{it.label}</span>
                                 {it.id === 'outages' && outageCount > 0 ? (
-                                    <span className="rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold tabular-nums text-amber-300 ring-1 ring-amber-400/20">
+                                    <span className="mm-badge rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold tabular-nums text-amber-300 ring-1 ring-amber-400/20">
                                         {outageCount}
                                     </span>
                                 ) : null}
                                 {it.id === 'alerts' && alertCount > 0 ? (
-                                    <span title="Alerts firing now" className="rounded-full bg-rose-500/20 px-1.5 text-[10px] font-semibold tabular-nums text-rose-300 ring-1 ring-rose-400/20">
+                                    <span title="Alerts firing now" className="mm-badge mm-badge-rose rounded-full bg-rose-500/20 px-1.5 text-[10px] font-semibold tabular-nums text-rose-300 ring-1 ring-rose-400/20">
                                         {alertCount}
                                     </span>
                                 ) : null}
@@ -71,7 +72,7 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
 
             <div className="mt-auto space-y-4">
                 <MapLegend />
-                <div className="rounded-xl bg-white/[0.02] p-3 font-mono text-[10px] leading-relaxed text-white/30 ring-1 ring-white/[0.06]">
+                <div className="mm-sysbox rounded-xl bg-white/[0.02] p-3 font-mono text-[10px] leading-relaxed text-white/30 ring-1 ring-white/[0.06]">
                     <div>server - my-mate</div>
                     <div>fping 5s - snmp 12s</div>
                     <div>my-mate {version || '...'}</div>
@@ -91,7 +92,7 @@ export function NavRail({ outageCount = 0, alertCount = 0 }: { outageCount?: num
     return (
         <>
             {/* Desktop / large screens: a static column in the shell row. */}
-            <nav className="z-10 hidden w-52 shrink-0 flex-col gap-6 border-r border-white/10 bg-white/[0.02] p-3 backdrop-blur-2xl lg:flex">
+            <nav className="mm-navrail z-10 hidden min-h-0 w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-white/10 bg-white/[0.02] p-3 backdrop-blur-2xl lg:flex">
                 <NavContent outageCount={outageCount} alertCount={alertCount} />
             </nav>
 

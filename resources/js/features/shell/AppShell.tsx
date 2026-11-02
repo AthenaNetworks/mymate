@@ -85,7 +85,7 @@ export function AppShell() {
     const meshGlow = (
         <div
             aria-hidden
-            className="pointer-events-none fixed inset-0 -z-10"
+            className="mm-mesh pointer-events-none fixed inset-0 -z-10"
             style={{
                 background:
                     'radial-gradient(55rem 55rem at 10% -15%, rgba(16,185,129,0.12), transparent 60%),' +

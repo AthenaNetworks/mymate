@@ -1,5 +1,5 @@
 import { displayName } from '../../../lib/deviceName';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     ReactFlow,
     Background,
@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Cube, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
-import { useTheme } from '../../../lib/theme';
+import { useContrast, useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
 import { MapPortalNode } from '../nodes/MapPortalNode';
 import { ChildMapNode } from '../nodes/ChildMapNode';
@@ -148,6 +148,23 @@ export function MapCanvas() {
     const updateDevice = useUpdateDevice(); // node menu: clear a parent without opening the picker
     const { fitView, screenToFlowPosition } = useReactFlow();
     const theme = useTheme();
+    const highContrast = useContrast() === 'high';
+    // Fit tighter in high contrast so nodes (and their text) land as large as the screen allows.
+    const fitPad = highContrast ? 0.08 : 0.3;
+    // The toolbar is a strip above the map (not an overlay), so the canvas starts below it. Its
+    // height changes when the rows wrap, so measure it instead of hard-coding one.
+    // A state-held element (not a ref + [] effect): the map shows "Loading..." first, so the toolbar
+    // mounts later and an effect that only ran once would never see it.
+    const [toolbarEl, setToolbarEl] = useState<HTMLDivElement | null>(null);
+    const [toolbarH, setToolbarH] = useState(0);
+    useLayoutEffect(() => {
+        if (!toolbarEl) return;
+        const measure = () => setToolbarH(toolbarEl.offsetHeight);
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(toolbarEl);
+        return () => ro.disconnect();
+    }, [toolbarEl]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -663,9 +680,9 @@ export function MapCanvas() {
         if (fittedMapRef.current === activeMapId) return;
         fittedMapRef.current = activeMapId;
         // Delay lets setNodes flush to React Flow\'s store (incl. node measurement) before framing.
-        const t = setTimeout(() => fitView({ padding: 0.3, duration: 600 }), 140);
+        const t = setTimeout(() => fitView({ padding: fitPad, duration: 600 }), 140);
         return () => clearTimeout(t);
-    }, [activeMapId, mapDevices, fitView]);
+    }, [activeMapId, mapDevices, fitView, fitPad]);
 
     // Apply a computed {id -> position} map to the canvas + persist each per-map, then frame.
     const applyPositions = useCallback(
@@ -675,9 +692,9 @@ export function MapCanvas() {
             // One request for the whole layout (not one per device), so a big Tidy can't half-land.
             const devices = Object.entries(pos).map(([id, p]) => ({ id: Number(id), x: p.x, y: p.y }));
             if (devices.length) savePositions.mutate({ mapId: activeMapId, devices });
-            setTimeout(() => fitView({ padding: 0.3, duration: 600 }), 60);
+            setTimeout(() => fitView({ padding: fitPad, duration: 600 }), 60);
         },
-        [activeMapId, setNodes, savePositions, fitView],
+        [activeMapId, setNodes, savePositions, fitView, fitPad],
     );
 
     // Snapshot the current on-canvas device positions (seeds the force layout + feeds Remove-overlaps).
@@ -754,6 +771,8 @@ export function MapCanvas() {
 
     return (
         <>
+            {/* The canvas fills what is left under the toolbar strip. React Flow ignores a user `position`/`height` on its own root, hence the wrapper. */}
+            <div className="absolute inset-x-0 bottom-0" style={{ top: toolbarH }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -867,7 +886,7 @@ export function MapCanvas() {
                     addToMap.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }, { onSuccess: () => selectDevice(deviceId) });
                 }}
                 fitView
-                fitViewOptions={{ padding: 0.3 }}
+                fitViewOptions={{ padding: fitPad }}
                 // React Flow's default minZoom is 0.5 - far too tight to fit a large map (dozens of
                 // 200px nodes), so fitView would clamp and land zoomed into a corner, especially on
                 // a phone. Allow it to zoom right out so the whole topology fits on any screen.
@@ -879,25 +898,39 @@ export function MapCanvas() {
                 {/* Layered "blueprint" grid - a coarse major grid over a fine minor grid, both
                     very faint. Reads as an instrument/graph-paper backdrop rather than the stock
                     React Flow dot field, and gives the canvas depth against the mesh glow. */}
-                <Background id="major" variant={BackgroundVariant.Lines} gap={128} lineWidth={1} color={theme === 'light' ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.028)'} />
-                <Background id="minor" variant={BackgroundVariant.Dots} gap={32} size={1} color={theme === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.05)'} />
+                {/* High contrast: no faint grid lines, a clearly visible dot grid instead. */}
+                {/* Standard contrast is a flat canvas (per the Normal Dark / Normal Light designs): no grid. */}
+                {highContrast && (
+                    <Background
+                        id="minor"
+                        variant={BackgroundVariant.Dots}
+                        gap={28}
+                        size={1.5}
+                        color={theme === 'light' ? '#d6d6d6' : '#3d3d3d'}
+                    />
+                )}
                 {/* Custom background image (GitHub #37) - self-contained layer + its admin panel. */}
                 <MapBackground mapId={activeMapId} />
                 <MapControls />
                 <MiniMap
                     pannable
                     zoomable
-                    className="!hidden !rounded-xl !bg-white/[0.03] !ring-1 !ring-white/10 lg:!block"
+                    className="mm-minimap !hidden !rounded-xl !bg-white/[0.03] !ring-1 !ring-white/10 lg:!block"
                     maskColor={theme === 'light' ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)'}
-                    nodeColor={(n) => miniColor[(n.data as { status?: DeviceStatus }).status ?? 'unknown'] ?? miniColor.unknown}
+                    nodeColor={(n) =>
+                        highContrast && n.selected
+                            ? theme === 'light' ? '#000000' : '#ffffff'
+                            : miniColor[(n.data as { status?: DeviceStatus }).status ?? 'unknown'] ?? miniColor.unknown
+                    }
                 />
             </ReactFlow>
+            </div>
 
             {/* Toolbar - one flex row so the two clusters wrap onto a second line instead of
                 overlapping when they don\'t both fit (e.g. the search pill expanded on focus).
                 Two independently `absolute`-positioned corners used to paint over each other
                 here since neither knew the other\'s width. */}
-            <div className="absolute inset-x-4 top-4 z-10 flex flex-wrap items-start gap-2">
+            <div ref={setToolbarEl} className="mm-toolbar absolute inset-x-0 top-0 z-10 flex flex-col items-start gap-2.5 border-b border-white/10 bg-surface px-4 py-3.5">
                 <div className="flex flex-wrap items-center gap-2">
                     <MapBreadcrumb />
                     <MapSwitcher />
@@ -924,10 +957,12 @@ export function MapCanvas() {
                 {/* ml-auto keeps this cluster right-aligned whether it shares the first line
                     or wraps to its own - plain justify-between would collapse a lone wrapped
                     item to the left edge instead. */}
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {/* Desktop / tablet: the tool clusters inline. Below lg they collapse into the
                         single overflow menu below so the toolbar never wraps over the map. */}
                     <div className="hidden items-center gap-2 lg:flex">
+                    {/* High contrast draws the two toggles below as one segmented group; `contents` keeps them separate otherwise. */}
+                    <div className="mm-seg contents">
                     {/* Curved / straight link geometry. */}
                     <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
                         <button onClick={() => setEdgeStyle('curved')} title="Curved links" className={edgeBtn(edgeStyle === 'curved')}>
@@ -947,10 +982,11 @@ export function MapCanvas() {
                             <PushPin weight="bold" className="h-4 w-4" />
                         </button>
                     </div>
+                    </div>
                     {/* OSPF cost label size/colour - only when this map carries OSPF costs (GitHub #22). */}
                     {hasOspfCost && <OspfCostControl />}
                     {isAdmin && (
-                        <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
+                        <div className="mm-addbar flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
                             <button
                                 onClick={() => setDeviceDialog({})}
                                 title="Add a device to this map"

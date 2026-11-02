@@ -1,4 +1,8 @@
 import '@fontsource-variable/plus-jakarta-sans';
+import '@fontsource-variable/jetbrains-mono';
+// High-contrast mode swaps to Atkinson Hyperlegible (designed for low vision); see app.css.
+import '@fontsource-variable/atkinson-hyperlegible-next';
+import '@fontsource-variable/atkinson-hyperlegible-mono';
 import { StrictMode, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';

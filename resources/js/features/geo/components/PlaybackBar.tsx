@@ -28,8 +28,8 @@ const btn = 'grid h-7 w-7 place-items-center rounded-lg text-white/70 hover:bg-w
 export function PlaybackBadge({ pb }: { pb: Playback }) {
     if (!pb.active) {
         return (
-            <div className={`flex items-center gap-1 rounded-lg px-1 py-1 ${glass}`}>
-                <span className="flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+            <div className={`mm-live-group flex items-center gap-1 rounded-lg px-1 py-1 ${glass}`}>
+                <span className="mm-live flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> Live
                 </span>
                 <button

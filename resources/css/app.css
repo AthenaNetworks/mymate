@@ -14,9 +14,10 @@
     /* Themeable surfaces (GitHub #34). The three near-black backgrounds the app hardcoded
        (#0d0d11 body, #15151b raised, #060608 deepest) become tokens so light mode can flip
        them: bg-surface / bg-surface-2 / bg-surface-deep. */
-    --color-surface: #0d0d11;
-    --color-surface-2: #15151b;
-    --color-surface-deep: #060608;
+    --color-surface: #0a0d0f;
+    --color-surface-2: #111518;
+    --color-surface-deep: #0a0d0f;
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
 
 /* App tokens. --link-down: grey for down devices/links, distinct from saturated red.
@@ -44,10 +45,10 @@
 :root[data-theme='light'] {
     /* Near-black (not a soft grey) so the pervasive muted opacities - text-white/40, ring-white/10,
        bg-white/[0.03] - keep enough contrast on white; a lighter base washed them out. */
-    --color-white: #0a0a0b;
-    --color-surface: #f4f4f5;
+    --color-white: #172029;
+    --color-surface: #ffffff;
     --color-surface-2: #ffffff;
-    --color-surface-deep: #e7e7ea;
+    --color-surface-deep: #ffffff;
     --link-down: #9ca3af;
     --link-unknown: #94a3b8;
     color-scheme: light;
@@ -80,6 +81,929 @@
     --color-rose-200: oklch(0.514 0.222 16.935); /* rose-700 */
     --color-sky-200: oklch(0.5 0.134 242.749); /* sky-700 */
     --color-indigo-200: oklch(0.457 0.24 277.023); /* indigo-700 */
+}
+
+/* ---------------------------------------------------------------------------------------------
+   High contrast. An opt-in second axis beside light/dark (data-contrast="high" on <html>, see
+   lib/theme.ts). Standard is untouched. The values come from the approved design
+   ("Topology High Contrast" Dark/Light): pure black/white surfaces, ink + one secondary text
+   colour, solid 2px borders, Atkinson Hyperlegible type, a larger root size, and status
+   colours with a shape as well as a hue. The utility overrides sit in the utilities layer
+   behind :where() so they cost no specificity: a hover:/focus: variant still wins on hover.
+   --------------------------------------------------------------------------------------------- */
+:root[data-contrast='high'] {
+    --font-sans: 'Atkinson Hyperlegible Next Variable', 'Atkinson Hyperlegible', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'Atkinson Hyperlegible Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+    font-size: 18px;
+    /* Primary actions: the design's mint with near-black ink and outline. */
+    --color-emerald-500: #2ee59d;
+    --color-emerald-950: #050505;
+}
+:root[data-theme='dark'][data-contrast='high'] {
+    --color-surface: #000000;
+    --color-surface-2: #000000;
+    --color-surface-deep: #000000;
+    --graph-axis: 255 255 255;
+    --graph-ink: 255 255 255;
+    --hc-ink-2: #e6e6e6;
+    --hc-border: #9a9a9a;
+    --hc-raised: #1a1a1a;
+    --color-emerald-200: #4df5a8;
+    --color-emerald-300: #4df5a8;
+    --color-emerald-400: #3be070;
+    --color-rose-200: #ff8a8a;
+    --color-rose-300: #ff8a8a;
+    --color-rose-400: #ff4d5e;
+    --color-rose-500: #ff4d5e;
+}
+:root[data-theme='light'][data-contrast='high'] {
+    --color-white: #000000;
+    --color-surface: #ffffff;
+    --color-surface-2: #ffffff;
+    --color-surface-deep: #ffffff;
+    --graph-axis: 0 0 0;
+    --graph-ink: 0 0 0;
+    --hc-ink-2: #333333;
+    --hc-border: #767676;
+    --hc-raised: #f2f2f2;
+    --color-emerald-200: #00663a;
+    --color-emerald-300: #00663a;
+    --color-emerald-400: #00853f;
+    --color-rose-200: #b0001a;
+    --color-rose-300: #b0001a;
+    --color-rose-400: #d9001e;
+    --color-rose-500: #d9001e;
+    --color-amber-200: #78350f;
+    --color-amber-300: #78350f;
+    --color-sky-200: oklch(0.443 0.11 240.79);
+    --color-sky-300: oklch(0.443 0.11 240.79);
+    --color-indigo-200: oklch(0.398 0.195 277.366);
+    --color-indigo-300: oklch(0.398 0.195 277.366);
+    --color-violet-300: oklch(0.432 0.232 292.759);
+}
+:root[data-contrast='high'] body {
+    color: var(--color-white);
+    font-weight: 500;
+}
+:root[data-contrast='high'] :focus-visible {
+    outline: 3px solid var(--color-white);
+    outline-offset: 2px;
+}
+
+/* Top-bar buttons: outlined, with a text label (theme + contrast). */
+.mm-hc-label {
+    display: none;
+}
+:root[data-contrast='high'] .mm-hc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 40px;
+    padding-inline: 14px;
+    border-radius: 0.5rem;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-white);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--hc-border);
+}
+:root[data-contrast='high'] .mm-hc-btn:hover {
+    background: var(--hc-raised);
+    box-shadow: 0 0 0 2px var(--color-white);
+}
+:root[data-contrast='high'] .mm-hc-btn .mm-hc-label {
+    display: inline;
+}
+
+/* Sidebar: the active page is a solid pill; items are larger. */
+:root[data-contrast='high'] .mm-nav {
+    min-height: 0;
+    font-size: 17px;
+    font-weight: 500;
+    border-radius: 0.5rem;
+}
+:root[data-contrast='high'] [data-active] {
+    background: var(--color-white);
+    color: var(--color-surface);
+    font-weight: 700;
+    box-shadow: none;
+}
+:root[data-contrast='high'] [data-active] svg {
+    color: inherit;
+}
+
+/* Status: a shape as well as a hue (up = circle, down = square, unknown = hollow ring). */
+:root[data-contrast='high'] .mm-status-pill {
+    --tw-ring-color: currentColor;
+    --tw-ring-shadow: 0 0 0 2px currentColor;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-status-pill[data-status='up'] {
+    color: var(--color-emerald-300);
+}
+:root[data-contrast='high'] .mm-status-pill[data-status='down'] {
+    color: var(--color-rose-300);
+}
+:root[data-contrast='high'] .mm-status-pill > span:not(.mm-status-dot) {
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-status-dot {
+    width: 0.65rem;
+    height: 0.65rem;
+}
+:root[data-contrast='high'] .mm-status-dot[data-status='down'] {
+    border-radius: 0;
+}
+:root[data-contrast='high'] .mm-status-dot[data-status='unknown'] {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--hc-ink-2);
+}
+
+/* Map chrome: a labelled minimap and a zoom readout. */
+:root[data-contrast='high'] .mm-minimap::before {
+    content: 'Overview';
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    z-index: 1;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--hc-ink-2);
+}
+:root[data-contrast='high'] .mm-zoom-pct {
+    display: block;
+}
+
+/* A disabled control reads as disabled by its dashed outline, not by fading. */
+:root[data-contrast='high'] button:disabled {
+    opacity: 1;
+    cursor: not-allowed;
+    color: var(--hc-ink-2);
+    background: var(--hc-raised);
+    outline: 2px dashed var(--hc-border);
+    outline-offset: -2px;
+}
+
+/* ---- Map: node cards, toolbar, side panel (matches the approved design) ---- */
+/* One 2px outlined card instead of the double bezel. */
+:root[data-contrast='high'] .mm-node {
+    padding: 0;
+    border-radius: 10px;
+    background: transparent;
+}
+:root[data-contrast='high'] .mm-node.ring-2 {
+    --tw-ring-shadow: 0 0 0 3px var(--tw-ring-color, currentcolor);
+}
+:root[data-contrast='high'] .mm-node-core {
+    border-radius: 8px;
+    box-shadow: none;
+    background: var(--color-surface);
+    padding: 0.6rem 0.75rem;
+}
+:root[data-contrast='high'] .mm-node-label {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-node-ip {
+    font-family: var(--font-mono);
+    font-size: 13.5px;
+    color: var(--hc-ink-2);
+}
+:root[data-contrast='high'] .mm-node-chip {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-white);
+    background: var(--hc-raised);
+    box-shadow: 0 0 0 1px var(--hc-border);
+}
+:root[data-contrast='high'] .mm-node-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--color-white) 22%, transparent);
+}
+:root[data-contrast='high'] .mm-node-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-white);
+}
+
+/* Toolbar: squared 42px controls, 15px labels (pills become 8px-radius boxes). */
+:root[data-contrast='high'] .mm-toolbar .rounded-full {
+    border-radius: 0.5rem;
+}
+:root[data-contrast='high'] .mm-toolbar button {
+    min-height: 42px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-toolbar button:hover {
+    background: var(--hc-raised);
+}
+:root[data-contrast='high'] .mm-toolbar :is(.text-xs, .text-\[11px\], .text-\[13px\]) {
+    font-size: 15px;
+}
+:root[data-contrast='high'] .mm-toolbar .bg-white\/5 {
+    background: var(--color-surface);
+}
+
+/* Side panel: 46px controls, solid borders. */
+:root[data-contrast='high'] .mm-inspector {
+    background: var(--color-surface);
+    gap: 1.4rem;
+}
+:root[data-contrast='high'] .mm-inspector button.w-full,
+:root[data-contrast='high'] .mm-inspector select {
+    min-height: 46px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    color: var(--color-white);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--hc-border);
+}
+:root[data-contrast='high'] .mm-inspector button.w-full:hover {
+    background: var(--hc-raised);
+    box-shadow: 0 0 0 2px var(--color-white);
+}
+
+/* Primary actions get the design's dark outline. */
+:root[data-contrast='high'] .bg-emerald-500 {
+    box-shadow: 0 0 0 2px #050505;
+    color: #050505;
+    font-weight: 800;
+}
+
+/* Toolbar details: sentence-case labels, ungrouped add buttons, sturdier sidebar icons. */
+:root[data-contrast='high'] .mm-toolbar .uppercase {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 15px;
+    font-weight: 700;
+}
+:root[data-contrast='high'] .mm-toolbar span.font-mono {
+    letter-spacing: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+:root[data-contrast='high'] .mm-addbar {
+    gap: 8px;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+:root[data-contrast='high'] .mm-addbar button {
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--hc-border);
+    padding-inline: 14px;
+}
+:root[data-contrast='high'] .mm-addbar button:hover {
+    box-shadow: 0 0 0 2px var(--color-white);
+}
+:root[data-contrast='high'] .mm-nav svg path {
+    stroke: currentColor;
+    stroke-width: 10;
+}
+/* Node text is drawn inside the zoomable canvas (often 60-70%), so it gets a bigger base. */
+:root[data-contrast='high'] .mm-node-label {
+    font-size: 17px;
+}
+:root[data-contrast='high'] .mm-node-ip {
+    font-size: 15px;
+}
+:root[data-contrast='high'] .mm-node-chip {
+    font-size: 13px;
+}
+:root[data-contrast='high'] .mm-node-val {
+    font-size: 15px;
+}
+
+/* Active segmented-toolbar buttons are solid (ink on surface), not outlined. */
+:root[data-contrast='high'] .mm-toolbar button.bg-white\/10 {
+    background: var(--color-white);
+    color: var(--color-surface);
+    box-shadow: none;
+}
+:root[data-contrast='high'] .mm-toolbar button.bg-white\/10 svg {
+    color: inherit;
+}
+/* Link labels live in the zoomable canvas too: give them a bigger base. */
+:root[data-contrast='high'] .mm-edge-label {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 1px 8px;
+    border-width: 2px;
+    background: var(--color-surface);
+}
+/* Panel action buttons that sit in a grid (Winbox / SSH / Trace / Upgrade) match the full-width ones. */
+:root[data-contrast='high'] .mm-inspector .grid > button:not(:disabled) {
+    min-height: 46px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-white);
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--hc-border);
+    border-radius: 0.5rem;
+}
+:root[data-contrast='high'] .mm-node-label {
+    font-size: 17px;
+}
+:root[data-contrast='high'] .mm-node-ip {
+    font-size: 15px;
+}
+:root[data-contrast='high'] .mm-node-chip {
+    font-size: 13px;
+}
+:root[data-contrast='high'] .mm-node-val {
+    font-size: 15px;
+}
+/* min-w is in rem, which the 18px root inflates; pin it so cards don't grow into their neighbours. */
+:root[data-contrast='high'] .mm-node-core {
+    min-width: 200px;
+}
+
+/* Device tiles: solid colour blocks with a 2px edge, like the design (instead of faint tints). */
+:root[data-contrast='high'] .mm-node [class*='bg-sky-500/15'] {
+    background: #00798c;
+    color: #fefefe;
+    --tw-ring-color: #00798c;
+}
+:root[data-contrast='high'] .mm-node [class*='bg-violet-500/15'] {
+    background: #5b3fd6;
+    color: #fefefe;
+    --tw-ring-color: #5b3fd6;
+}
+:root[data-contrast='high'] .mm-node [class*='bg-amber-500/15'] {
+    background: #ffc21a;
+    color: #050505;
+    --tw-ring-color: #ffc21a;
+}
+:root[data-contrast='high'] .mm-node [class*='bg-fuchsia-500/15'] {
+    background: #b3126b;
+    color: #fefefe;
+    --tw-ring-color: #b3126b;
+}
+:root[data-contrast='high'] .mm-node [class*='bg-emerald-500/15'] {
+    background: var(--hc-raised);
+    color: var(--color-white);
+    --tw-ring-color: var(--hc-border);
+}
+:root[data-contrast='high'] .mm-edge-label {
+    border-radius: 6px;
+}
+
+/* Toolbar layout from the design: two left-aligned rows. Row 1 = map, live, counts, search;
+   row 2 = one segmented tool group, then the add buttons. */
+:root[data-contrast='high'] .mm-seg {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 42px;
+    padding: 3px;
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px var(--hc-border);
+    background: var(--color-surface);
+}
+:root[data-contrast='high'] .mm-seg > div {
+    padding: 0;
+    gap: 4px;
+    background: transparent;
+    box-shadow: none;
+    border-radius: 0;
+}
+:root[data-contrast='high'] .mm-seg button {
+    width: 36px;
+    height: 32px;
+    min-height: 32px;
+    padding: 0;
+    border-radius: 6px;
+    box-shadow: none;
+    background: transparent;
+}
+:root[data-contrast='high'] .mm-seg button.bg-white\/10 {
+    background: var(--color-white);
+    color: var(--color-surface);
+}
+/* Live / History group. */
+:root[data-contrast='high'] .mm-live-group {
+    height: 42px;
+    padding: 3px;
+    gap: 4px;
+    border-radius: 8px;
+    box-shadow: 0 0 0 2px var(--hc-border);
+    background: var(--color-surface);
+}
+:root[data-contrast='high'] .mm-live {
+    height: 32px;
+    padding-inline: 12px;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--color-emerald-400) 18%, var(--color-surface));
+    box-shadow: 0 0 0 2px var(--color-emerald-300);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 15px;
+    font-weight: 800;
+}
+:root[data-contrast='high'] .mm-live-group button {
+    min-height: 32px;
+    box-shadow: none;
+    font-size: 15px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+/* Solid black/white panels with divider lines, like the design: no mesh glow, no translucent
+   panels, and a toolbar strip that sits above the map (with its own bottom divider) instead of
+   floating over it. */
+:root[data-contrast='high'] .mm-mesh {
+    display: none;
+}
+:root[data-contrast='high'] .mm-header,
+:root[data-contrast='high'] .mm-navrail {
+    background: var(--color-surface);
+    backdrop-filter: none;
+}
+:root[data-contrast='high'] .react-flow {
+    --xy-background-color: var(--color-surface);
+    --xy-background-color-default: var(--color-surface);
+    background-color: var(--color-surface);
+}
+/* Minimap panel: the label gets its own band above the map thumbnail (it used to sit on top of the
+   nodes), and the panel gets the same 2px border as every other card. The utilities on the element
+   are !important, so these need to be too. */
+:root[data-contrast='high'] .mm-minimap {
+    box-sizing: content-box;
+    padding: 34px 12px 12px;
+    border-radius: 10px !important;
+    background: var(--color-surface) !important;
+    box-shadow: 0 0 0 2px var(--hc-border) !important;
+}
+:root[data-contrast='high'] .mm-minimap .react-flow__minimap-svg {
+    display: block;
+}
+
+/* Zoom control: moved to the top-left of the map in high contrast, as a squared 50px column. */
+:root[data-contrast='high'] .mm-zoom {
+    width: 50px;
+    border-radius: 10px;
+    background: var(--color-surface);
+    box-shadow: 0 0 0 2px var(--hc-border);
+}
+:root[data-contrast='high'] .mm-zoom button {
+    width: 100%;
+    height: 46px;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-zoom button:hover {
+    background: var(--hc-raised);
+}
+:root[data-contrast='high'] .mm-zoom-div {
+    margin: 0;
+    height: 2px;
+    background: var(--hc-border);
+}
+:root[data-contrast='high'] .mm-zoom .mm-zoom-pct {
+    padding: 5px 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-white);
+    opacity: 1;
+    border-bottom: 2px solid var(--hc-border);
+}
+
+@layer utilities {
+    /* The minimap's own classes are !important utilities in this layer, and an important
+       declaration in a layer beats an important unlayered one, so these live here, later. */
+    :where(:root[data-contrast='high']) .mm-minimap {
+        border-radius: 10px !important;
+        background: var(--color-surface) !important;
+        box-shadow: 0 0 0 2px var(--hc-border) !important;
+    }
+}
+/* No grey dimming mask over the thumbnail: the design is plain black with solid green blocks. */
+:root[data-contrast='high'] .mm-minimap .react-flow__minimap-mask {
+    fill: transparent !important;
+    stroke: none !important;
+}
+/* Sidebar details from the design: solid count badges, a bolder utilisation key, a framed system box. */
+:root[data-contrast='high'] .mm-badge {
+    display: grid;
+    place-items: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 14px;
+    background: #ffc21a;
+    border: 2px solid #050505;
+    box-shadow: none;
+    color: #050505;
+    font-size: 14px;
+    font-weight: 800;
+}
+:root[data-contrast='high'] .mm-badge-rose {
+    background: var(--color-rose-400);
+    color: #ffffff;
+}
+:root[data-contrast='high'] .mm-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+:root[data-contrast='high'] .mm-legend-bar {
+    height: 12px;
+    border-radius: 6px;
+}
+:root[data-theme='light'][data-contrast='high'] .mm-legend-bar {
+    background: linear-gradient(90deg, #00853f, #f2c200 50%, #d9001e) !important;
+}
+:root[data-theme='dark'][data-contrast='high'] .mm-legend-bar {
+    background: linear-gradient(90deg, #3be070, #f2c200 50%, #ff4d5e) !important;
+}
+:root[data-contrast='high'] .mm-legend-scale {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-legend-keys {
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    padding-top: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-legend-dot {
+    width: 12px;
+    height: 12px;
+}
+:root[data-contrast='high'] .mm-legend-dot[data-status='down'] {
+    border-radius: 0;
+}
+:root[data-contrast='high'] .mm-legend-dot[data-status='unknown'] {
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--hc-ink-2);
+}
+:root[data-contrast='high'] .mm-sysbox {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: 0 0 0 2px var(--hc-border);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--color-white);
+}
+:root[data-contrast='high'] .mm-sysbox div:last-child {
+    color: var(--hc-ink-2);
+}
+
+/* Sidebar sizing from the design (248px wide, tighter vertical rhythm) so the legend and system box
+   stay on screen; the rail also scrolls on short windows instead of running off the bottom. */
+:root[data-contrast='high'] .mm-navrail {
+    width: 248px;
+    gap: 12px;
+    padding: 18px 12px 14px;
+}
+:root[data-contrast='high'] .mm-navrail ul {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    gap: 2px;
+}
+/* Rows are 44px when there is room and shrink (to 36px) when the window is short, so the rail
+   fits instead of needing a scrollbar. */
+:root[data-contrast='high'] .mm-navrail li {
+    flex: 1 1 36px;
+    min-height: 0;
+    max-height: 44px;
+}
+:root[data-contrast='high'] .mm-navrail li > button {
+    height: 100%;
+}
+:root[data-contrast='high'] .mm-legend-keys {
+    gap: 6px 14px;
+}
+
+@layer utilities {
+    /* Text: two colours only. Secondary for what was muted, ink for the rest. */
+    :where(:root[data-contrast='high']) :is(.text-white\/20, .text-white\/25, .text-white\/30, .text-white\/35, .text-white\/40, .text-white\/45, .text-white\/50, .text-white\/55, .text-white\/60) {
+        color: var(--hc-ink-2);
+    }
+    :where(:root[data-contrast='high']) :is(.text-white\/65, .text-white\/70, .text-white\/75, .text-white\/80, .text-white\/85, .text-white\/90) {
+        color: var(--color-white);
+    }
+    :where(:root[data-contrast='high']) .placeholder\:text-white\/30::placeholder {
+        color: var(--hc-ink-2);
+    }
+
+    /* Size floor for the smallest print. */
+    :where(:root[data-contrast='high']) :is(.text-\[9px\], .text-\[10px\]) {
+        font-size: 12px;
+    }
+    :where(:root[data-contrast='high']) .text-\[11px\] {
+        font-size: 13px;
+    }
+    /* Section labels: bold caps, wide enough to read. */
+    :where(:root[data-contrast='high']) .uppercase {
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+    }
+
+    /* Edges: solid, visible, 2px. */
+    :where(:root[data-contrast='high']) :is(.ring-white\/5, .ring-white\/10, .ring-white\/15, .ring-white\/20, .ring-white\/25, .ring-white\/30) {
+        --tw-ring-color: var(--hc-border);
+    }
+    :where(:root[data-contrast='high']) .ring-1 {
+        --tw-ring-shadow: 0 0 0 2px var(--tw-ring-color, currentcolor);
+    }
+    :where(:root[data-contrast='high']) :is(.border-white\/5, .border-white\/10, .border-white\/15, .border-white\/20) {
+        border-color: var(--hc-border);
+    }
+    :where(:root[data-contrast='high']) :is(.border, .border-b, .border-t, .border-l, .border-r) {
+        border-width: 2px;
+    }
+    :where(:root[data-contrast='high']) :is(.border-b) {
+        border-width: 0 0 2px;
+    }
+    :where(:root[data-contrast='high']) :is(.border-t) {
+        border-width: 2px 0 0;
+    }
+    :where(:root[data-contrast='high']) :is(.border-l) {
+        border-width: 0 0 0 2px;
+    }
+    :where(:root[data-contrast='high']) :is(.border-r) {
+        border-width: 0 2px 0 0;
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Normal Dark (the approved "Topology Normal Dark" design): flat #0A0D0F panels over a flat
+   #151617 canvas, hairline #1F2529 dividers, single-border node cards, no glow. Scoped to the dark
+   theme at standard contrast; high contrast and light mode have their own rules.
+   --------------------------------------------------------------------------------------------- */
+:root[data-theme='dark']:not([data-contrast='high']) .mm-mesh {
+    display: none;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .react-flow {
+    --xy-background-color: #151617;
+    --xy-background-color-default: #151617;
+    background-color: #151617;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-toolbar {
+    background: #151617;
+    border-bottom-color: #1f2529;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-header,
+:root[data-theme='dark']:not([data-contrast='high']) .mm-navrail {
+    background: #0a0d0f;
+    backdrop-filter: none;
+}
+/* Node cards: one 1px card, 10px radius, soft drop shadow. Selected/down keep their rings. */
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node {
+    padding: 0;
+    border-radius: 10px;
+    background: transparent;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node.ring-white\/5 {
+    box-shadow: none;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node-core {
+    background: #0b0d0f;
+    border: 1px solid #2a3137;
+    border-radius: 10px;
+    padding: 8px 10px 7px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node-label {
+    color: #e9ebed;
+    font-weight: 700;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node-ip {
+    color: #7a8389;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node-chip {
+    background: #181d21;
+    color: #7a8389;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px #2a3137;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node-bar {
+    background: #262c31;
+}
+/* Device tiles: tinted blocks with no ring, per the design. */
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node [class*='bg-emerald-500/15'] {
+    background: #0e2a22;
+    color: #34e89e;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node [class*='bg-sky-500/15'] {
+    background: #1f2a33;
+    color: #8fa3b3;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node [class*='bg-violet-500/15'] {
+    background: #2a2350;
+    color: #b9a8ff;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-node [class*='bg-amber-500/15'] {
+    background: #3a2c08;
+    color: #f5b82e;
+    box-shadow: none;
+    border-radius: 6px;
+}
+/* LIVE / HISTORY: monospace caps, LIVE as a small bordered button. */
+:root[data-theme='dark']:not([data-contrast='high']) .mm-live-group {
+    background: #111518;
+    box-shadow: 0 0 0 1px #1f2529;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+}
+:root[data-theme='dark']:not([data-contrast='high']) .mm-live {
+    background: #0d1013;
+    box-shadow: 0 0 0 1px #1f2529;
+    border-radius: 6px;
+    height: 26px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.12em;
+}
+/* Minimap: 4px corners, no dimming mask. */
+:root[data-theme='dark']:not([data-contrast='high']) .mm-minimap .react-flow__minimap-mask {
+    fill: transparent !important;
+    stroke: none !important;
+}
+@layer utilities {
+    :where(:root[data-theme='dark']:not([data-contrast='high'])) .mm-minimap {
+        border-radius: 4px !important;
+        background: #0a0d0f !important;
+        box-shadow: 0 0 0 1px #1f2529 !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Normal Light (the approved "Topology Normal Light" design): white panels over a flat #E1E4E7
+   canvas, #E1E5EA dividers, single-border white node cards, no glow. Standard contrast only.
+   --------------------------------------------------------------------------------------------- */
+:root[data-theme='light']:not([data-contrast='high']) .mm-mesh {
+    display: none;
+}
+:root[data-theme='light']:not([data-contrast='high']) .react-flow {
+    --xy-background-color: #e1e4e7;
+    --xy-background-color-default: #e1e4e7;
+    background-color: #e1e4e7;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-toolbar {
+    background: #ffffff;
+    border-bottom-color: #e1e5ea;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-header,
+:root[data-theme='light']:not([data-contrast='high']) .mm-navrail {
+    background: #ffffff;
+    backdrop-filter: none;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node {
+    padding: 0;
+    border-radius: 10px;
+    background: transparent;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node.ring-white\/5 {
+    box-shadow: none;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node-core {
+    background: #ffffff;
+    border: 1px solid #ccd3da;
+    border-radius: 10px;
+    padding: 8px 10px 7px;
+    box-shadow: 0 1px 2px rgba(20, 30, 40, 0.06);
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node-label {
+    color: #172029;
+    font-weight: 700;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node-ip {
+    color: #5f6b76;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node-chip {
+    background: #e9edf1;
+    color: #5f6b76;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px #ccd3da;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node-bar {
+    background: #e3e7eb;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node [class*='bg-emerald-500/15'] {
+    background: #e4f2ea;
+    color: #11784c;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node [class*='bg-sky-500/15'] {
+    background: #e8edf2;
+    color: #4e6475;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node [class*='bg-violet-500/15'] {
+    background: #edeafb;
+    color: #5643c2;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-node [class*='bg-amber-500/15'] {
+    background: #fbf0d4;
+    color: #8f6100;
+    box-shadow: none;
+    border-radius: 6px;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-live-group {
+    background: #ffffff;
+    box-shadow: 0 0 0 1px #e1e5ea;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-live {
+    background: #f5f7f9;
+    box-shadow: 0 0 0 1px #e1e5ea;
+    border-radius: 6px;
+    height: 26px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.12em;
+}
+:root[data-theme='light']:not([data-contrast='high']) .mm-minimap .react-flow__minimap-mask {
+    fill: transparent !important;
+    stroke: none !important;
+}
+@layer utilities {
+    :where(:root[data-theme='light']:not([data-contrast='high'])) .mm-minimap {
+        border-radius: 4px !important;
+        background: #ffffff !important;
+        box-shadow: 0 0 0 1px #e1e5ea !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Normal Light / Normal Dark text + control colours. The app writes muted text as the ink colour
+   at 30-70% opacity, which renders much paler than the designs' solid greys, so at standard
+   contrast those utilities map onto the designs' three greys, and inspector buttons become
+   bordered, solid-filled controls.
+   --------------------------------------------------------------------------------------------- */
+:root[data-theme='light']:not([data-contrast='high']) {
+    --mm-t1: #34404b;
+    --mm-t2: #5f6b76;
+    --mm-t3: #87929c;
+    --mm-border: #e1e5ea;
+    --mm-hover: #e9edf1;
+    --mm-btn-bg: #ffffff;
+}
+:root[data-theme='dark']:not([data-contrast='high']) {
+    --mm-t1: #c3c8cc;
+    --mm-t2: #7a8389;
+    --mm-t3: #555d63;
+    --mm-border: #1f2529;
+    --mm-hover: #181d21;
+    --mm-btn-bg: #111518;
+}
+:root:not([data-contrast='high']) .mm-inspector :is(button.w-full, .grid > button):not(:disabled):not([class*='rose']) {
+    background: var(--mm-btn-bg);
+    box-shadow: 0 0 0 1px var(--mm-border);
+    color: var(--mm-t1);
+    border-radius: 6px;
+    font-weight: 500;
+}
+:root:not([data-contrast='high']) .mm-inspector :is(button.w-full, .grid > button):not(:disabled):not([class*='rose']):hover {
+    background: var(--mm-hover);
+}
+:root:not([data-contrast='high']) .mm-nav {
+    font-size: 15px;
+    min-height: 38px;
+}
+@layer utilities {
+    :where(:root:not([data-contrast='high'])) :is(.text-white\/20, .text-white\/25, .text-white\/30, .text-white\/35) {
+        color: var(--mm-t3);
+    }
+    :where(:root:not([data-contrast='high'])) :is(.text-white\/40, .text-white\/45, .text-white\/50) {
+        color: var(--mm-t2);
+    }
+    :where(:root:not([data-contrast='high'])) :is(.text-white\/55, .text-white\/60, .text-white\/65, .text-white\/70) {
+        color: var(--mm-t1);
+    }
+    :where(:root:not([data-contrast='high'])) .placeholder\:text-white\/30::placeholder {
+        color: var(--mm-t3);
+    }
 }
 
 /* Native <select> option popups. The app's controls sit on translucent backgrounds
