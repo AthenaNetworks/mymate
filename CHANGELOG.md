@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-03
+
 ### Added
 - High-contrast setting: a contrast button next to the light/dark toggle (top bar and sign-in screen) switches to pure black or white surfaces, solid 2px borders, a secondary-text colour that meets AAA, the Atkinson Hyperlegible font, a larger base size, status shapes (circle, square, hollow ring) and a labelled minimap and zoom readout, in either theme. It is remembered per browser and the standard look is unchanged.
 - The sign-in screen has an eye button to show or hide the password as you type it.
@@ -1220,7 +1222,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.1.1...HEAD
+[2.1.1]: https://github.com/AthenaNetworks/mymate/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/AthenaNetworks/mymate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...v2.0.0
 [1.9.0]: https://github.com/AthenaNetworks/mymate/compare/v1.8.0...v1.9.0
