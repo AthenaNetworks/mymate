@@ -541,7 +541,7 @@ function PackageCache() {
                     {packages.map((p) => (
                         <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs ring-1 ring-white/[0.06]">
                             <span className="min-w-0 flex-1 truncate">
-                                <span className="font-mono text-white/80">{p.version} · {p.arch}</span>
+                                <span className="font-mono text-white/80">{p.name && p.name !== 'routeros' ? `${p.name} · ` : ''}{p.version} · {p.arch}</span>
                                 <span className={`ml-2 ${statusTone[p.status] ?? 'text-white/40'}`}>{p.status}</span>
                                 {p.size_bytes ? <span className="ml-2 text-white/35">{(p.size_bytes / 1048576).toFixed(1)} MB</span> : null}
                                 {p.error ? <span className="ml-2 truncate text-rose-300/70">{p.error}</span> : null}

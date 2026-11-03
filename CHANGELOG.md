@@ -16,9 +16,24 @@ of commit subjects.
 ### Added
 - High-contrast setting: a contrast button next to the light/dark toggle (top bar and sign-in screen) switches to pure black or white surfaces, solid 2px borders, a secondary-text colour that meets AAA, the Atkinson Hyperlegible font, a larger base size, status shapes (circle, square, hollow ring) and a labelled minimap and zoom readout, in either theme. It is remembered per browser and the standard look is unchanged.
 - The sign-in screen has an eye button to show or hide the password as you type it.
+- `mymate:user:password <email>` sets a new password for an operator from the server, for when the
+  only admin is locked out. It asks twice, applies the app's password rules and signs out
+  "remember me" logins. The README shows how to run it for each install method.
 
 ### Changed
 - Dark and light themes follow the new Topology designs: flat panels and canvas, a toolbar strip with a divider above the map (left-aligned rows), single-border node cards with tinted device tiles, and muted text mapped onto the designs' solid greys. The sidebar rail now scrolls instead of running off short windows.
+
+### Fixed
+- Upgrading RouterOS 7 to a specific version rebooted a router with an extra package installed
+  (`wifi-qcom-ac`, `wifi-qcom`, `container`, ...) without upgrading it. Only the main `routeros`
+  package was staged, so RouterOS logged `missing package wifi-qcom-ac` and booted the old
+  version. My Mate now stages every installed package at the target version, and the mirror
+  caches them as well. If one can't be downloaded it removes what it staged and doesn't reboot.
+- An upgrade is only marked done once the router is confirmed running the new version. One that
+  comes back on the old version is marked failed with RouterOS's reason from its log (for example
+  `missing package wifi-qcom-ac`) instead of reporting success or a vague failure.
+- An upgrade message longer than 255 characters (a long router log line or error) no longer
+  fails to save; it's cut to fit.
 
 ## [2.1.0] - 2026-11-01
 

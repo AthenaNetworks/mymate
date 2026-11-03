@@ -24,6 +24,8 @@ use Throwable;
  * the UI can show a spinner -> result:
  *   checking -> (up_to_date)            ... already on the latest, nothing to do
  *   checking -> downloading -> rebooting -> done   ... pulled a newer release, rebooted, confirmed
+ *   checking -> downloading -> rebooting -> failed ... came back on the old version (RouterOS
+ *                                                     refused the install; its log says why)
  *
  * Reboots are destructive, so callers gate it behind a confirm + run it on the
  * isolated `upgrade` queue. After issuing the reboot this **waits for the device to
@@ -99,12 +101,12 @@ class UpgradeDevice
         $this->mark($device, UpgradeStatus::Checking, $version !== null ? "Preparing {$version}..." : 'Checking for updates...', $version);
 
         try {
-            $rebooted = $version !== null
+            $expected = $version !== null
                 ? $this->installTargeted($device, $version, $source)
                 : $this->checkAndMaybeReboot($device);
 
-            if (! $rebooted) {
-                return; // up_to_date already marked
+            if ($expected === null) {
+                return; // no reboot - up_to_date or failed already marked
             }
 
             if (! $this->waiter->awaitRecovery($device)) {
@@ -113,13 +115,31 @@ class UpgradeDevice
                 return;
             }
 
-            // Confirm the new version (best-effort; fall back to the target version).
-            $version = $this->readVersion($device) ?? $device->latest_version;
-            $device->os_version = $version;
-            $this->mark($device, UpgradeStatus::Done, 'Upgraded to '.($version ?? 'the latest release').'.');
+            // Confirm it really is on the new version. A router reboots happily when RouterOS
+            // refuses the install (a missing extra package, no space) and comes back on the old
+            // one, so a successful reboot proves nothing on its own.
+            $running = $this->readVersionAfterReboot($device);
+            if ($running === null) {
+                $this->mark($device, UpgradeStatus::Failed, "Came back online, but its RouterOS version couldn't be read to confirm {$expected} installed.");
+
+                return;
+            }
+            $device->os_version = $running;
+            if ($running !== $expected) {
+                $reason = $this->installFailureReason($device);
+                $this->mark($device, UpgradeStatus::Failed, "Rebooted, but it's still on {$running}: RouterOS didn't install {$expected}"
+                    .($reason !== null ? " ({$reason})." : '.'));
+                EngineLog::warning('upgrade: rebooted but not upgraded', [
+                    'device_id' => $device->id, 'device' => $device->name, 'running' => $running, 'expected' => $expected, 'reason' => $reason,
+                ]);
+
+                return;
+            }
+
+            $this->mark($device, UpgradeStatus::Done, "Upgraded to {$running}.");
 
             EngineLog::info('upgrade: complete', [
-                'device_id' => $device->id, 'device' => $device->name, 'version' => $version,
+                'device_id' => $device->id, 'device' => $device->name, 'version' => $running,
             ]);
         } catch (Throwable $e) {
             $this->mark($device, UpgradeStatus::Failed, $e->getMessage()); // host/error only - never creds
@@ -127,8 +147,12 @@ class UpgradeDevice
         }
     }
 
-    /** Returns true if a reboot was issued (an update was available). */
-    private function checkAndMaybeReboot(Device $device): bool
+    /**
+     * Upgrade to the latest in the device's channel. RouterOS's own updater downloads every
+     * installed package, extras included. Returns the version it rebooted to apply, or null if
+     * there was nothing to do.
+     */
+    private function checkAndMaybeReboot(Device $device): ?string
     {
         $conn = $this->client->open(RouterOsTarget::fromDevice($device));
 
@@ -148,7 +172,7 @@ class UpgradeDevice
             if (! self::isNewer($latest, $installed)) {
                 $this->mark($device, UpgradeStatus::UpToDate, 'Already on the latest'.($installed ? " ({$installed})." : '.'));
 
-                return false;
+                return null;
             }
 
             $this->mark($device, UpgradeStatus::Downloading, "Downloading {$latest}...", $latest);
@@ -157,19 +181,25 @@ class UpgradeDevice
             $this->mark($device, UpgradeStatus::Rebooting, "Rebooting to apply {$latest}...", $latest);
             $conn->query('/system/reboot');
 
-            return true;
+            return $latest;
         } finally {
             $conn->close();
         }
     }
 
     /**
-     * Install a specific version: fetch its per-arch .npk onto the router and reboot. The
-     * router pulls the package straight from MikroTik (source 'mikrotik') or from our cache
-     * (source 'mirror'); on reboot RouterOS installs any .npk in root. We verify the package
-     * landed before rebooting - never reboot on a failed fetch. Returns true if a reboot issued.
+     * Install a specific version: fetch its per-arch .npk files onto the router and reboot. The
+     * router pulls them straight from MikroTik (source 'mikrotik') or from our cache (source
+     * 'mirror'); on reboot RouterOS installs any .npk in root.
+     *
+     * On RouterOS 7 that has to be every installed package, not just `routeros`: with an extra
+     * such as wifi-qcom-ac installed and only routeros staged, RouterOS logs "missing package
+     * wifi-qcom-ac", skips the install and boots the old version. So stage one .npk per installed
+     * package and check each one landed. If any didn't, remove what was staged (a later reboot
+     * would only hit the same wall) and don't reboot. Returns the version it rebooted to apply,
+     * or null if it didn't reboot.
      */
-    private function installTargeted(Device $device, string $version, string $source): bool
+    private function installTargeted(Device $device, string $version, string $source): ?string
     {
         $conn = $this->client->open(RouterOsTarget::fromDevice($device));
 
@@ -184,44 +214,89 @@ class UpgradeDevice
             if ($arch === '') {
                 $this->mark($device, UpgradeStatus::Failed, 'Could not determine the device architecture.');
 
-                return false;
+                return null;
             }
             if ($installed !== null && self::normalizeVersion($version) === $installed) {
                 $this->mark($device, UpgradeStatus::UpToDate, "Already on {$version}.");
 
-                return false;
+                return null;
             }
 
-            $filename = $this->releases->packageFilename($version, $arch);
+            // RouterOS 6 ships the standard packages as one bundle, so `routeros` is all there is.
+            $names = (int) $version >= 7 ? ['routeros', ...$this->extraPackages($conn)] : ['routeros'];
 
-            if ($source === 'mirror') {
-                $pkg = $this->packages->fetch($version, $arch);
-                if (! $pkg->isReady()) {
-                    $this->mark($device, UpgradeStatus::Failed, "Couldn't cache {$version}/{$arch}: ".($pkg->error ?? 'download failed').'.');
+            $staged = [];
+            foreach ($names as $name) {
+                $filename = $this->releases->packageFilename($version, $arch, $name);
 
-                    return false;
+                if ($source === 'mirror') {
+                    $pkg = $this->packages->fetch($version, $arch, null, $name);
+                    if (! $pkg->isReady()) {
+                        $this->removeFiles($conn, $staged);
+                        $this->mark($device, UpgradeStatus::Failed, "Couldn't cache {$filename}: ".($pkg->error ?? 'download failed').' - not rebooting.');
+
+                        return null;
+                    }
+                    $url = url('/rospkg/'.$pkg->token);
+                } else {
+                    $url = $this->releases->packageUrl($version, $arch, $name);
                 }
-                $url = url('/rospkg/'.$pkg->token);
-            } else {
-                $url = $this->releases->packageUrl($version, $arch);
-            }
 
-            $this->mark($device, UpgradeStatus::Downloading, "Fetching {$version} ({$arch}) to the device...");
-            $mode = str_starts_with($url, 'https') ? 'https' : 'http';
-            $conn->query('/tool/fetch', ['url' => $url, 'dst-path' => $filename, 'mode' => $mode]);
+                $this->mark($device, UpgradeStatus::Downloading, "Fetching {$filename} to the device...");
+                $staged[] = $filename;
+                try {
+                    $conn->query('/tool/fetch', ['url' => $url, 'dst-path' => $filename, 'mode' => str_starts_with($url, 'https') ? 'https' : 'http']);
+                } catch (RouterOsClientException) {
+                    // A 404 (no such package for this version) or a dropped download. The file
+                    // check below reports it.
+                }
 
-            if (! $this->fileOnDevice($conn, $filename)) {
-                $this->mark($device, UpgradeStatus::Failed, "The package didn't download onto {$device->name} - not rebooting.");
+                if (! $this->fileOnDevice($conn, $filename)) {
+                    $this->removeFiles($conn, $staged);
+                    $this->mark($device, UpgradeStatus::Failed, "{$filename} didn't download onto {$device->name} - not rebooting.");
 
-                return false;
+                    return null;
+                }
             }
 
             $this->mark($device, UpgradeStatus::Rebooting, "Rebooting to apply {$version}...");
             $conn->query('/system/reboot');
 
-            return true;
+            return self::normalizeVersion($version) ?? $version;
         } finally {
             $conn->close();
+        }
+    }
+
+    /**
+     * The extra packages installed on a RouterOS 7 router (wifi-qcom-ac, container, ...): every
+     * package but `routeros` itself, skipping any already scheduled for uninstall.
+     *
+     * @return list<string>
+     */
+    private function extraPackages(RouterOsConnection $conn): array
+    {
+        $names = [];
+        foreach ($conn->query('/system/package/print') as $row) {
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($name === '' || $name === 'routeros' || str_contains(strtolower((string) ($row['scheduled'] ?? '')), 'uninstall')) {
+                continue;
+            }
+            $names[$name] = true;
+        }
+
+        return array_keys($names);
+    }
+
+    /** Best-effort removal of .npk files we staged, so an abandoned upgrade isn't applied on a later reboot. */
+    private function removeFiles(RouterOsConnection $conn, array $names): void
+    {
+        foreach ($names as $name) {
+            try {
+                $conn->query('/file/remove', ['numbers' => $name]);
+            } catch (Throwable) {
+                // Not there (the fetch never wrote it) or the router refused - nothing more to do.
+            }
         }
     }
 
@@ -240,6 +315,55 @@ class UpgradeDevice
         }
 
         return false;
+    }
+
+    /**
+     * The running version once the router is back. It answers ping before its API is up, so
+     * give the API a few tries before giving up.
+     */
+    private function readVersionAfterReboot(Device $device): ?string
+    {
+        $attempts = max(1, (int) config('mymate.upgrade.version_check_attempts', 6));
+        for ($i = 1; $i <= $attempts; $i++) {
+            $version = $this->readVersion($device);
+            if ($version !== null || $i === $attempts) {
+                return $version;
+            }
+            sleep(max(0, (int) config('mymate.upgrade.poll_interval_s', 10)));
+        }
+
+        return null;
+    }
+
+    /**
+     * Why RouterOS skipped the install, from its log ("missing package wifi-qcom-ac", "not
+     * enough space for upgrade"). Null when the log doesn't say or can't be read.
+     */
+    private function installFailureReason(Device $device): ?string
+    {
+        try {
+            $conn = $this->client->open(RouterOsTarget::fromDevice($device));
+            try {
+                $rows = $conn->query('/log/print');
+            } finally {
+                $conn->close();
+            }
+        } catch (Throwable) {
+            return null;
+        }
+
+        $reasons = [];
+        foreach (array_reverse($rows) as $row) {
+            $message = trim((string) ($row['message'] ?? ''));
+            if (preg_match('/missing package|not enough (disk )?space|(bad|invalid|broken|corrupt\w*) (package|npk)|(failed to|unable to|could not) install|install(ation)? failed|depend/i', $message) === 1) {
+                $reasons[$message] = true;
+            }
+            if (count($reasons) === 3) {
+                break;
+            }
+        }
+
+        return $reasons === [] ? null : implode('; ', array_keys($reasons));
     }
 
     /** Read the live RouterOS version after a reboot; null if the device isn't answering yet. */

@@ -10,10 +10,13 @@ use App\Jobs\BulkUpgradeJob;
 use App\Jobs\UpgradeDeviceJob;
 use App\Models\Credential;
 use App\Models\Device;
+use App\Models\RouterosPackage;
 use App\Services\RouterOs\RouterOsClientException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\Support\FakeRebootWaiter;
 use Tests\Support\FakeRouterOsClient;
 use Tests\TestCase;
@@ -74,16 +77,197 @@ class UpgradeDeviceTest extends TestCase
         $device->update(['arch' => 'arm', 'os_version' => '7.20.7']);
         $client = new FakeRouterOsClient(replies: [
             '/system/resource/print' => [['version' => '7.20.7 (stable)', 'architecture-name' => 'arm']],
+            '/system/package/print' => [['name' => 'routeros', 'version' => '7.20.7']],
             // The fetched package is present on the device (so we reboot).
             '/file/print' => [['name' => 'routeros-7.20.9-arm.npk', 'size' => '11557064']],
         ]);
 
-        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.20.9', 'mikrotik');
+        (new UpgradeDevice($client, $this->comesBackOn($client, '7.20.9')))($device, '7.20.9', 'mikrotik');
 
         $cmds = $client->opened[0]->commands();
         $this->assertContains('/tool/fetch', $cmds);
         $this->assertContains('/system/reboot', $cmds);
+        $device->refresh();
+        $this->assertSame(UpgradeStatus::Done, $device->upgrade_status);
+        $this->assertSame('7.20.9', $device->os_version);
+    }
+
+    /** A waiter that has the router report $version once it's back, as a real upgrade would. */
+    private function comesBackOn(FakeRouterOsClient $client, string $version): FakeRebootWaiter
+    {
+        return new FakeRebootWaiter(result: true, onRecover: function () use ($client, $version): void {
+            $client->replies['/system/resource/print'] = [['version' => "{$version} (stable)", 'architecture-name' => 'arm']];
+        });
+    }
+
+    /** The fetch URLs the upgrade sent to the router, in order. */
+    private function fetchedUrls(FakeRouterOsClient $client): array
+    {
+        return array_values(array_map(
+            fn (array $q): string => $q['params']['url'],
+            array_filter($client->opened[0]->queries, fn (array $q): bool => $q['command'] === '/tool/fetch'),
+        ));
+    }
+
+    public function test_targeted_upgrade_stages_every_installed_package_not_just_routeros(): void
+    {
+        // A cAP ac: RouterOS refuses to install a new routeros without wifi-qcom-ac at the same
+        // version, logs "missing package wifi-qcom-ac" and boots the old one (the bug a customer
+        // hit). Every installed package has to be staged.
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.23.8']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.23.8 (stable)', 'architecture-name' => 'arm']],
+            '/system/package/print' => [
+                ['name' => 'routeros', 'version' => '7.23.8'],
+                ['name' => 'wifi-qcom-ac', 'version' => '7.23.8'],
+                ['name' => 'container', 'version' => '7.23.8', 'disabled' => 'true'],
+                ['name' => 'iot', 'version' => '7.23.8', 'scheduled' => 'scheduled for uninstall'],
+            ],
+            '/file/print' => [
+                ['name' => 'routeros-7.24.6-arm.npk', 'size' => '13000000'],
+                ['name' => 'wifi-qcom-ac-7.24.6-arm.npk', 'size' => '3000000'],
+                ['name' => 'container-7.24.6-arm.npk', 'size' => '1100000'],
+            ],
+        ]);
+
+        (new UpgradeDevice($client, $this->comesBackOn($client, '7.24.6')))($device, '7.24.6', 'mikrotik');
+
+        $this->assertSame([
+            'https://download.mikrotik.com/routeros/7.24.6/routeros-7.24.6-arm.npk',
+            'https://download.mikrotik.com/routeros/7.24.6/wifi-qcom-ac-7.24.6-arm.npk',
+            'https://download.mikrotik.com/routeros/7.24.6/container-7.24.6-arm.npk', // disabled still counts
+        ], $this->fetchedUrls($client)); // iot is being uninstalled, so not staged
+        $this->assertContains('/system/reboot', $client->opened[0]->commands());
         $this->assertSame(UpgradeStatus::Done, $device->refresh()->upgrade_status);
+    }
+
+    public function test_targeted_upgrade_does_not_reboot_when_an_extra_package_is_missing_and_cleans_up(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.23.8']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.23.8', 'architecture-name' => 'arm']],
+            '/system/package/print' => [['name' => 'routeros'], ['name' => 'wifi-qcom-ac']],
+            // routeros landed; wifi-qcom-ac didn't (a 404 for this version, say).
+            '/file/print' => [['name' => 'routeros-7.24.6-arm.npk', 'size' => '13000000']],
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.24.6', 'mikrotik');
+
+        $queries = $client->opened[0]->queries;
+        $this->assertNotContains('/system/reboot', array_column($queries, 'command'));
+        // Both staged files are removed, so a later reboot can't half-apply the upgrade.
+        $removed = array_column(array_column(array_filter($queries, fn (array $q): bool => $q['command'] === '/file/remove'), 'params'), 'numbers');
+        $this->assertSame(['routeros-7.24.6-arm.npk', 'wifi-qcom-ac-7.24.6-arm.npk'], $removed);
+        $device->refresh();
+        $this->assertSame(UpgradeStatus::Failed, $device->upgrade_status);
+        $this->assertStringContainsString('wifi-qcom-ac-7.24.6-arm.npk', $device->upgrade_message);
+    }
+
+    public function test_an_upgrade_that_comes_back_on_the_old_version_fails_with_the_routers_reason(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.23.8']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.23.8 (stable)', 'architecture-name' => 'arm']],
+            '/system/package/print' => [['name' => 'routeros']],
+            '/file/print' => [['name' => 'routeros-7.24.6-arm.npk', 'size' => '13000000']],
+            '/log/print' => [
+                ['message' => 'missing package wifi-qcom-ac'],
+                ['message' => 'router rebooted by api:admin@192.0.2.1/action:1'],
+                ['message' => 'ether1 link up'],
+            ],
+        ]);
+
+        // Rebooted fine and answers again - but RouterOS skipped the install.
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.24.6', 'mikrotik');
+
+        $device->refresh();
+        $this->assertSame(UpgradeStatus::Failed, $device->upgrade_status);
+        $this->assertSame('7.23.8', $device->os_version);
+        $this->assertSame("Rebooted, but it's still on 7.23.8: RouterOS didn't install 7.24.6 (missing package wifi-qcom-ac).", $device->upgrade_message);
+    }
+
+    public function test_a_latest_channel_upgrade_that_comes_back_on_the_old_version_fails(): void
+    {
+        $device = $this->routerOsDevice();
+        $client = new FakeRouterOsClient(replies: [
+            '/system/package/update/print' => [['installed-version' => '7.20.7', 'latest-version' => '7.20.8']],
+            '/system/resource/print' => [['version' => '7.20.7 (stable)']], // still the old one after the reboot
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device);
+
+        $device->refresh();
+        $this->assertSame(UpgradeStatus::Failed, $device->upgrade_status);
+        $this->assertStringStartsWith("Rebooted, but it's still on 7.20.7: RouterOS didn't install 7.20.8", $device->upgrade_message);
+    }
+
+    public function test_mirror_upgrade_caches_and_serves_the_extra_packages_too(): void
+    {
+        Storage::fake('local');
+        // A closure, so each download gets a fresh body (one shared response is drained by the first).
+        Http::fake(['*download.mikrotik.com/*' => fn () => Http::response(str_repeat('N', 4096))]);
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm64', 'os_version' => '7.23.8']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.23.8', 'architecture-name' => 'arm64']],
+            '/system/package/print' => [['name' => 'routeros'], ['name' => 'wifi-qcom']],
+            '/file/print' => [
+                ['name' => 'routeros-7.24.6-arm64.npk', 'size' => '13000000'],
+                ['name' => 'wifi-qcom-7.24.6-arm64.npk', 'size' => '3000000'],
+            ],
+        ]);
+
+        (new UpgradeDevice($client, $this->comesBackOn($client, '7.24.6')))($device, '7.24.6', 'mirror');
+
+        $cached = RouterosPackage::orderBy('id')->get();
+        $this->assertSame(['routeros', 'wifi-qcom'], $cached->pluck('name')->all());
+        $this->assertSame(['ready', 'ready'], $cached->pluck('status')->all());
+        $this->assertSame($cached->map(fn (RouterosPackage $p): string => url('/rospkg/'.$p->token))->all(), $this->fetchedUrls($client));
+        Http::assertSent(fn ($r): bool => str_ends_with($r->url(), '/7.24.6/wifi-qcom-7.24.6-arm64.npk'));
+        $this->assertSame(UpgradeStatus::Done, $device->refresh()->upgrade_status);
+    }
+
+    public function test_a_long_failure_reason_is_cut_to_fit_rather_than_failing_the_write(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'arm', 'os_version' => '7.23.8']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '7.23.8', 'architecture-name' => 'arm']],
+            '/system/package/print' => [['name' => 'routeros']],
+            '/file/print' => [['name' => 'routeros-7.24.6-arm.npk', 'size' => '13000000']],
+            '/log/print' => [
+                ['message' => 'missing package '.str_repeat('a', 120)],
+                ['message' => 'missing package '.str_repeat('b', 120)],
+            ],
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '7.24.6', 'mikrotik');
+
+        $device->refresh();
+        $this->assertSame(UpgradeStatus::Failed, $device->upgrade_status);
+        $this->assertSame(255, mb_strlen($device->upgrade_message));
+        $this->assertStringEndsWith('...', $device->upgrade_message);
+        $this->assertSame($device->upgrade_message, $device->upgrades()->latest('id')->value('message'));
+    }
+
+    public function test_routeros_6_targeted_upgrade_stages_only_the_bundle(): void
+    {
+        $device = $this->routerOsDevice();
+        $device->update(['arch' => 'mipsbe', 'os_version' => '6.49.10']);
+        $client = new FakeRouterOsClient(replies: [
+            '/system/resource/print' => [['version' => '6.49.10', 'architecture-name' => 'mipsbe']],
+            // v6 lists the bundle's parts (system, wireless, ...) - they're all inside routeros.
+            '/system/package/print' => [['name' => 'routeros-mipsbe'], ['name' => 'system'], ['name' => 'wireless']],
+            '/file/print' => [['name' => 'routeros-mipsbe-6.49.18.npk', 'size' => '12000000']],
+        ]);
+
+        (new UpgradeDevice($client, new FakeRebootWaiter(result: true)))($device, '6.49.18', 'mikrotik');
+
+        $this->assertSame(['https://download.mikrotik.com/routeros/6.49.18/routeros-mipsbe-6.49.18.npk'], $this->fetchedUrls($client));
+        $this->assertNotContains('/system/package/print', $client->opened[0]->commands());
     }
 
     public function test_targeted_upgrade_does_not_reboot_if_the_package_never_landed(): void

@@ -24,6 +24,10 @@ class RouterosPackageTest extends TestCase
         $this->assertSame('routeros-7.15.3-arm.npk', $r->packageFilename('7.15.3', 'arm'));
         $this->assertSame('routeros-mipsbe-6.49.10.npk', $r->packageFilename('6.49.10', 'mipsbe'));
         $this->assertStringEndsWith('/7.15.3/routeros-7.15.3-arm.npk', $r->packageUrl('7.15.3', 'arm'));
+        // RouterOS 7 extra packages follow the same pattern, arch-less on x86/CHR.
+        $this->assertSame('wifi-qcom-ac-7.24.6-arm.npk', $r->packageFilename('7.24.6', 'arm', 'wifi-qcom-ac'));
+        $this->assertSame('container-7.24.6.npk', $r->packageFilename('7.24.6', 'x86_64', 'container'));
+        $this->assertStringEndsWith('/7.24.6/wifi-qcom-7.24.6-arm64.npk', $r->packageUrl('7.24.6', 'arm64', 'wifi-qcom'));
 
         // RouterOS 7 x86 AND CHR (which reports arch x86_64) both use the single arch-less package -
         // there is no routeros-<v>-x86.npk / -x86_64.npk on MikroTik.

@@ -28,6 +28,9 @@ class RecordUpgradeStatus
         ?int $userId = null,
         ?string $batchId = null,
     ): DeviceUpgrade {
+        // Both message columns are varchar(255); a router's log line or an exception can run longer.
+        $message = $message === null ? null : mb_strimwidth($message, 0, 255, '...');
+
         return DB::transaction(function () use ($device, $status, $message, $toVersion, $userId, $batchId) {
             $now = now();
 

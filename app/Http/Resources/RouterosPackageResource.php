@@ -13,6 +13,7 @@ class RouterosPackageResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'name' => $this->name,
             'version' => $this->version,
             'arch' => $this->arch,
             'channel' => $this->channel,

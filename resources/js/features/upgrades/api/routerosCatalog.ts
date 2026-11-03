@@ -10,6 +10,8 @@ export interface ChannelRelease {
 
 export interface RouterosPackage {
     id: number;
+    /** `routeros`, or an extra package (wifi-qcom-ac, container, ...) cached for a mirror upgrade. */
+    name: string;
     version: string;
     arch: string;
     channel: string | null;

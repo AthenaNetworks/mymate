@@ -435,6 +435,9 @@ return [
         'reboot_wait_s' => (int) env('MYMATE_UPGRADE_REBOOT_WAIT', 300),
         // How often to re-check the device's status while waiting (s).
         'poll_interval_s' => (int) env('MYMATE_UPGRADE_POLL_INTERVAL', 10),
+        // Once it's back, how many times to try reading its version (poll_interval_s apart) to
+        // confirm the upgrade took. Ping comes back before the API does.
+        'version_check_attempts' => (int) env('MYMATE_UPGRADE_VERSION_CHECK_ATTEMPTS', 6),
 
         // RouterOS package mirror/cache: choose a version + let the router pull the .npk from
         // us or straight from MikroTik.

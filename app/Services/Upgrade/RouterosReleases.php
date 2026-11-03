@@ -74,30 +74,32 @@ class RouterosReleases
     }
 
     /**
-     * The .npk filename for a version + arch. RouterOS 7 orders it version-first, 6 arch-first.
+     * The .npk filename for a package + version + arch. RouterOS 7 orders it version-first, 6
+     * arch-first. `$name` is the main `routeros` package or a RouterOS 7 extra (`wifi-qcom-ac`,
+     * `container`, ...), which MikroTik publishes alongside it under the same pattern.
      *
      * RouterOS 7 ships x86 AND CHR (which reports its architecture as `x86_64`) as one arch-LESS
      * package - there is no `routeros-<v>-x86.npk` or `-x86_64.npk`, only `routeros-<v>.npk`. Every
      * other architecture is suffixed as normal. This is why a CHR upgrade fetches a different file
      * than, say, an arm64 device.
      */
-    public function packageFilename(string $version, string $arch): string
+    public function packageFilename(string $version, string $arch, string $name = 'routeros'): string
     {
         $major = (int) $version;
 
         if ($major >= 7) {
             return in_array($arch, ['x86', 'x86_64'], true)
-                ? "routeros-{$version}.npk"
-                : "routeros-{$version}-{$arch}.npk";
+                ? "{$name}-{$version}.npk"
+                : "{$name}-{$version}-{$arch}.npk";
         }
 
-        return "routeros-{$arch}-{$version}.npk";
+        return "{$name}-{$arch}-{$version}.npk";
     }
 
-    /** Full MikroTik download URL for a version + arch. */
-    public function packageUrl(string $version, string $arch): string
+    /** Full MikroTik download URL for a package + version + arch. */
+    public function packageUrl(string $version, string $arch, string $name = 'routeros'): string
     {
-        return "{$this->base()}/{$version}/{$this->packageFilename($version, $arch)}";
+        return "{$this->base()}/{$version}/{$this->packageFilename($version, $arch, $name)}";
     }
 
     /** Byte size of the package on MikroTik if it exists (HEAD), else null. */
