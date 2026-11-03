@@ -144,6 +144,27 @@ mymate:user:create --admin
 After that, admins manage accounts inside the app under Settings. Admins can change anything,
 everyone else is read only.
 
+## Resetting a password
+
+An admin can reset anyone's password under Settings > Operators. If you're locked out yourself (the
+only admin, say), reset it from the server with `mymate:user:password`. It asks for the new password
+twice, so it never ends up in your shell history. The same rules apply as in the app: at least 10
+characters, upper and lower case letters, and a number. It also signs out any "remember me"
+logins made with the old password.
+
+Run it as the `mymate` user, the same as the services, however you installed:
+
+| Install | Command |
+|---|---|
+| Debian / Ubuntu package | `sudo -u mymate php /opt/mymate/artisan mymate:user:password you@example.com` |
+| Proxmox LXC | `pct enter <vmid>` on the Proxmox host, then the package command above |
+| Docker Compose | `docker compose exec -u mymate app php artisan mymate:user:password you@example.com` |
+| Plain `docker run` | `docker exec -it -u mymate <container> php artisan mymate:user:password you@example.com` |
+| From source | `sudo -u mymate php artisan mymate:user:password you@example.com`, in the checkout |
+
+If you can sign in with your password but have lost your passkey and recovery codes, clear them the
+same way with `mymate:user:reset-passkeys you@example.com` in place of `mymate:user:password`.
+
 ## HTTPS
 
 The packaged and LXC installs are HTTPS on day one with a self signed certificate. To move to
