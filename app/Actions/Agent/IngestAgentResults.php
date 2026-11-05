@@ -3,6 +3,7 @@
 namespace App\Actions\Agent;
 
 use App\Actions\Devices\CaptureDeviceFacts;
+use App\Actions\Devices\UpgradeDevice;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
 use App\Actions\Polling\PollSensors;
@@ -281,6 +282,11 @@ class IngestAgentResults
             array_values((array) ($facts['ent_models'] ?? [])),
             array_values((array) ($facts['ent_serials'] ?? [])),
         );
+        // An older RouterOS leaves the version out of sysDescr; a newer agent also sends
+        // mtxrLicVersion for that (GH #60). An older agent doesn't, and nothing changes.
+        if ($parsed['os_version'] === null && is_string($facts['mtxr_version'] ?? null)) {
+            $parsed['os_version'] = UpgradeDevice::normalizeVersion($facts['mtxr_version']);
+        }
 
         $this->facts->applyFacts($device, $parsed);
     }

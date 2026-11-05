@@ -54,3 +54,16 @@ func TestExpandCIDRCap(t *testing.T) {
 		t.Errorf("first = %s, want 10.0.0.1", got[0])
 	}
 }
+
+func TestWantsMtxrVersionOnlyForRouterOS(t *testing.T) {
+	for descr, want := range map[string]bool{
+		"RouterOS RB750Gr3":                     true,
+		"RouterOS RB5009UPr+S+ 7.23.2 (stable)": true,
+		"Cisco IOS Software, C2960":             false,
+		"":                                      false,
+	} {
+		if got := wantsMtxrVersion(descr); got != want {
+			t.Errorf("wantsMtxrVersion(%q) = %v, want %v", descr, got, want)
+		}
+	}
+}

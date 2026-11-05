@@ -14,16 +14,19 @@ import (
 // *parsing* of what comes back stays server-side (CaptureDeviceFacts). Fixes #33 for the SNMP
 // path: an agent-polled device is discovered and fact-captured from the agent, not the server.
 const (
-	oidIfDescr      = "1.3.6.1.2.1.2.2.1.2"       // ifDescr.<idx>
-	oidIfName       = "1.3.6.1.2.1.31.1.1.1.1"    // ifName.<idx>
-	oidIfHighSpeed  = "1.3.6.1.2.1.31.1.1.1.15"   // ifHighSpeed.<idx> (Mbps)
-	oidIfOperStatus = "1.3.6.1.2.1.2.2.1.8"       // ifOperStatus.<idx> (1=up)
+	oidIfDescr      = "1.3.6.1.2.1.2.2.1.2"     // ifDescr.<idx>
+	oidIfName       = "1.3.6.1.2.1.31.1.1.1.1"  // ifName.<idx>
+	oidIfHighSpeed  = "1.3.6.1.2.1.31.1.1.1.15" // ifHighSpeed.<idx> (Mbps)
+	oidIfOperStatus = "1.3.6.1.2.1.2.2.1.8"     // ifOperStatus.<idx> (1=up)
 	oidSysDescr     = "1.3.6.1.2.1.1.1.0"
 	oidSysUpTime    = "1.3.6.1.2.1.1.3.0"
 	oidSysLocation  = "1.3.6.1.2.1.1.6.0"
 	oidHrMemorySize = "1.3.6.1.2.1.25.2.2.0"      // hrMemorySize (KB)
 	oidEntModel     = "1.3.6.1.2.1.47.1.1.1.1.13" // entPhysicalModelName
 	oidEntSerial    = "1.3.6.1.2.1.47.1.1.1.1.11" // entPhysicalSerialNum
+	// MIKROTIK-MIB mtxrLicVersion, the one vendor OID here: the RouterOS version, for builds
+	// that don't put it in sysDescr. Only asked of a device whose sysDescr says RouterOS.
+	oidMtxrLicVersion = "1.3.6.1.4.1.14988.1.1.4.4.0"
 )
 
 // discoverDevice walks an SNMP device's interfaces + facts. Runs only when the server set
@@ -116,6 +119,13 @@ func walkFacts(g *gosnmp.GoSNMP) *proto.DeviceFacts {
 		}
 	}
 
+	// Its own GET, so a device that doesn't know the OID can't fail the read above (SNMPv1).
+	if wantsMtxrVersion(f.SysDescr) {
+		if res, err := g.Get([]string{oidMtxrLicVersion}); err == nil && len(res.Variables) == 1 {
+			f.MtxrVersion = strings.TrimSpace(pduString(res.Variables[0]))
+		}
+	}
+
 	f.EntModels = stringsByIndex(walkStrings(g, oidEntModel))
 	f.EntSerials = stringsByIndex(walkStrings(g, oidEntSerial))
 
@@ -123,6 +133,11 @@ func walkFacts(g *gosnmp.GoSNMP) *proto.DeviceFacts {
 		return nil
 	}
 	return f
+}
+
+// wantsMtxrVersion is true for a RouterOS sysDescr, the only kind that has mtxrLicVersion.
+func wantsMtxrVersion(sysDescr string) bool {
+	return strings.HasPrefix(sysDescr, "RouterOS")
 }
 
 // stringsByIndex returns a walk's non-empty values ordered by their numeric row index.

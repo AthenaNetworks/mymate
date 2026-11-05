@@ -403,6 +403,9 @@ type DeviceFacts struct {
 	MemKb       *uint64  `json:"mem_kb,omitempty"`
 	EntModels   []string `json:"ent_models,omitempty"`
 	EntSerials  []string `json:"ent_serials,omitempty"`
+	// MIKROTIK-MIB mtxrLicVersion, read only for a RouterOS sysDescr: older builds leave the
+	// version out of sysDescr (GH #60). An older server ignores it.
+	MtxrVersion string `json:"mtxr_version,omitempty"`
 }
 
 // MetricsResult is one device's cpu/mem/temp reading. Each field is a pointer so an

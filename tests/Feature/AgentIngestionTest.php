@@ -289,6 +289,28 @@ class AgentIngestionTest extends TestCase
         $this->assertSame('snmp', $device->geo_source);
     }
 
+    public function test_ingest_discovery_reads_the_routeros_version_from_old_and_new_agents(): void
+    {
+        // GH #60. Older agents send sysDescr only; newer ones add mtxr_version for builds that
+        // leave the version out of sysDescr. Both must work.
+        $agent = Agent::factory()->create();
+        $ingest = function (array $facts) use ($agent) {
+            $device = Device::factory()->create(['agent_id' => $agent->id, 'os_version' => null]);
+            app(IngestAgentResults::class)($agent, ['discovery' => [[
+                'device_id' => $device->id,
+                'interfaces' => [['if_index' => 1, 'name' => 'ether1', 'oper_up' => true]],
+                'facts' => $facts,
+            ]]]);
+
+            return $device->fresh()->os_version;
+        };
+
+        $this->assertSame('7.23.2', $ingest(['sys_descr' => 'RouterOS RB5009UPr+S+ 7.23.2 (stable)'])); // older agent
+        $this->assertNull($ingest(['sys_descr' => 'RouterOS RB750Gr3'])); // older agent, older build
+        $this->assertSame('6.49.17', $ingest(['sys_descr' => 'RouterOS RB750Gr3', 'mtxr_version' => '6.49.17']));
+        $this->assertSame('7.23.2', $ingest(['sys_descr' => 'RouterOS RB5009UPr+S+ 7.23.2 (stable)', 'mtxr_version' => '7.1'])); // sysDescr wins
+    }
+
     public function test_ingest_discovery_applies_routeros_facts(): void
     {
         $agent = Agent::factory()->create();

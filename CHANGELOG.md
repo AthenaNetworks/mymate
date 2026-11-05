@@ -19,6 +19,8 @@ of commit subjects.
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters
   to one version, with a count of devices on each (#60). SNMP-polled MikroTiks now record their
   version too, read from sysDescr or MIKROTIK-MIB, so the sort isn't limited to API devices.
+  Remote agents already send sysDescr; a newer agent also sends the MIKROTIK-MIB version for
+  older builds that leave it out. Older agents keep working unchanged.
 
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
