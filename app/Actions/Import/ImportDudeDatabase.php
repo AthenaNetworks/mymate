@@ -266,7 +266,9 @@ class ImportDudeDatabase
             return [PollMethod::RouterOs, $credId];
         }
 
-        return [PollMethod::Snmp, null];
+        // Neither (Dude's no-snmp profile, say): ping-only, the way Dude was watching it. SNMP
+        // with no credential just failed every throughput poll. (GH #61)
+        return [PollMethod::None, null];
     }
 
     private function mapDeviceType(string $label): DeviceType

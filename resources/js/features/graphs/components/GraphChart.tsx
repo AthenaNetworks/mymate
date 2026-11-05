@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { formatRate } from '../../../lib/formatRate';
+import { bridgeGaps } from '../../../lib/bridgeGaps';
 import { parseUtc } from '../../../lib/parseUtc';
 import type { GraphColorMode, GraphData, GraphSeriesFormat } from '../../../types';
 
@@ -38,7 +39,8 @@ function fmtValue(v: number, format: GraphSeriesFormat, unit: string | null): st
     return `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ''}`;
 }
 
-type Line = { key: string; label: string; color: string; dashed: boolean; emphasized: boolean; format: GraphSeriesFormat; unit: string | null; values: (number | null)[] };
+// `values` are the real samples (the tooltip); `drawn` has the sampling gaps bridged (the lines).
+type Line = { key: string; label: string; color: string; dashed: boolean; emphasized: boolean; format: GraphSeriesFormat; unit: string | null; values: (number | null)[]; drawn: (number | null)[] };
 // A resolved thing to draw: its stroke path top values, an optional lower edge (stacked/fill area)
 // and the scale it's plotted against. `filled` draws the area under/within it.
 type Drawn = { line: Line; top: (number | null)[]; base: number[] | null; sc: (v: number) => number; filled: boolean };
@@ -77,9 +79,9 @@ export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: C
         };
         const out: Line[] = data.series.map((s, i) => ({
             key: `${s.group}:${i}`, label: s.label, color: s.color ?? defaultColor(s.group, i),
-            dashed: s.dashed, emphasized: false, format: s.format, unit: s.unit, values: s.values,
+            dashed: s.dashed, emphasized: false, format: s.format, unit: s.unit, values: s.values, drawn: bridgeGaps(s.values),
         }));
-        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, format: leftFmt.format, unit: leftFmt.unit, values: data.total });
+        if (data.total) out.push({ key: 'total', label: 'Total', color: TOTAL, dashed: false, emphasized: true, format: leftFmt.format, unit: leftFmt.unit, values: data.total, drawn: bridgeGaps(data.total) });
         return out;
     }, [data, leftFmt, palette, colorMode]);
 
@@ -108,14 +110,14 @@ export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: C
         if (stacked && mains.length > 0) {
             const running = new Array(nb).fill(0);
             for (const l of mains) {
-                const top = running.map((b, i) => b + (l.values[i] ?? 0));
+                const top = running.map((b, i) => b + (l.drawn[i] ?? 0));
                 items.push({ line: l, top, base: running.slice(), filled: true });
                 for (let i = 0; i < nb; i++) running[i] = top[i];
             }
             leftPeak = Math.max(1, ...running); // stack top = the implicit total
         } else {
-            for (const l of mains) items.push({ line: l, top: l.values, base: null, filled: fill });
-            if (totalLine) items.push({ line: totalLine, top: totalLine.values, base: null, filled: false });
+            for (const l of mains) items.push({ line: l, top: l.drawn, base: null, filled: fill });
+            if (totalLine) items.push({ line: totalLine, top: totalLine.drawn, base: null, filled: false });
             const src = mains.length || totalLine ? [...mains, ...(totalLine ? [totalLine] : [])] : msOnly;
             leftPeak = Math.max(1, ...src.flatMap((l) => l.values.map((v) => v ?? 0)));
         }
@@ -125,13 +127,13 @@ export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: C
         const yMsFn = (v: number) => PAD.t + (1 - v / msMaxLocal) * (H - PAD.t - PAD.b);
         // ms overlay only takes the right scale when a left-axis series shares the chart.
         const msScale = dualMs ? yMsFn : yFn;
-        for (const l of msOnly) items.push({ line: l, top: l.values, base: null, filled: false });
+        for (const l of msOnly) items.push({ line: l, top: l.drawn, base: null, filled: false });
 
         const list: Drawn[] = items.map((it) => ({ ...it, sc: it.line.format === 'ms' ? msScale : yFn }));
         return { drawn: list, yMax: yMaxLocal, msMax: msMaxLocal };
     }, [mains, msOnly, totalLine, stacked, fill, dualMs, nb]);
 
-    // A stroke path along `top` (breaks on nulls, so gaps stay gaps).
+    // A stroke path along `top` (breaks on nulls, so real gaps stay gaps; sampling gaps were bridged).
     const strokePath = (values: (number | null)[], sc: (v: number) => number) => {
         let d = '';
         let pen = false;

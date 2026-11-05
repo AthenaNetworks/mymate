@@ -116,10 +116,27 @@ class CaptureDeviceFacts
             'ram_bytes' => ($memKb !== null && $memKb > 0) ? $memKb * 1024 : null,
             'uptime_seconds' => $uptimeTicks !== null ? intdiv($uptimeTicks, 100) : null,
             'device_type' => $this->snmpType($sysDescr)->value,
+            'os_version' => self::versionFromSysDescr($sysDescr),
             'latitude' => $geo['lat'] ?? null,
             'longitude' => $geo['lng'] ?? null,
             'geo_source' => $geo !== null ? 'snmp' : null,
         ];
+    }
+
+    /**
+     * The RouterOS version from sysDescr, so SNMP-polled MikroTiks get one too, not only those on
+     * the API (GH #60). Newer builds append it after the model ("RouterOS RB5009UPr+S+ 7.23.2
+     * (stable)"), a CHR has no model ("RouterOS 7.23.2"). Older builds leave it out, and fromSnmp()
+     * asks mtxrLicVersion instead. Null for anything else: other vendors' sysDescr numbers aren't
+     * a RouterOS version.
+     */
+    public static function versionFromSysDescr(string $descr): ?string
+    {
+        if (preg_match('/^RouterOS\s+(?:\S+\s+)?v?(\d+\.\d+(?:\.\d+)?)(?:\s|$|[a-z])/i', trim($descr), $m) !== 1) {
+            return null;
+        }
+
+        return UpgradeDevice::normalizeVersion($m[1]);
     }
 
     /** @return array<string, mixed> */
@@ -236,7 +253,7 @@ class CaptureDeviceFacts
         $entModels = $this->snmp->walk($device->mgmt_ip, $community, $oids['ent_model']);
         $entSerials = $this->snmp->walk($device->mgmt_ip, $community, $oids['ent_serial']);
 
-        return $this->factsFromRaw(
+        $facts = $this->factsFromRaw(
             $descr,
             $ticks !== null ? (int) $ticks : null,
             is_numeric($memKb) ? (int) $memKb : null,
@@ -244,6 +261,19 @@ class CaptureDeviceFacts
             array_values($entModels),
             array_values($entSerials),
         );
+
+        // An older RouterOS leaves the version out of sysDescr; MIKROTIK-MIB still has it. Asked on
+        // its own so a device that doesn't know the OID can't fail the main read (SNMPv1).
+        if ($facts['os_version'] === null && str_starts_with(trim($descr), 'RouterOS')) {
+            try {
+                $lic = $this->snmp->get($device->mgmt_ip, $community, [$oids['mtxr_lic_version']]);
+                $facts['os_version'] = UpgradeDevice::normalizeVersion((string) ($lic[$oids['mtxr_lic_version']] ?? ''));
+            } catch (\Throwable) {
+                // best effort: no version is no worse than before
+            }
+        }
+
+        return $facts;
     }
 
     /** First non-empty, non-placeholder value from an SNMP walk (skips "", "N/A", "none"). */

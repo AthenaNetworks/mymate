@@ -8,7 +8,10 @@ use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Models\Device;
 use App\Models\Outage;
+use App\Services\Ping\FpingRunner;
 use App\Services\Ping\Pinger;
+use App\Services\Ping\PingSample;
+use App\Services\Ping\PingSweepTimedOut;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
@@ -234,5 +237,59 @@ class PingFleetTest extends TestCase
         $this->assertSame(1, app(PingFleet::class)());
         $this->assertSame(DeviceStatus::Up, $device->refresh()->status);
         $this->assertSame(0, $device->fail_streak);
+    }
+
+    public function test_a_timed_out_sweep_marks_who_replied_and_leaves_the_rest_alone(): void
+    {
+        // GH #61: the whole sweep used to be thrown away, so a big fleet never left unknown.
+        config(['mymate.ping.fail_threshold' => 1]);
+        $replied = Device::factory()->create(['mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Unknown]);
+        $unheardUnknown = Device::factory()->create(['mgmt_ip' => '10.0.0.2', 'status' => DeviceStatus::Unknown]);
+        $unheardUp = Device::factory()->create(['mgmt_ip' => '10.0.0.3', 'status' => DeviceStatus::Up]);
+        $this->app->bind(Pinger::class, fn () => new class implements Pinger
+        {
+            public function reachable(array $ips): array
+            {
+                return [];
+            }
+
+            public function measure(array $ips, ?string $source = null): array
+            {
+                throw new PingSweepTimedOut(['10.0.0.1' => new PingSample(reachable: true, rttMs: 3.0)], count($ips), 30);
+            }
+        });
+
+        app(PingFleet::class)();
+
+        $this->assertSame(DeviceStatus::Up, $replied->refresh()->status);
+        $this->assertSame(DeviceStatus::Unknown, $unheardUnknown->refresh()->status);
+        $this->assertSame(DeviceStatus::Up, $unheardUp->refresh()->status);
+        $this->assertSame(0, (int) $unheardUp->fail_streak);
+        $this->assertSame(0, Outage::count());
+    }
+
+    public function test_fping_outliving_the_process_timeout_keeps_its_partial_output(): void
+    {
+        // A stand-in fping that answers for one host, then hangs past the 1s cap.
+        $dir = sys_get_temp_dir().'/mymate-fping-'.uniqid();
+        mkdir($dir);
+        $fake = $dir.'/fping';
+        file_put_contents($fake, "#!/bin/sh\necho '{\"resp\": {\"host\": \"10.0.0.1\", \"seq\": 0, \"rtt\": 1.5}}'\nexec sleep 10\n");
+        chmod($fake, 0755);
+        config(['mymate.ping.fping' => $fake]);
+
+        try {
+            (new FpingRunner(processTimeout: 1))->measure(['10.0.0.1', '10.0.0.2']);
+            $this->fail('expected the sweep to time out');
+        } catch (PingSweepTimedOut $e) {
+            $this->assertSame(['10.0.0.1'], array_keys($e->samples));
+            $this->assertSame(1.5, $e->samples['10.0.0.1']->rttMs);
+
+            // Discovery takes whatever answered rather than failing the scan.
+            $this->assertSame(['10.0.0.1'], (new FpingRunner(processTimeout: 1))->reachable(['10.0.0.1', '10.0.0.2']));
+        } finally {
+            @unlink($fake);
+            @rmdir($dir);
+        }
     }
 }

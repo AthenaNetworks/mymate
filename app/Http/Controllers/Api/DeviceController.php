@@ -40,7 +40,10 @@ class DeviceController extends Controller
 
     private const MAX_IDS = 500;
 
-    private const SORTS = ['name', 'status', 'mgmt_ip', 'last_change', 'vendor', 'model'];
+    private const SORTS = ['name', 'status', 'mgmt_ip', 'last_change', 'vendor', 'model', 'os_version'];
+
+    /** os_version as an int array (7.9 before 7.10), null when it doesn't start with a number. */
+    private const VERSION_KEY = "string_to_array(substring(devices.os_version from '^[0-9]+(?:\\.[0-9]+)*'), '.')::int[]";
 
     /**
      * One page of the fleet (GitHub #22). At ~25k devices the old "everything at once" payload
@@ -57,6 +60,7 @@ class DeviceController extends Controller
             'status' => ['sometimes', Rule::enum(DeviceStatus::class)],
             'device_type' => ['sometimes', Rule::enum(DeviceType::class)],
             'poll_method' => ['sometimes', Rule::enum(PollMethod::class)],
+            'os_version' => ['sometimes', 'string', 'max:64'],
             'monitored' => ['sometimes', 'boolean'],
             'placed' => ['sometimes', 'boolean'],
             'backup_enabled' => ['sometimes', 'boolean'],
@@ -122,6 +126,24 @@ class DeviceController extends Controller
         ]]);
     }
 
+    /**
+     * The RouterOS versions across the fleet with how many devices run each, newest first, for the
+     * Devices tab's version filter (GH #60). Visibility-scoped like every other device read.
+     */
+    public function versions(): JsonResponse
+    {
+        $rows = Device::query()
+            ->whereNotNull('os_version')->where('os_version', '!=', '')
+            ->selectRaw('os_version, COUNT(*) AS n')
+            ->groupBy('os_version')
+            ->orderByRaw(self::VERSION_KEY.' DESC NULLS LAST')
+            ->orderBy('os_version')
+            ->toBase()
+            ->get();
+
+        return response()->json(['data' => $rows->map(fn ($r) => ['version' => $r->os_version, 'count' => (int) $r->n])->values()]);
+    }
+
     /** @param  array<string, mixed>  $v */
     private function filter(Builder $query, array $v): void
     {
@@ -134,7 +156,7 @@ class DeviceController extends Controller
             });
         }
 
-        foreach (['status', 'device_type', 'poll_method'] as $col) {
+        foreach (['status', 'device_type', 'poll_method', 'os_version'] as $col) {
             if (isset($v[$col])) {
                 $query->where($col, $v[$col]);
             }
@@ -215,6 +237,9 @@ class DeviceController extends Controller
         if ($col === 'status') {
             // Worst first: down, then unknown, then up.
             $query->orderByRaw("CASE devices.status WHEN 'down' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END {$dir}");
+        } elseif ($col === 'os_version') {
+            // By version, not text, so 7.9 sorts before 7.10. No version goes last either way.
+            $query->orderByRaw(self::VERSION_KEY." {$dir} NULLS LAST");
         } elseif ($col !== 'name') {
             $query->orderByRaw("devices.{$col} {$dir} NULLS LAST");
         }

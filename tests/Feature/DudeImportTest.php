@@ -221,4 +221,32 @@ class DudeImportTest extends TestCase
         $this->assertSame(0, DB::table('interface_samples')->count());
         $this->assertSame(3, Device::count()); // config still imported
     }
+
+    public function test_a_device_with_no_snmp_and_no_login_comes_in_ping_only(): void
+    {
+        // GH #61: Dude's no-snmp default used to import as SNMP v2c with no credential.
+        $dir = sys_get_temp_dir().'/dude-nosnmp-'.uniqid();
+        mkdir($dir);
+        foreach (glob($this->fixtures.'/*') as $file) {
+            copy($file, $dir.'/'.basename($file));
+        }
+        file_put_contents($dir.'/credentials.csv', str_replace(
+            '200,switch-b,10.0.0.2,admin,secret,device,10002,v2-public,v2c,public',
+            '200,switch-b,10.0.0.2,,,inherited(global),10003,no-snmp,disabled,',
+            file_get_contents($dir.'/credentials.csv'),
+        ));
+        $this->fixtures = $dir;
+
+        try {
+            $this->doImport();
+        } finally {
+            array_map('unlink', glob($dir.'/*'));
+            rmdir($dir);
+        }
+
+        $switch = Device::where('mgmt_ip', '10.0.0.2')->firstOrFail();
+        $this->assertSame(PollMethod::None, $switch->poll_method);
+        $this->assertNull($switch->credential_id);
+        $this->assertSame(PollMethod::Snmp, Device::where('mgmt_ip', '10.0.0.1')->firstOrFail()->poll_method);
+    }
 }

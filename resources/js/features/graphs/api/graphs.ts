@@ -12,7 +12,7 @@ export interface GraphInput {
 
 const graphKeys = {
     all: ['graphs'] as const,
-    data: (id: number, range: string) => ['graphs', id, 'data', range] as const,
+    data: (id: number, range: string, end: number | null) => ['graphs', id, 'data', range, end] as const,
     styleDefaults: ['graphs', 'style-defaults'] as const,
 };
 
@@ -76,15 +76,18 @@ export function useDeleteGraph() {
     });
 }
 
-export function useGraphData(id: number | null, range: string) {
+/** `end` (unix seconds) looks back in time (GH #59); null is a window ending now. */
+export function useGraphData(id: number | null, range: string, end: number | null = null) {
     return useQuery({
-        queryKey: graphKeys.data(id ?? 0, range),
+        queryKey: graphKeys.data(id ?? 0, range, end),
         queryFn: async (): Promise<GraphData> => {
-            const { data } = await apiClient.get<{ data: GraphData }>(`/graphs/${id}/data`, { params: { range } });
+            const { data } = await apiClient.get<{ data: GraphData }>(`/graphs/${id}/data`, { params: end === null ? { range } : { range, end } });
             return data.data;
         },
         enabled: id !== null,
-        // Keep a live-ish view without hammering; the newest bucket fills in as polling runs.
-        refetchInterval: 30000,
+        // Keep a live-ish view without hammering; the newest bucket fills in as polling runs. A
+        // window in the past doesn't change, so it isn't refetched.
+        refetchInterval: end === null ? 30000 : false,
+        placeholderData: (prev) => prev,
     });
 }

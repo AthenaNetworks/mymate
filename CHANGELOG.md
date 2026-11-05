@@ -13,6 +13,31 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Graphs can look back in time: arrows next to the range step the window back and forward by its
+  own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
+- The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters
+  to one version, with a count of devices on each (#60). SNMP-polled MikroTiks now record their
+  version too, read from sysDescr or MIKROTIK-MIB, so the sort isn't limited to API devices.
+
+### Changed
+- Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
+  own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
+
+### Fixed
+- Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
+  latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
+  blocked them. Every shipped nginx config now passes the Host the browser used (#62).
+- After a large Dude import every device stayed on unknown: the ping sweep ran past its 30s cap and
+  all of its results were thrown away. A sweep that times out now marks the devices that replied as
+  up, leaves the rest as they were instead of counting a miss, and logs which settings to raise (#61).
+- The Dude import brought devices with no SNMP profile and no login (Dude's no-snmp default) in as
+  SNMP v2c with no credential. They now come in ping-only (#61).
+- The 1h range on a graph was empty for anything sampled less often than every 15 seconds (latency,
+  health, slow SNMP counters): each point stood alone and no line was drawn. Short sampling gaps are
+  now bridged, real outages still show as gaps (#59).
+- The config backup viewer showed only the first screen of a config or diff and wouldn't scroll (#41).
+
 ## [2.1.1] - 2026-11-03
 
 ### Added

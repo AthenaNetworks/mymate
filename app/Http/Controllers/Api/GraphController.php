@@ -11,6 +11,7 @@ use App\Models\Graph;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\Response;
 
 /** Custom graph CRUD plus the multi-interface time series that backs one (GitHub #28). */
@@ -48,15 +49,25 @@ class GraphController extends Controller
         return response()->noContent();
     }
 
-    /** The aligned per-series (and optional total) data for one graph over the chosen range. */
+    /**
+     * The aligned per-series (and optional total) data for one graph over the chosen range. `end`
+     * (unix seconds) moves the window back in time, so a 6h graph can show any six hours that are
+     * still kept rather than only the latest (GH #59). Without it the window ends now.
+     */
     public function data(Request $request, Graph $graph, GetGraphData $get, HistoryTiers $tiers): JsonResponse
     {
+        $request->validate(['end' => ['nullable', 'integer', 'min:0']]);
+
         $seconds = self::RANGES[$request->query('range', '24h')] ?? 86400;
         // Don't ask for more history than we keep, or the chart just shows empty leading space.
         // The rollup tiers outlive raw (GitHub #28), so the longest kept tier is the limit.
-        $seconds = min($seconds, $tiers->maxDays() * 86400);
+        $keptSeconds = $tiers->maxDays() * 86400;
+        $seconds = min($seconds, $keptSeconds);
 
-        $to = now();
+        // A window can't end in the future, or start before the oldest data any tier keeps.
+        $now = now();
+        $to = $request->filled('end') ? Carbon::createFromTimestamp((int) $request->query('end'))->setTimezone($now->getTimezone()) : $now->copy();
+        $to = $to->min($now)->max($now->copy()->subSeconds($keptSeconds - $seconds));
         $from = $to->copy()->subSeconds($seconds);
 
         $config = $graph->config ?? [];
@@ -66,6 +77,8 @@ class GraphController extends Controller
         $result = $get($configSeries, $metric, ! empty($config['show_total']), $from, $to);
 
         return response()->json(['data' => [
+            'from' => $from->getTimestamp(),
+            'to' => $to->getTimestamp(),
             'buckets' => $result['buckets'],
             'metric' => $metric,
             'series' => $result['series'],

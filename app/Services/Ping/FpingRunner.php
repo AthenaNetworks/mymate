@@ -2,6 +2,8 @@
 
 namespace App\Services\Ping;
 
+use App\Support\EngineLog;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 /**
@@ -24,7 +26,7 @@ class FpingRunner implements Pinger
         // hard the total grows to minutes over a big fleet; a small value (e.g. 1ms) sweeps
         // tens of thousands quickly - and measurably more accurately, since fewer replies
         // arrive after the timeout window. null = leave fping's default.
-        private ?int $intervalMs = null,
+        private ?int $intervalMs = 1,
     ) {}
 
     public function reachable(array $ips): array
@@ -33,7 +35,12 @@ class FpingRunner implements Pinger
             return [];
         }
 
-        return self::parseReachable($this->run($ips), $ips);
+        // Discovery can use whatever answered before a timeout; there's no status to get wrong.
+        try {
+            return self::parseReachable($this->run($ips), $ips);
+        } catch (PingSweepTimedOut $e) {
+            return array_keys($e->samples);
+        }
     }
 
     public function measure(array $ips, ?string $source = null): array
@@ -43,6 +50,21 @@ class FpingRunner implements Pinger
         }
 
         return self::parseSamples($this->run($ips, $source), $ips);
+    }
+
+    /**
+     * Roughly how long (ms) a sweep of $hosts takes: fping paces every probe by -i, then waits out
+     * the per-host probe spacing and the reply timeout on each try. Used to say what to change when
+     * a sweep is killed.
+     */
+    public function estimatedSweepMs(int $hosts): int
+    {
+        $count = max(1, $this->count);
+        $interval = $this->intervalMs ?? 10; // fping's own default
+
+        return $hosts * $count * max(0, $interval)
+            + ($count - 1) * max(1, $this->periodMs)
+            + $this->timeoutMs * ($this->retries + 1);
     }
 
     /**
@@ -102,12 +124,31 @@ class FpingRunner implements Pinger
         return array_merge($args, ['-f', '-']);
     }
 
-    /** Run one fping sweep over the given IPs and return its raw JSON-Lines stdout. */
+    /**
+     * Run one fping sweep over the given IPs and return its raw JSON-Lines stdout.
+     *
+     * @throws PingSweepTimedOut when fping outlives the process timeout, carrying the replies
+     *                           it had printed so far
+     */
     private function run(array $ips, ?string $source = null): string
     {
         $process = new Process($this->commandArgs($source), input: implode("\n", $ips)."\n");
         $process->setTimeout($this->processTimeout);
-        $process->run();
+        try {
+            $process->run();
+        } catch (ProcessTimedOutException) {
+            // Used to throw everything away, so a fleet too big for the settings never got a
+            // single status and sat on unknown with nothing to say why. (GH #61)
+            $samples = array_filter(self::parseSamples($process->getOutput(), $ips), static fn (PingSample $s): bool => $s->reachable);
+            EngineLog::warning('ping: sweep timed out, raise MYMATE_PING_SHARDS (and MYMATE_PING_PROCESSES to match) or lower MYMATE_PING_INTERVAL_MS', [
+                'hosts' => count($ips),
+                'replied' => count($samples),
+                'timeout_s' => $this->processTimeout,
+                'estimated_s' => round($this->estimatedSweepMs(count($ips)) / 1000, 1),
+            ]);
+
+            throw new PingSweepTimedOut($samples, count($ips), $this->processTimeout);
+        }
 
         // fping exits non-zero when ANY host is unreachable - that is normal here.
         return $process->getOutput();
@@ -172,7 +213,18 @@ class FpingRunner implements Pinger
         $out = [];
         foreach ($ips as $ip) {
             if (! isset($summary[$ip])) {
-                continue; // host never appeared in the output
+                // No summary: either the host never appeared, or fping was killed before it
+                // printed the summaries (they all come at the end). A reply still proves it's up.
+                if (isset($rtts[$ip])) {
+                    $hostRtts = $rtts[$ip];
+                    $out[$ip] = new PingSample(
+                        reachable: true,
+                        rttMs: round(array_sum($hostRtts) / count($hostRtts), 3),
+                        jitterMs: count($hostRtts) >= 2 ? round(max($hostRtts) - min($hostRtts), 3) : null,
+                    );
+                }
+
+                continue;
             }
             $rcv = $summary[$ip]['rcv'];
             $hostRtts = $rtts[$ip] ?? [];

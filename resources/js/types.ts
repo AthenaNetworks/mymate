@@ -562,6 +562,9 @@ export interface GraphDataSeries {
 }
 
 export interface GraphData {
+    /** The window actually served, unix seconds (older servers don't send it). */
+    from?: number;
+    to?: number;
     buckets: string[];
     metric: GraphMetric;
     series: GraphDataSeries[];

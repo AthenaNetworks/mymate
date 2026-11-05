@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold, CaretLeft, CaretRight } from '@phosphor-icons/react';
-import { useDebounced, useDeviceList, useDeviceStats, type DeviceListParams } from '../api/getDevices';
+import { useDebounced, useDeviceList, useDeviceStats, useDeviceVersions, type DeviceListParams } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
 import { useUnplaceDevice } from '../api/unplaceDevice';
 import { useUpdateDevice } from '../api/updateDevice';
@@ -29,6 +29,8 @@ const SORTS: { value: NonNullable<DeviceListParams['sort']>; label: string }[] =
     { value: '-last_change', label: 'Last change' },
     { value: 'vendor', label: 'Vendor' },
     { value: 'model', label: 'Model' },
+    { value: '-os_version', label: 'Version, newest' },
+    { value: 'os_version', label: 'Version, oldest' },
 ];
 const selectCls = 'rounded-lg bg-white/[0.04] px-2 py-1.5 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40';
 
@@ -62,6 +64,8 @@ export function DevicesView() {
     const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
     const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
     const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced'>('all'); // on a map / hidden from every map
+    const [versionFilter, setVersionFilter] = useState<string>('all'); // RouterOS version (GH #60)
+    const { data: versions } = useDeviceVersions();
     const [sort, setSort] = useState<NonNullable<DeviceListParams['sort']>>('name');
     const q = useDebounced(query.trim());
     const params: DeviceListParams = {
@@ -70,6 +74,7 @@ export function DevicesView() {
         device_type: typeFilter === 'all' ? undefined : typeFilter,
         monitored: monitoredFilter === 'all' ? undefined : monitoredFilter === 'live',
         placed: mapFilter === 'all' ? undefined : mapFilter === 'placed',
+        os_version: versionFilter === 'all' ? undefined : versionFilter,
         sort,
     };
     // The page belongs to the query it was picked for; change the search, a filter or the sort
@@ -84,7 +89,7 @@ export function DevicesView() {
     const matching = data?.meta.total ?? 0;
     const lastPage = data?.meta.last_page ?? 1;
     const fleetTotal = stats?.total ?? matching;
-    const filtersActive = query.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all';
+    const filtersActive = query.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all' || versionFilter !== 'all';
     const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
 
     function open(id: number) {
@@ -275,6 +280,16 @@ export function DevicesView() {
                                     <option value="placed">On a map</option>
                                     <option value="unplaced">Not on any map</option>
                                 </select>
+                                {(versions?.length ?? 0) > 0 && (
+                                    <select value={versionFilter} onChange={(e) => setVersionFilter(e.target.value)} title="RouterOS version" className={selectCls}>
+                                        <option value="all">Any version</option>
+                                        {versions?.map((v) => (
+                                            <option key={v.version} value={v.version}>
+                                                v{v.version} ({v.count})
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
                                 <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} title="Sort" className={selectCls}>
                                     {SORTS.map((s) => (
                                         <option key={s.value} value={s.value}>
@@ -283,7 +298,7 @@ export function DevicesView() {
                                     ))}
                                 </select>
                                 {filtersActive && (
-                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
+                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); setVersionFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
                                         Clear
                                     </button>
                                 )}

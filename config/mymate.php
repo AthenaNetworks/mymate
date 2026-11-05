@@ -19,13 +19,15 @@ return [
         'interval' => (int) env('MYMATE_PING_INTERVAL', 5),
         'timeout_ms' => (int) env('MYMATE_PING_TIMEOUT_MS', 500),
         'retries' => (int) env('MYMATE_PING_RETRIES', 1),
-        // fping -i: ms between successive targets. Null keeps fping's own default (~10ms),
-        // which paces sends so hard that a big fleet takes minutes and trips the process
-        // timeout. Set a small value (e.g. 1) on large installs - it sweeps tens of thousands
-        // of hosts in seconds and is measurably more accurate (fewer late replies missed).
-        'interval_ms' => env('MYMATE_PING_INTERVAL_MS') !== null ? (int) env('MYMATE_PING_INTERVAL_MS') : null,
+        // fping -i: ms between successive targets. fping's own default (~10ms) paces sends so
+        // hard that a fleet of a thousand-odd devices (a Dude import, say) trips the process
+        // timeout and never gets a status (GH #61). 1 sweeps tens of thousands of hosts in
+        // seconds and is measurably more accurate (fewer late replies missed). Set it to null
+        // to go back to fping's default.
+        'interval_ms' => env('MYMATE_PING_INTERVAL_MS', 1) !== null ? (int) env('MYMATE_PING_INTERVAL_MS', 1) : null,
         // Hard wall-clock cap (s) on a single fping process. A sweep that can't finish in time
-        // is killed and the job fails; raise it in step with fleet size / shard size.
+        // is killed: the hosts that replied are marked up, the rest keep their status, and a
+        // warning is logged. Raise the shards, or this, in step with fleet size.
         'process_timeout' => (int) env('MYMATE_PING_PROCESS_TIMEOUT', 30),
         // Shard the up/down sweep into N parallel ping jobs by crc32(device_id) % shards, so no
         // single fping has to cover the whole fleet. 1 = one sweep (small installs). Raise it
@@ -185,6 +187,7 @@ return [
             'sys_location' => '.1.3.6.1.2.1.1.6.0', // operator-set location (may carry [lat, lng])
             'sys_object_id' => '.1.3.6.1.2.1.1.2.0',
             'sys_descr' => '.1.3.6.1.2.1.1.1.0',
+            'mtxr_lic_version' => '.1.3.6.1.4.1.14988.1.1.4.4.0', // MIKROTIK-MIB mtxrLicVersion: the RouterOS version
             'sys_uptime' => '.1.3.6.1.2.1.1.3.0',
             // Hardware inventory (CaptureDeviceFacts): ENTITY-MIB model/serial (cross-vendor)
             // + host-resources total RAM.

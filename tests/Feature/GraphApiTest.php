@@ -181,4 +181,32 @@ class GraphApiTest extends TestCase
         $this->actingAs($viewer)->getJson('/api/settings/graph-style')->assertOk();
         $this->actingAs($viewer)->putJson('/api/settings/graph-style', ['fill' => true, 'stacked' => false, 'color_mode' => 'group', 'palette' => ['#112233']])->assertForbidden();
     }
+
+    public function test_data_can_look_back_to_an_earlier_window(): void
+    {
+        // GH #59: a 6h graph can show six hours that aren't the latest.
+        $this->actingAsUser();
+        $a = $this->iface();
+        $this->sample($a->id, now()->subHours(9)->format('Y-m-d H:i:s'), 500, 50); // only in the earlier window
+        $this->sample($a->id, now()->subHours(1)->format('Y-m-d H:i:s'), 100, 10); // only in the latest one
+        $graph = Graph::factory()->create(['config' => ['metric' => 'rate', 'series' => [['interface_id' => $a->id, 'direction' => 'in']]]]);
+        $sum = fn (array $data) => array_sum(array_filter($data['series'][0]['values'], fn ($v) => $v !== null));
+
+        $latest = $this->getJson("/api/graphs/{$graph->id}/data?range=6h")->assertOk()->json('data');
+        $this->assertEquals(100, $sum($latest));
+        $this->assertEqualsWithDelta(now()->getTimestamp(), $latest['to'], 2);
+
+        $end = now()->subHours(6)->getTimestamp();
+        $earlier = $this->getJson("/api/graphs/{$graph->id}/data?range=6h&end={$end}")->assertOk()->json('data');
+        $this->assertEquals(500, $sum($earlier));
+        $this->assertSame($end, $earlier['to']);
+        $this->assertSame($end - 21600, $earlier['from']);
+
+        // A window can't end in the future, or start before anything is kept.
+        $future = $this->getJson("/api/graphs/{$graph->id}/data?range=6h&end=".(now()->getTimestamp() + 86400))->assertOk()->json('data');
+        $this->assertEqualsWithDelta(now()->getTimestamp(), $future['to'], 2);
+        $ancient = $this->getJson("/api/graphs/{$graph->id}/data?range=6h&end=1")->assertOk()->json('data');
+        $this->assertGreaterThan(1, $ancient['to']);
+        $this->getJson("/api/graphs/{$graph->id}/data?range=6h&end=soon")->assertUnprocessable();
+    }
 }

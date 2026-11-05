@@ -12,7 +12,7 @@ import { BACKUP_IN_PROGRESS, UPGRADE_IN_PROGRESS, type Device, type DeviceMetric
 //   - name lookups:       useDevicesByIds(ids)       just those rows
 // Live websocket updates are folded into all of them by patchCachedDevices below.
 
-export type DeviceSort = 'name' | 'status' | 'mgmt_ip' | 'last_change' | 'vendor' | 'model';
+export type DeviceSort = 'name' | 'status' | 'mgmt_ip' | 'last_change' | 'vendor' | 'model' | 'os_version';
 
 export interface DeviceListParams {
     page?: number;
@@ -21,6 +21,7 @@ export interface DeviceListParams {
     status?: DeviceStatus;
     device_type?: DeviceType;
     poll_method?: PollMethod;
+    os_version?: string;
     monitored?: boolean;
     placed?: boolean;
     backup_enabled?: boolean;
@@ -65,6 +66,7 @@ export const deviceKeys = {
     map: (mapId: number) => [...deviceKeys.all, 'map', mapId] as const,
     ids: (ids: number[]) => [...deviceKeys.all, 'ids', ids] as const,
     stats: () => [...deviceKeys.all, 'stats'] as const,
+    versions: () => [...deviceKeys.all, 'versions'] as const,
 };
 
 // Laravel reads booleans as 1/0 and arrays as ids[]=; drop the unset keys.
@@ -185,6 +187,18 @@ export function useDeviceStats() {
         // the other pages, adds/deletes and anything missed while disconnected. It's one tiny
         // GROUP BY, so 30 s is cheap.
         refetchInterval: 30_000,
+    });
+}
+
+/** The RouterOS versions in the fleet, newest first, with a device count each (GH #60). */
+export function useDeviceVersions() {
+    return useQuery({
+        queryKey: deviceKeys.versions(),
+        queryFn: async (): Promise<{ version: string; count: number }[]> => {
+            const { data } = await apiClient.get<{ data: { version: string; count: number }[] }>('/devices/versions');
+            return data.data;
+        },
+        staleTime: 60_000,
     });
 }
 

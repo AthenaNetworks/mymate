@@ -263,4 +263,29 @@ class CaptureDeviceFactsTest extends TestCase
         $this->assertSame('CCR2004', $device->model);                // other facts still captured
         $this->assertSame(300, $device->uptime_seconds);
     }
+
+    public function test_snmp_captures_the_routeros_version_from_sysdescr_or_the_mikrotik_mib(): void
+    {
+        // GH #60: only API-polled devices used to get a version, so an SNMP fleet had none to sort by.
+        $oids = config('mymate.snmp.oids');
+        $capture = function (array $gets) {
+            $cred = Credential::factory()->create(['snmp_community' => 'public-test']);
+            $device = Device::factory()->create(['poll_method' => PollMethod::Snmp, 'credential_id' => $cred->id, 'os_version' => null]);
+            $snmp = new FakeSnmpClient;
+            $snmp->getsByCommunity['public-test'] = $gets;
+            $this->app->instance(SnmpClient::class, $snmp);
+            app(CaptureDeviceFacts::class)($device);
+
+            return $device->fresh()->os_version;
+        };
+
+        $this->assertSame('7.23.2', $capture([$oids['sys_descr'] => 'RouterOS RB5009UPr+S+ 7.23.2 (stable)']));
+        $this->assertSame('7.23.2', $capture([$oids['sys_descr'] => 'RouterOS 7.23.2 (stable)']));
+        // An older build leaves it out of sysDescr; mtxrLicVersion still has it.
+        $this->assertSame('6.49.17', $capture([$oids['sys_descr'] => 'RouterOS RB750Gr3', $oids['mtxr_lic_version'] => '6.49.17']));
+        $this->assertNull($capture([$oids['sys_descr'] => 'Cisco IOS Software, C2960 Version 15.0(2)SE']));
+
+        $this->assertNull(CaptureDeviceFacts::versionFromSysDescr('RouterOS RB5009UPr+S+'));
+        $this->assertSame('7.21', CaptureDeviceFacts::versionFromSysDescr('RouterOS CCR2004-1G-12S+2XS 7.21beta3 (testing)'));
+    }
 }

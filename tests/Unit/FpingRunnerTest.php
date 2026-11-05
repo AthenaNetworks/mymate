@@ -84,4 +84,32 @@ class FpingRunnerTest extends TestCase
 
         $this->assertSame(['10.0.0.1'], FpingRunner::parseReachable($stdout, ['10.0.0.1', '10.0.0.2']));
     }
+
+    public function test_a_killed_sweep_still_counts_the_replies_it_printed(): void
+    {
+        // fping prints every summary at the end, so a sweep killed at the timeout has resp lines only.
+        $stdout = <<<'JSON'
+        {"resp": {"host": "10.0.0.1", "seq": 0, "rtt": 2.0}}
+        {"resp": {"host": "10.0.0.1", "seq": 1, "rtt": 4.0}}
+        {"timeout": {"host": "10.0.0.2", "seq": 0}}
+        JSON;
+
+        $samples = FpingRunner::parseSamples($stdout, ['10.0.0.1', '10.0.0.2', '10.0.0.3']);
+
+        $this->assertSame(['10.0.0.1'], array_keys($samples));
+        $this->assertTrue($samples['10.0.0.1']->reachable);
+        $this->assertSame(3.0, $samples['10.0.0.1']->rttMs);
+        $this->assertSame(2.0, $samples['10.0.0.1']->jitterMs);
+        $this->assertNull($samples['10.0.0.1']->lossPct);
+    }
+
+    public function test_estimated_sweep_time_shows_why_a_dude_sized_fleet_timed_out(): void
+    {
+        // GH #61: 1066 hosts, 3 probes each, at fping's own 10ms pacing is past the 30s cap; at 1ms it isn't.
+        $fpingDefault = new FpingRunner(timeoutMs: 500, retries: 1, processTimeout: 30, count: 3, periodMs: 300, intervalMs: null);
+        $oneMs = new FpingRunner(timeoutMs: 500, retries: 1, processTimeout: 30, count: 3, periodMs: 300, intervalMs: 1);
+
+        $this->assertGreaterThan(30_000, $fpingDefault->estimatedSweepMs(1066));
+        $this->assertLessThan(10_000, $oneMs->estimatedSweepMs(1066));
+    }
 }

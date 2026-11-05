@@ -9,6 +9,7 @@ use App\Events\DeviceStatusChanged;
 use App\Models\Device;
 use App\Services\Ping\Pinger;
 use App\Services\Ping\PingSample;
+use App\Services\Ping\PingSweepTimedOut;
 use App\Support\EngineLog;
 use App\Support\LiveBroadcast;
 use Illuminate\Support\Collection;
@@ -44,7 +45,7 @@ class PingFleet
             return 0;
         }
 
-        $samples = $this->measureBySource($devices);
+        [$samples, $unmeasured] = $this->measureBySource($devices);
 
         // Flap dampening: a device only flips to `down` after `fail_threshold` consecutive
         // missed sweeps, so a single dropped reply (transient loss, a busy sweep) doesn't alarm.
@@ -54,6 +55,9 @@ class PingFleet
         $changed = 0;
         foreach ($devices as $device) {
             $reachable = ($samples[$device->mgmt_ip] ?? null)?->reachable ?? false;
+            if (! $reachable && isset($unmeasured[$device->mgmt_ip])) {
+                continue; // its sweep timed out before it was heard: not a miss (GH #61)
+            }
 
             $streak = (int) $device->fail_streak;
             if ($reachable) {
@@ -104,18 +108,31 @@ class PingFleet
      * common case (nobody set a per-device source) is still exactly one fping using the global
      * default. Central mgmt IPs are unique, so merging the groups' samples by IP is safe.
      *
+     * A group whose fping timed out keeps the replies it got; its other IPs come back in the
+     * second element so the caller leaves them alone instead of counting a miss.
+     *
      * @param  Collection<int, Device>  $devices
-     * @return array<string, PingSample>
+     * @return array{0: array<string, PingSample>, 1: array<string, true>} [samples, unmeasured IPs]
      */
     private function measureBySource(Collection $devices): array
     {
         $samples = [];
+        $unmeasured = [];
         foreach ($devices->groupBy(fn (Device $d): string => (string) $d->ping_source) as $source => $group) {
             $ips = $group->pluck('mgmt_ip')->all();
-            $samples += $this->pinger->measure($ips, $source === '' ? null : (string) $source);
+            try {
+                $samples += $this->pinger->measure($ips, $source === '' ? null : (string) $source);
+            } catch (PingSweepTimedOut $e) {
+                $samples += $e->samples;
+                foreach ($ips as $ip) {
+                    if (! isset($e->samples[$ip])) {
+                        $unmeasured[$ip] = true;
+                    }
+                }
+            }
         }
 
-        return $samples;
+        return [$samples, $unmeasured];
     }
 
     /**

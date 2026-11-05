@@ -302,4 +302,26 @@ class DeviceListApiTest extends TestCase
         $this->assertSame('down', $payload['status']);
         $this->assertTrue($payload['monitored']);
     }
+
+    public function test_sort_and_filter_by_routeros_version(): void
+    {
+        // GH #60. By version, not text: 7.9 comes before 7.10.
+        $this->actingAsUser();
+        $a = Device::factory()->create(['name' => 'a', 'os_version' => '7.10']);
+        $b = Device::factory()->create(['name' => 'b', 'os_version' => '7.9']);
+        $c = Device::factory()->create(['name' => 'c', 'os_version' => '6.49.17']);
+        $d = Device::factory()->create(['name' => 'd', 'os_version' => null]);
+        $e = Device::factory()->create(['name' => 'e', 'os_version' => '7.10']);
+
+        $names = fn (string $qs) => collect($this->getJson('/api/devices?'.$qs)->assertOk()->json('data'))->pluck('name')->all();
+        $this->assertSame(['c', 'b', 'a', 'e', 'd'], $names('sort=os_version'));
+        $this->assertSame(['a', 'e', 'b', 'c', 'd'], $names('sort=-os_version'));
+        $this->assertSame(['a', 'e'], $names('os_version=7.10'));
+
+        $this->getJson('/api/devices/versions')->assertOk()->assertExactJson(['data' => [
+            ['version' => '7.10', 'count' => 2],
+            ['version' => '7.9', 'count' => 1],
+            ['version' => '6.49.17', 'count' => 1],
+        ]]);
+    }
 }

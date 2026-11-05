@@ -31,7 +31,7 @@ function DiffView({ text }: { text: string | null | undefined }) {
     if (text === null || text === undefined) return <p className="p-4 text-xs text-white/35">Loading...</p>;
     if (text.trim() === '') return <p className="p-4 text-xs text-white/40">No changes in this version.</p>;
     return (
-        <pre className="overflow-auto p-3 font-mono text-[11px] leading-relaxed">
+        <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[11px] leading-relaxed">
             {text.split('\n').map((line, i) => {
                 let cls = 'text-white/55';
                 if (line.startsWith('+') && !line.startsWith('+++')) cls = 'bg-emerald-500/[0.07] text-emerald-300';
@@ -209,15 +209,16 @@ export function VersionPanel({ device }: { device: Device }) {
                     )}
                 </div>
 
-                {/* Diff / config viewer. */}
-                <div className="min-w-0 flex-1 overflow-hidden rounded-xl bg-surface-deep ring-1 ring-white/10">
+                {/* Diff / config viewer. A flex column so the <pre> gets the pane's height and scrolls
+                    inside it, rather than growing past it and being clipped (GH #41). */}
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-surface-deep ring-1 ring-white/10">
                     {!isAdmin ? (
                         <p className="p-4 text-xs text-white/35">Config contents are only shown to administrators.</p>
                     ) : mode === 'config' ? (
                         commit === null ? (
                             <p className="p-4 text-xs text-white/35">No version selected.</p>
                         ) : config.data ? (
-                            <pre className="overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/75">{config.data}</pre>
+                            <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[11px] leading-relaxed text-white/75">{config.data}</pre>
                         ) : (
                             <p className="p-4 text-xs text-white/35">{config.isLoading ? 'Loading...' : 'No config at this version.'}</p>
                         )

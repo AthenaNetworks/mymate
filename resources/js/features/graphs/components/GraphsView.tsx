@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChartLine, DownloadSimple, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ChartLine, DownloadSimple, Plus, PencilSimple, Trash } from '@phosphor-icons/react';
 import { useGraphs, useDeleteGraph, useGraphData, useGraphStyleDefaults } from '../api/graphs';
 import { GraphChart } from './GraphChart';
 import { GraphEditor } from './GraphEditor';
@@ -8,16 +8,18 @@ import { useIsAdmin } from '../../auth/api/auth';
 import { pushToast } from '../../../lib/toast';
 import type { Graph } from '../../../types';
 
-const RANGES: { key: string; label: string }[] = [
-    { key: '1h', label: '1h' },
-    { key: '6h', label: '6h' },
-    { key: '24h', label: '24h' },
-    { key: '7d', label: '7d' },
-    { key: '30d', label: '30d' },
-    { key: '90d', label: '90d' },
-    { key: '180d', label: '180d' },
-    { key: '365d', label: '1y' },
+const RANGES: { key: string; label: string; seconds: number }[] = [
+    { key: '1h', label: '1h', seconds: 3600 },
+    { key: '6h', label: '6h', seconds: 21600 },
+    { key: '24h', label: '24h', seconds: 86400 },
+    { key: '7d', label: '7d', seconds: 604800 },
+    { key: '30d', label: '30d', seconds: 2592000 },
+    { key: '90d', label: '90d', seconds: 7776000 },
+    { key: '180d', label: '180d', seconds: 15552000 },
+    { key: '365d', label: '1y', seconds: 31536000 },
 ];
+
+const fmtEnd = (unix: number) => new Date(unix * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 const pill = (active: boolean) =>
     `rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${active ? 'bg-white/10 text-white/90 ring-1 ring-white/15' : 'text-white/45 hover:text-white/75'}`;
@@ -28,6 +30,8 @@ export function GraphsView() {
     const del = useDeleteGraph();
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [range, setRange] = useState('24h');
+    // Where the window ends, unix seconds; null follows now. The arrows step it a whole window (GH #59).
+    const [end, setEnd] = useState<number | null>(null);
     const [editing, setEditing] = useState<Graph | 'new' | null>(null);
     const [exportOpen, setExportOpen] = useState(false);
     const svgRef = useRef<SVGSVGElement>(null);
@@ -38,7 +42,15 @@ export function GraphsView() {
     }, [graphs, selectedId]);
 
     const selected = graphs?.find((g) => g.id === selectedId) ?? null;
-    const { data: graphData, isLoading } = useGraphData(editing ? null : selectedId, range);
+    const { data: graphData, isLoading } = useGraphData(editing ? null : selectedId, range, end);
+    const rangeSeconds = RANGES.find((r) => r.key === range)?.seconds ?? 86400;
+    // Step from the window the server actually served (it clamps to what's kept).
+    const servedEnd = end ?? graphData?.to ?? Math.floor(Date.now() / 1000);
+    const atOldest = graphData?.to !== undefined && end !== null && graphData.to > end;
+    function step(dir: -1 | 1) {
+        const next = servedEnd + dir * rangeSeconds;
+        setEnd(next >= Date.now() / 1000 ? null : next);
+    }
     const { data: styleDefaults } = useGraphStyleDefaults();
     // A graph draws with its own fill/stacking if it has any, otherwise the house default. The
     // palette is always the house default (a series pins its own colour in the editor instead).
@@ -121,8 +133,15 @@ export function GraphsView() {
                                 <div className="flex items-center gap-2">
                                     <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10">
                                         {RANGES.map((r) => (
-                                            <button key={r.key} onClick={() => setRange(r.key)} className={pill(range === r.key)}>{r.label}</button>
+                                            <button key={r.key} onClick={() => { setRange(r.key); setEnd(null); }} className={pill(range === r.key)}>{r.label}</button>
                                         ))}
+                                    </div>
+                                    <div className="flex items-center gap-0.5 rounded-full bg-white/5 p-0.5 ring-1 ring-white/10">
+                                        <button onClick={() => step(-1)} disabled={atOldest} title={`Back ${RANGES.find((r) => r.key === range)?.label ?? ''}`} className="rounded-full p-1 text-white/55 hover:bg-white/5 hover:text-white/85 disabled:opacity-30"><CaretLeft weight="bold" className="h-3.5 w-3.5" /></button>
+                                        {end !== null && (
+                                            <button onClick={() => setEnd(null)} title="Back to now" className="px-1.5 font-mono text-[11px] text-white/60 hover:text-white/85">to {fmtEnd(graphData?.to ?? end)}</button>
+                                        )}
+                                        <button onClick={() => step(1)} disabled={end === null} title="Forward" className="rounded-full p-1 text-white/55 hover:bg-white/5 hover:text-white/85 disabled:opacity-30"><CaretRight weight="bold" className="h-3.5 w-3.5" /></button>
                                     </div>
                                     {graphData && (
                                         <div className="relative">
