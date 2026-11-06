@@ -27,6 +27,13 @@ export type EdgeAttach = 'auto' | 'fixed';
 /** OSPF cost badge size on the map - remembered per-browser (GitHub #22 readability). */
 export type OspfCostSize = 'sm' | 'md' | 'lg';
 
+/** Map dot grid bounds + defaults. The size is also the snap grid, so the dots mark exactly
+ *  where a dragged card can land. Colours are per theme - one grey can't suit both canvases. */
+export const MAP_GRID_MIN = 4;
+export const MAP_GRID_MAX = 128;
+export const MAP_GRID_DEFAULT_SIZE = 16;
+export const MAP_GRID_DEFAULT_COLOR = { dark: '#646464', light: '#646464' } as const;
+
 /** Auto-layout algorithm - remembered per-browser; mirrors LayoutKind in lib/layout. */
 export type LayoutKind = 'smart' | 'tree-tb' | 'tree-lr' | 'radial' | 'force' | 'dependency';
 
@@ -48,6 +55,10 @@ type ShellState = {
     ospfCostSize: OspfCostSize; // OSPF cost badge size on links
     ospfCostColor: string; // OSPF cost badge colour (hex)
     layoutKind: LayoutKind; // last-chosen auto-layout algorithm
+    mapGrid: boolean; // draw the dot grid on the map
+    mapGridSize: number; // dot spacing AND snap grid, in flow px
+    mapGridColorDark: string; // dot colour on the dark theme (hex)
+    mapGridColorLight: string; // dot colour on the light theme (hex)
     wallboard: boolean; // big-screen / TV presentation mode
     mapToolsCollapsed: boolean; // map tools panel folded to a slim rail on the right (lg+ only)
     mapToolsOrphansOnly: boolean; // map tools device list: only devices on no map at all
@@ -107,6 +118,10 @@ type Persisted = Pick<
     | 'ospfCostSize'
     | 'ospfCostColor'
     | 'layoutKind'
+    | 'mapGrid'
+    | 'mapGridSize'
+    | 'mapGridColorDark'
+    | 'mapGridColorLight'
     | 'wallboard'
     | 'mapToolsCollapsed'
     | 'mapToolsOrphansOnly'
@@ -126,6 +141,12 @@ function loadPersisted(): Partial<Persisted> {
 }
 const saved = loadPersisted();
 
+/** Whole px within bounds; anything unusable (NaN, a hand-edited string) falls back to the default. */
+export function clampGridSize(n: unknown): number {
+    const v = typeof n === 'number' && Number.isFinite(n) ? Math.round(n) : MAP_GRID_DEFAULT_SIZE;
+    return Math.min(MAP_GRID_MAX, Math.max(MAP_GRID_MIN, v));
+}
+
 let state: ShellState = {
     view: initialView,
     navOpen: false,
@@ -140,6 +161,10 @@ let state: ShellState = {
     ospfCostSize: saved.ospfCostSize ?? 'md',
     ospfCostColor: saved.ospfCostColor ?? '#a5b4fc', // indigo-300
     layoutKind: saved.layoutKind ?? 'smart',
+    mapGrid: saved.mapGrid ?? false,
+    mapGridSize: clampGridSize(saved.mapGridSize ?? MAP_GRID_DEFAULT_SIZE),
+    mapGridColorDark: saved.mapGridColorDark ?? MAP_GRID_DEFAULT_COLOR.dark,
+    mapGridColorLight: saved.mapGridColorLight ?? MAP_GRID_DEFAULT_COLOR.light,
     wallboard: saved.wallboard ?? false,
     mapToolsCollapsed: saved.mapToolsCollapsed ?? false,
     mapToolsOrphansOnly: saved.mapToolsOrphansOnly ?? false,
@@ -154,13 +179,13 @@ function persist(): void {
     try {
         const {
             selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
-            dashboardAll, dashboardIds, dashboardCycleS,
+            mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
                 selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
-                dashboardAll, dashboardIds, dashboardCycleS,
+                mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
     } catch {
@@ -351,6 +376,41 @@ export function setLayoutKind(kind: LayoutKind): void {
 
 export function useLayoutKind(): LayoutKind {
     return useSyncExternalStore(subscribe, () => state.layoutKind);
+}
+
+// Map dot grid: on/off from the map toolbar; size + per-theme colour from Settings > Theme.
+// Global + persisted per browser, like the link toggles beside it. The size doubles as the
+// snap grid, so the dots always mark where a dragged card can land.
+export function setMapGrid(on: boolean): void {
+    if (state.mapGrid === on) return;
+    state = { ...state, mapGrid: on };
+    emit();
+}
+
+export function useMapGrid(): boolean {
+    return useSyncExternalStore(subscribe, () => state.mapGrid);
+}
+
+export function setMapGridSize(size: number): void {
+    const v = clampGridSize(size);
+    if (state.mapGridSize === v) return;
+    state = { ...state, mapGridSize: v };
+    emit();
+}
+
+export function useMapGridSize(): number {
+    return useSyncExternalStore(subscribe, () => state.mapGridSize);
+}
+
+export function setMapGridColor(theme: 'dark' | 'light', color: string): void {
+    const key = theme === 'light' ? 'mapGridColorLight' : 'mapGridColorDark';
+    if (state[key] === color) return;
+    state = { ...state, [key]: color };
+    emit();
+}
+
+export function useMapGridColor(theme: 'dark' | 'light'): string {
+    return useSyncExternalStore(subscribe, () => (theme === 'light' ? state.mapGridColorLight : state.mapGridColorDark));
 }
 
 // Wallboard / TV mode: chrome-free fullscreen presentation. Global +
