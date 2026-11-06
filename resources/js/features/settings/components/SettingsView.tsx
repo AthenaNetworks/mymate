@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, DotsNine, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, Palette, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useGenerateRecoveryCodes, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -25,6 +25,7 @@ import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
 import type { AgentUpgrade, Credential, GraphColorMode, Operator, OperatorGroup } from '../../../types';
 import { relativeTime } from '../../../lib/relativeTime';
+import { MAP_GRID_DEFAULT_COLOR, MAP_GRID_DEFAULT_SIZE, MAP_GRID_MAX, MAP_GRID_MIN, clampGridSize, setMapGrid, setMapGridColor, setMapGridSize, useMapGrid, useMapGridColor, useMapGridSize } from '../../../lib/shellStore';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -1702,6 +1703,95 @@ function GraphDefaultsSection() {
 }
 
 /**
+ * The map's dot grid (Theme tab). Per-browser preferences, like the link toggles on the map
+ * toolbar, so they apply as you change them - no save. The size is also the snap grid, so the
+ * dots always mark where a dragged card lands. One colour per theme: a grey that reads on the
+ * dark canvas vanishes on the light one and vice versa.
+ */
+function MapGridSection() {
+    const on = useMapGrid();
+    const size = useMapGridSize();
+    const dark = useMapGridColor('dark');
+    const light = useMapGridColor('light');
+    // Typed text is kept as-is until blur/Enter, so clearing the box to type "24" doesn't snap to the minimum mid-edit.
+    const [sizeText, setSizeText] = useState(String(size));
+    useEffect(() => setSizeText(String(size)), [size]);
+    const commitSize = () => {
+        const v = clampGridSize(Number(sizeText));
+        setMapGridSize(v);
+        setSizeText(String(v)); // shows the clamped value even when the store didn't change
+    };
+    const isDefault = size === MAP_GRID_DEFAULT_SIZE && dark === MAP_GRID_DEFAULT_COLOR.dark && light === MAP_GRID_DEFAULT_COLOR.light;
+
+    const swatch = (label: string, value: string, theme: 'dark' | 'light', canvas: string) => (
+        <label className="flex items-center justify-between gap-4">
+            <span className="min-w-0 flex-1 text-sm text-white/70">{label}</span>
+            <span className="relative block cursor-pointer" title={`${label}: ${value}`}>
+                {/* Swatch drawn on that theme's canvas colour, so you see the dot as it will look. */}
+                <span className="grid h-8 w-14 place-items-center rounded-lg ring-1 ring-white/15" style={{ backgroundColor: canvas }}>
+                    <span className="block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: value }} />
+                </span>
+                <input type="color" value={value} onChange={(e) => setMapGridColor(theme, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label={label} />
+            </span>
+        </label>
+    );
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <DotsNine weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">Map grid</h2>
+                    <p className="text-xs text-white/40">The dot grid on the map, toggled from the map toolbar. Saved in this browser.</p>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">Show dot grid</span>
+                    <Toggle checked={on} onChange={setMapGrid} />
+                </label>
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">
+                        Grid size (px)
+                        <span className="block text-xs text-white/40">Spacing between dots. Also the snap grid that cards land on when dragged ({MAP_GRID_MIN}-{MAP_GRID_MAX}).</span>
+                    </span>
+                    <input
+                        type="number"
+                        min={MAP_GRID_MIN}
+                        max={MAP_GRID_MAX}
+                        step={1}
+                        value={sizeText}
+                        onChange={(e) => setSizeText(e.target.value)}
+                        onBlur={commitSize}
+                        onKeyDown={(e) => e.key === 'Enter' && commitSize()}
+                        className={numField}
+                    />
+                </label>
+                <div className="space-y-3 border-t border-white/5 pt-3">
+                    {swatch('Dot colour - dark theme', dark, 'dark', '#060608')}
+                    {swatch('Dot colour - light theme', light, 'light', '#f4f4f5')}
+                </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+                <button
+                    onClick={() => {
+                        setMapGridSize(MAP_GRID_DEFAULT_SIZE);
+                        setMapGridColor('dark', MAP_GRID_DEFAULT_COLOR.dark);
+                        setMapGridColor('light', MAP_GRID_DEFAULT_COLOR.light);
+                    }}
+                    disabled={isDefault}
+                    className="rounded-lg px-3 py-1.5 text-sm text-white/60 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/85 disabled:opacity-40"
+                >
+                    Reset to defaults
+                </button>
+            </div>
+        </section>
+    );
+}
+
+/**
  * Personal API keys. An operator mints a bearer token for scripts / integrations; the
  * plaintext is shown ONCE right after creation (same pattern as agent enrolment). The key
  * carries the owner's exact access, so a read-only operator's key stays read-only. Self-service:
@@ -2061,6 +2151,8 @@ const TABS: Tab[] = [
     { id: 'credentials', label: 'Credentials', icon: Key, adminOnly: true, render: () => <CredentialsSection /> },
     { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
     { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },
+    // Per-browser look-and-feel - every operator gets it, read-only included.
+    { id: 'theme', label: 'Theme', icon: Palette, render: () => <TwoCol><MapGridSection /></TwoCol> },
     {
         id: 'operators',
         label: 'Operators',

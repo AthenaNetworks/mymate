@@ -14,7 +14,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Cube, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { AlignBottom, AlignCenterHorizontal, AlignCenterVertical, AlignLeft, AlignRight, AlignTop, ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Columns, Cube, DotsNine, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Rows, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useContrast, useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -53,9 +53,10 @@ import { useFaceSensors } from '../../settings/api/sensors';
 import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
 import { computeLayout, dependencyLayout, declump, type LayoutKind } from '../lib/layout';
+import { alignBoxes, ALIGN_LABEL, ALIGN_MIN, type AlignKind } from '../lib/align';
 import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from '../api/layoutSnapshots';
 import { bundleParallel, computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
-import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useSelectedDeviceId } from '../../../lib/shellStore';
+import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, setMapGrid, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useMapGrid, useMapGridColor, useMapGridSize, useSelectedDeviceId } from '../../../lib/shellStore';
 import { pushToast } from '../../../lib/toast';
 import { fmtDuration } from '../../device-page/lib/format';
 import type { AlertStateChangedPayload, Device, DeviceRebootedPayload, DeviceStatus, FaceSensorReading, InterfaceUtilUpdatedPayload } from '../../../types';
@@ -103,6 +104,22 @@ const LAYOUTS: { kind: LayoutKind; label: string; Icon: typeof TreeStructure; ic
     { kind: 'force', label: 'Force-directed', Icon: Graph },
 ];
 
+// "Align and Distribute" options in the Tidy menu - act on the selected device cards (2+ to
+// align, 3+ to distribute; see ALIGN_MIN).
+const ALIGNS: { kind: AlignKind; Icon: typeof AlignLeft }[] = [
+    { kind: 'left', Icon: AlignLeft },
+    { kind: 'hcenter', Icon: AlignCenterHorizontal },
+    { kind: 'right', Icon: AlignRight },
+    { kind: 'top', Icon: AlignTop },
+    { kind: 'vmiddle', Icon: AlignCenterVertical },
+    { kind: 'bottom', Icon: AlignBottom },
+    { kind: 'hdistribute', Icon: Columns },
+    { kind: 'vdistribute', Icon: Rows },
+];
+// Fallback card size before React Flow has measured a node (matches lib/layout).
+const CARD_W = 208;
+const CARD_H = 84;
+
 // Segmented-pill button for the curved/straight edge-style toggle.
 const edgeBtn = (active: boolean): string =>
     `grid h-7 w-7 place-items-center rounded-full transition-colors duration-200 ease-fluid ${
@@ -149,6 +166,10 @@ export function MapCanvas() {
     const { fitView, screenToFlowPosition } = useReactFlow();
     const theme = useTheme();
     const highContrast = useContrast() === 'high';
+    // Dot grid (toolbar toggle; size + colour in Settings > Theme). The size is the snap grid too.
+    const showGrid = useMapGrid();
+    const gridSize = useMapGridSize();
+    const gridColor = useMapGridColor(theme === 'light' ? 'light' : 'dark');
     // Fit tighter in high contrast so nodes (and their text) land as large as the screen allows.
     const fitPad = highContrast ? 0.08 : 0.3;
     // The toolbar is a strip above the map (not an overlay), so the canvas starts below it. Its
@@ -685,14 +706,15 @@ export function MapCanvas() {
     }, [activeMapId, mapDevices, fitView, fitPad]);
 
     // Apply a computed {id -> position} map to the canvas + persist each per-map, then frame.
+    // `fit: false` keeps the viewport where it is (aligning a few cards shouldn't re-frame the map).
     const applyPositions = useCallback(
-        (pos: Record<number, { x: number; y: number }>) => {
+        (pos: Record<number, { x: number; y: number }>, opts: { fit?: boolean } = {}) => {
             if (activeMapId === null) return;
             setNodes((nds) => nds.map((n) => (n.type === 'device' && pos[Number(n.id)] ? { ...n, position: pos[Number(n.id)] } : n)));
             // One request for the whole layout (not one per device), so a big Tidy can't half-land.
             const devices = Object.entries(pos).map(([id, p]) => ({ id: Number(id), x: p.x, y: p.y }));
             if (devices.length) savePositions.mutate({ mapId: activeMapId, devices });
-            setTimeout(() => fitView({ padding: fitPad, duration: 600 }), 60);
+            if (opts.fit !== false) setTimeout(() => fitView({ padding: fitPad, duration: 600 }), 60);
         },
         [activeMapId, setNodes, savePositions, fitView, fitPad],
     );
@@ -749,6 +771,40 @@ export function MapCanvas() {
         setLayoutMenu(false);
         applyPositions(declump(currentPositions()));
     }, [activeMapId, applyPositions, currentPositions]);
+
+    // Selected device cards - align needs two or more, distribute three. Notes, images and child maps
+    // aren't included: the undo snapshot only records device positions, so moving them here
+    // couldn't be undone.
+    const selectedDevices = useMemo(() => nodes.filter((n) => n.type === 'device' && n.selected), [nodes]);
+    const canAlign = selectedDevices.length >= 2; // any option at all (shows the section on phones)
+    const alignable = (kind: AlignKind) => selectedDevices.length >= ALIGN_MIN[kind];
+
+    // Align the selection on one edge / centre line of its bounding box. Same undo path as a
+    // tidy: snapshot the current layout first (and wait for it), then move and persist.
+    const alignSelected = useCallback(
+        async (kind: AlignKind) => {
+            if (activeMapId === null || selectedDevices.length < ALIGN_MIN[kind]) return;
+            setLayoutMenu(false);
+            setToolsMenu(false);
+            const positions = alignBoxes(
+                kind,
+                selectedDevices.map((n) => ({
+                    id: Number(n.id),
+                    x: n.position.x,
+                    y: n.position.y,
+                    w: n.measured?.width ?? n.width ?? CARD_W,
+                    h: n.measured?.height ?? n.height ?? CARD_H,
+                })),
+            );
+            try {
+                await captureSnapshot.mutateAsync({ mapId: activeMapId, note: ALIGN_LABEL[kind] });
+            } catch {
+                // Snapshot failed - still apply, just without an undo point (as runLayout does).
+            }
+            applyPositions(positions, { fit: false });
+        },
+        [activeMapId, selectedDevices, captureSnapshot, applyPositions],
+    );
 
     // Find-a-device search (React Flow has no built-in search - `fitView({ nodes })` is the
     // pan/zoom primitive). Selects it the same way a canvas click would (inspector + the
@@ -892,7 +948,7 @@ export function MapCanvas() {
                 // a phone. Allow it to zoom right out so the whole topology fits on any screen.
                 minZoom={0.1}
                 snapToGrid
-                snapGrid={[16, 16]}
+                snapGrid={[gridSize, gridSize]}
                 colorMode={theme === 'light' ? 'light' : 'dark'}
             >
                 {/* Layered "blueprint" grid - a coarse major grid over a fine minor grid, both
@@ -900,7 +956,20 @@ export function MapCanvas() {
                     React Flow dot field, and gives the canvas depth against the mesh glow. */}
                 {/* High contrast: no faint grid lines, a clearly visible dot grid instead. */}
                 {/* Standard contrast is a flat canvas (per the Normal Dark / Normal Light designs): no grid. */}
-                {highContrast && (
+                {/* Operator dot grid - one dot per snap point. React Flow centres each dot half a gap
+                    off the origin by default; offset = radius puts it exactly on the multiples of
+                    the gap, i.e. where a card's top-left corner snaps to. Replaces the
+                    high-contrast dots below rather than stacking two dot fields. */}
+                {showGrid ? (
+                    <Background
+                        id="snap"
+                        variant={BackgroundVariant.Dots}
+                        gap={gridSize}
+                        size={1.5}
+                        offset={0.75}
+                        color={gridColor}
+                    />
+                ) : highContrast && (
                     <Background
                         id="minor"
                         variant={BackgroundVariant.Dots}
@@ -982,6 +1051,17 @@ export function MapCanvas() {
                             <PushPin weight="bold" className="h-4 w-4" />
                         </button>
                     </div>
+                    </div>
+                    {/* Dot grid on/off - spacing matches the snap grid (Settings > Theme sets size + colour). */}
+                    <div className="flex items-center rounded-full bg-white/5 p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
+                        <button
+                            onClick={() => setMapGrid(!showGrid)}
+                            title={showGrid ? 'Hide the dot grid' : `Show the dot grid (${gridSize}px, the snap grid)`}
+                            aria-pressed={showGrid}
+                            className={edgeBtn(showGrid)}
+                        >
+                            <DotsNine weight="bold" className="h-4 w-4" />
+                        </button>
                     </div>
                     {/* OSPF cost label size/colour - only when this map carries OSPF costs (GitHub #22). */}
                     {hasOspfCost && <OspfCostControl />}
@@ -1066,7 +1146,7 @@ export function MapCanvas() {
                             <>
                                 {/* Click-away - closes the menu on any outside click. */}
                                 <div className="fixed inset-0 z-10" onClick={() => setLayoutMenu(false)} />
-                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-48 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-56 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                                     <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
                                     {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
                                         <button
@@ -1089,6 +1169,21 @@ export function MapCanvas() {
                                         <ArrowsOutCardinal weight="light" className="h-4 w-4" />
                                         <span className="flex-1">Remove overlaps</span>
                                     </button>
+                                    <div className="my-1 h-px bg-white/10" />
+                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
+                                    {!canAlign && <p className="px-2.5 pb-1 text-[11px] text-white/40">Select two or more devices (Ctrl/⌘-click or Shift-drag)</p>}
+                                    {canAlign && selectedDevices.length < 3 && <p className="px-2.5 pb-1 text-[11px] text-white/40">Distribute needs three or more</p>}
+                                    {ALIGNS.map(({ kind, Icon }) => (
+                                        <button
+                                            key={kind}
+                                            onClick={() => alignSelected(kind)}
+                                            disabled={!alignable(kind) || captureSnapshot.isPending}
+                                            className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors duration-200 ease-fluid hover:bg-white/10 disabled:pointer-events-none disabled:opacity-40"
+                                        >
+                                            <Icon weight="light" className="h-4 w-4" />
+                                            <span className="flex-1">{ALIGN_LABEL[kind]}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </>
                         )}
@@ -1127,6 +1222,11 @@ export function MapCanvas() {
                                             <PushPin weight="bold" className="h-4 w-4" /> Pinned
                                         </button>
                                     </div>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setMapGrid(!showGrid); setToolsMenu(false); }} aria-pressed={showGrid} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${showGrid ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <DotsNine weight="bold" className="h-4 w-4" /> Dot grid
+                                        </button>
+                                    </div>
                                     {isAdmin && (
                                         <>
                                             <div className="my-1 h-px bg-white/10" />
@@ -1150,6 +1250,17 @@ export function MapCanvas() {
                                             <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
                                                 <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
                                             </button>
+                                            {canAlign && (
+                                                <>
+                                                    <div className="my-1 h-px bg-white/10" />
+                                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
+                                                    {ALIGNS.filter(({ kind }) => alignable(kind)).map(({ kind, Icon }) => (
+                                                        <button key={kind} onClick={() => alignSelected(kind)} disabled={captureSnapshot.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
+                                                            <Icon weight="light" className="h-4 w-4" /> {ALIGN_LABEL[kind]}
+                                                        </button>
+                                                    ))}
+                                                </>
+                                            )}
                                             {snapshotCount > 0 && (
                                                 <button onClick={undoLayout} disabled={undoLayoutMut.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
                                                     <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" /> Undo tidy

@@ -21,6 +21,16 @@ of commit subjects.
   version too, read from sysDescr or MIKROTIK-MIB, so the sort isn't limited to API devices.
   Remote agents already send sysDescr; a newer agent also sends the MIKROTIK-MIB version for
   older builds that leave it out. Older agents keep working unchanged.
+- The map toolbar has a dot-grid toggle, next to the link style and attach toggles. Each dot sits
+  on a snap point, so it shows exactly where a dragged card lands. A new Settings > Theme tab sets
+  the grid size (which is also the snap grid, default 16px) and the dot colour for the dark and
+  light themes. These are saved per browser, like the other map toggles.
+- The map's Tidy layout menu has an Align and Distribute section. With two or more devices
+  selected, you can line them up on their left, horizontal centre, right, top, vertical middle or
+  bottom. Cards are aligned by their real size, so a taller or wider card lines up by its own
+  edge. With three or more selected, Distribute horizontally or vertically spaces them with equal
+  gaps between them, keeping the two outermost cards where they are. Each of these can be undone
+  with Undo tidy, the same as a layout.
 - The Map tools panel on the map page collapses to a slim rail on the right (the arrows next to
   its title), giving the map the room; click the rail to bring it back. Remembered per browser.
 - An "Orphaned only" toggle in Map tools narrows the device list to devices that aren't on any
