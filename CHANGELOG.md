@@ -21,6 +21,10 @@ of commit subjects.
   version too, read from sysDescr or MIKROTIK-MIB, so the sort isn't limited to API devices.
   Remote agents already send sysDescr; a newer agent also sends the MIKROTIK-MIB version for
   older builds that leave it out. Older agents keep working unchanged.
+- The Map tools panel on the map page collapses to a slim rail on the right (the arrows next to
+  its title), giving the map the room; click the rail to bring it back. Remembered per browser.
+- An "Orphaned only" toggle in Map tools narrows the device list to devices that aren't on any
+  map yet, instead of everything missing from the current map. Remembered per browser.
 
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's

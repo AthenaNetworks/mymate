@@ -1,6 +1,6 @@
 import { displayName } from '../../../lib/deviceName';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDoubleLeft, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Stack, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -11,6 +11,8 @@ import {
     setDeviceIfaceFilter,
     useInspectorOpen,
     setInspectorOpen,
+    useMapToolsCollapsed,
+    setMapToolsCollapsed,
     type IfaceFilter,
 } from '../../../lib/shellStore';
 import { useDevice, useDeviceStats, useDevicesByIds, useMapDevices } from '../../devices/api/getDevices';
@@ -431,8 +433,10 @@ function InterfacesList({
  * Responsive container for the inspector: a static right-hand column at
  * `lg`+ (unchanged), and a slide-over sheet with a backdrop + close button below it.
  * `open` drives the sheet; at `lg`+ the panel is always shown and `open` is ignored.
+ * `collapsed` (lg+ only) folds the column down to a slim rail with an expand button, so the
+ * map gets the room; below lg it's ignored and the sheet shows its content as usual.
  */
-function InspectorShell({ open, children }: { open: boolean; children: ReactNode }) {
+function InspectorShell({ open, collapsed = false, children }: { open: boolean; collapsed?: boolean; children: ReactNode }) {
     return (
         <>
             {/* Backdrop - phone/tablet only; dims the map behind the sheet. */}
@@ -443,10 +447,21 @@ function InspectorShell({ open, children }: { open: boolean; children: ReactNode
                 onClick={() => setInspectorOpen(false)}
             />
             <aside
-                className={`mm-inspector fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-surface/95 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:w-[22rem] lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
-                    open ? 'translate-x-0' : 'translate-x-full'
-                }`}
+                className={`mm-inspector fixed inset-y-0 right-0 z-40 flex w-[min(24rem,88vw)] flex-col gap-5 overflow-y-auto border-l border-white/10 bg-surface/95 p-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] backdrop-blur-2xl transition-transform duration-300 ease-fluid lg:static lg:z-10 lg:shrink-0 lg:translate-x-0 lg:bg-white/[0.02] lg:shadow-none ${
+                    collapsed ? 'lg:w-12 lg:overflow-hidden lg:p-1.5' : 'lg:w-[22rem]'
+                } ${open ? 'translate-x-0' : 'translate-x-full'}`}
             >
+                {collapsed && (
+                    <button
+                        onClick={() => setMapToolsCollapsed(false)}
+                        title="Show map tools"
+                        className="hidden flex-1 flex-col items-center gap-3 rounded-lg py-2 text-white/50 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/85 lg:flex"
+                    >
+                        <CaretDoubleLeft weight="bold" className="h-4 w-4" />
+                        <Stack weight="light" className="h-4 w-4" />
+                        <span className="text-xs font-semibold [writing-mode:vertical-rl]">Map tools</span>
+                    </button>
+                )}
                 {/* Close - phone/tablet only; a top bar so it never overlaps the header. */}
                 <div className="flex justify-end lg:hidden">
                     <button
@@ -457,7 +472,7 @@ function InspectorShell({ open, children }: { open: boolean; children: ReactNode
                         <X weight="bold" className="h-4 w-4" />
                     </button>
                 </div>
-                {children}
+                {collapsed ? <div className="contents lg:hidden">{children}</div> : children}
             </aside>
         </>
     );
@@ -539,6 +554,7 @@ export function DeviceInspector() {
     const id = useSelectedDeviceId();
     const chartMode = useDeviceChartMode(id ?? 0); // per-device chart toggle
     const inspectorOpen = useInspectorOpen(); // mobile slide-over open state
+    const mapToolsCollapsed = useMapToolsCollapsed(); // desktop: map tools folded to a rail
     const activeMapId = useActiveMapId();
     // Just the selected device (GitHub #22) - it used to be looked up in the whole fleet, which
     // at 25k devices never arrived. Seeded from the map's rows, so a click paints straight away.
@@ -612,7 +628,7 @@ export function DeviceInspector() {
 
     if (!device) {
         return (
-            <InspectorShell open={inspectorOpen}>
+            <InspectorShell open={inspectorOpen} collapsed={mapToolsCollapsed && isAdmin && stats?.total !== 0}>
                 {stats?.total === 0 ? (
                     <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
                         No devices yet - add one to see its details here.

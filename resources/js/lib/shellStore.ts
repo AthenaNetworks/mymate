@@ -49,6 +49,8 @@ type ShellState = {
     ospfCostColor: string; // OSPF cost badge colour (hex)
     layoutKind: LayoutKind; // last-chosen auto-layout algorithm
     wallboard: boolean; // big-screen / TV presentation mode
+    mapToolsCollapsed: boolean; // map tools panel folded to a slim rail on the right (lg+ only)
+    mapToolsOrphansOnly: boolean; // map tools device list: only devices on no map at all
     // Dashboard: which devices the card grid shows + the auto-page interval.
     // `dashboardAll` is a mode flag (not a frozen id list) so new devices auto-appear.
     dashboardAll: boolean;
@@ -106,6 +108,8 @@ type Persisted = Pick<
     | 'ospfCostColor'
     | 'layoutKind'
     | 'wallboard'
+    | 'mapToolsCollapsed'
+    | 'mapToolsOrphansOnly'
     | 'dashboardAll'
     | 'dashboardIds'
     | 'dashboardCycleS'
@@ -137,6 +141,8 @@ let state: ShellState = {
     ospfCostColor: saved.ospfCostColor ?? '#a5b4fc', // indigo-300
     layoutKind: saved.layoutKind ?? 'smart',
     wallboard: saved.wallboard ?? false,
+    mapToolsCollapsed: saved.mapToolsCollapsed ?? false,
+    mapToolsOrphansOnly: saved.mapToolsOrphansOnly ?? false,
     dashboardAll: saved.dashboardAll ?? true,
     dashboardIds: saved.dashboardIds ?? [],
     dashboardCycleS: saved.dashboardCycleS ?? 10,
@@ -147,13 +153,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
             dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
                 dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -359,6 +365,30 @@ export function setWallboard(on: boolean): void {
 
 export function useWallboard(): boolean {
     return useSyncExternalStore(subscribe, () => state.wallboard);
+}
+
+// Map tools panel collapsed to a slim rail on the right of the map, freeing the canvas.
+// Global + persisted. Desktop (lg+) only; below lg the inspector is a slide-over sheet anyway.
+export function setMapToolsCollapsed(collapsed: boolean): void {
+    if (state.mapToolsCollapsed === collapsed) return;
+    state = { ...state, mapToolsCollapsed: collapsed };
+    emit();
+}
+
+export function useMapToolsCollapsed(): boolean {
+    return useSyncExternalStore(subscribe, () => state.mapToolsCollapsed);
+}
+
+// Map tools device list filter: only orphaned devices (on no map at all) instead of everything
+// not on the current map. Global + persisted.
+export function setMapToolsOrphansOnly(on: boolean): void {
+    if (state.mapToolsOrphansOnly === on) return;
+    state = { ...state, mapToolsOrphansOnly: on };
+    emit();
+}
+
+export function useMapToolsOrphansOnly(): boolean {
+    return useSyncExternalStore(subscribe, () => state.mapToolsOrphansOnly);
 }
 
 // Dashboard selection + cadence. Persisted per browser. `dashboardAll`
