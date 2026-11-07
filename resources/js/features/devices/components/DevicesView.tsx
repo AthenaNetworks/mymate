@@ -8,6 +8,7 @@ import { useUpgradeDevices, useUpgradePreflight, type UpgradePlanRow } from '../
 import { DeviceForm } from './DeviceForm';
 import { DeviceEditModal } from './DeviceEditModal';
 import { useIsAdmin } from '../../auth/api/auth';
+import { useMaps } from '../../maps/api/maps';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
@@ -15,7 +16,7 @@ import { selectDevice, setView } from '../../../lib/shellStore';
 import { openDevicePage } from '../../device-page/lib/location';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
-import type { Device } from '../../../types';
+import type { Device, NetworkMap } from '../../../types';
 
 type PendingUpgrade = { ids: number[]; willUpgrade: UpgradePlanRow[]; skipped: UpgradePlanRow[] };
 
@@ -63,7 +64,11 @@ export function DevicesView() {
     const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
     const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
     const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
-    const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced'>('all'); // on a map / hidden from every map
+    // on a map / hidden from every map / on one particular map (`map:<id>`)
+    const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced' | `map:${number}`>('all');
+    const { data: maps } = useMaps();
+    const mapOptions = mapsInTreeOrder(maps ?? []);
+    const filterMapId = mapFilter.startsWith('map:') ? Number(mapFilter.slice(4)) : undefined;
     const [versionFilter, setVersionFilter] = useState<string>('all'); // RouterOS version (GH #60)
     const { data: versions } = useDeviceVersions();
     const [sort, setSort] = useState<NonNullable<DeviceListParams['sort']>>('name');
@@ -73,7 +78,8 @@ export function DevicesView() {
         status: statusFilter === 'all' ? undefined : statusFilter,
         device_type: typeFilter === 'all' ? undefined : typeFilter,
         monitored: monitoredFilter === 'all' ? undefined : monitoredFilter === 'live',
-        placed: mapFilter === 'all' ? undefined : mapFilter === 'placed',
+        placed: mapFilter === 'placed' ? true : mapFilter === 'unplaced' ? false : undefined,
+        map_id: filterMapId,
         os_version: versionFilter === 'all' ? undefined : versionFilter,
         sort,
     };
@@ -279,6 +285,16 @@ export function DevicesView() {
                                     <option value="all">Any map</option>
                                     <option value="placed">On a map</option>
                                     <option value="unplaced">Not on any map</option>
+                                    {mapOptions.length > 0 && (
+                                        <optgroup label="On this map">
+                                            {mapOptions.map(({ map, depth }) => (
+                                                <option key={map.id} value={`map:${map.id}`}>
+                                                    {'\u00a0\u00a0'.repeat(depth)}
+                                                    {map.name} ({map.device_count})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
                                 </select>
                                 {(versions?.length ?? 0) > 0 && (
                                     <select value={versionFilter} onChange={(e) => setVersionFilter(e.target.value)} title="RouterOS version" className={selectCls}>
@@ -599,4 +615,28 @@ export function DevicesView() {
             )}
         </div>
     );
+}
+
+/** Maps parent-first with their nesting depth, siblings in their saved order, for the map filter. */
+function mapsInTreeOrder(maps: NetworkMap[]): { map: NetworkMap; depth: number }[] {
+    const ids = new Set(maps.map((m) => m.id));
+    const children = new Map<number | null, NetworkMap[]>();
+    for (const m of maps) {
+        // A parent the viewer can't see is treated as the root so the map still shows up.
+        const parent = m.parent_map_id !== null && ids.has(m.parent_map_id) ? m.parent_map_id : null;
+        children.set(parent, [...(children.get(parent) ?? []), m]);
+    }
+    const out: { map: NetworkMap; depth: number }[] = [];
+    const seen = new Set<number>();
+    const walk = (parent: number | null, depth: number) => {
+        const kids = [...(children.get(parent) ?? [])].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+        for (const m of kids) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            out.push({ map: m, depth });
+            walk(m.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+    return out;
 }
