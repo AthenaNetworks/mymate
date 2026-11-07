@@ -281,7 +281,13 @@ export function DevicesView() {
                                     <option value="live">Live</option>
                                     <option value="paused">Paused</option>
                                 </select>
-                                <select value={mapFilter} onChange={(e) => setMapFilter(e.target.value as typeof mapFilter)} className={selectCls}>
+                                {/* Capped: a native select is as wide as its longest option, and map names can be long. */}
+                                <select
+                                    value={mapFilter}
+                                    onChange={(e) => setMapFilter(e.target.value as typeof mapFilter)}
+                                    title={filterMapId !== undefined ? maps?.find((m) => m.id === filterMapId)?.name : undefined}
+                                    className={`${selectCls} max-w-[11rem] truncate`}
+                                >
                                     <option value="all">Any map</option>
                                     <option value="placed">On a map</option>
                                     <option value="unplaced">Not on any map</option>
