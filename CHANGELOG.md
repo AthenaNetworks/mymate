@@ -16,6 +16,9 @@ of commit subjects.
 ### Added
 - The Devices tab's map filter lists every map (nested maps indented, with a device count), so
   you can show just the devices on one map, as well as "On a map" and "Not on any map".
+- The Devices tab remembers its search, filters, sort and page, so opening a device and coming
+  back (or reloading) shows the same list. Clear resets the search and filters. This is saved
+  per browser.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters

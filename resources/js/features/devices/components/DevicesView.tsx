@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import { useDebounced, useDeviceList, useDeviceStats, useDeviceVersions, type DeviceListParams } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
@@ -9,6 +9,7 @@ import { DeviceForm } from './DeviceForm';
 import { DeviceEditModal } from './DeviceEditModal';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMaps } from '../../maps/api/maps';
+import { DEFAULT_LIST_PREFS, loadListPrefs, saveListPrefs, type MapFilter } from '../lib/listPrefs';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
@@ -59,19 +60,21 @@ export function DevicesView() {
     const [confirmBulkUnplace, setConfirmBulkUnplace] = useState(false);
 
     // Search, filters, sort and paging all happen on the server (GitHub #22) - the list only ever
-    // holds one page, so it stays quick at 25k devices.
-    const [query, setQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
-    const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
-    const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
+    // holds one page, so it stays quick at 25k devices. They start from what this browser last
+    // had (listPrefs) so opening a device and coming back, or reloading, keeps the same list.
+    const [saved] = useState(() => loadListPrefs(SORTS.map((s) => s.value), DEVICE_TYPES));
+    const [query, setQuery] = useState(saved.query);
+    const [statusFilter, setStatusFilter] = useState(saved.status);
+    const [typeFilter, setTypeFilter] = useState(saved.type);
+    const [monitoredFilter, setMonitoredFilter] = useState(saved.monitored);
     // on a map / hidden from every map / on one particular map (`map:<id>`)
-    const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced' | `map:${number}`>('all');
+    const [mapFilter, setMapFilter] = useState<MapFilter>(saved.map);
     const { data: maps } = useMaps();
     const mapOptions = mapsInTreeOrder(maps ?? []);
     const filterMapId = mapFilter.startsWith('map:') ? Number(mapFilter.slice(4)) : undefined;
-    const [versionFilter, setVersionFilter] = useState<string>('all'); // RouterOS version (GH #60)
+    const [versionFilter, setVersionFilter] = useState(saved.version); // RouterOS version (GH #60)
     const { data: versions } = useDeviceVersions();
-    const [sort, setSort] = useState<NonNullable<DeviceListParams['sort']>>('name');
+    const [sort, setSort] = useState(saved.sort);
     const q = useDebounced(query.trim());
     const params: DeviceListParams = {
         q: q || undefined,
@@ -86,10 +89,10 @@ export function DevicesView() {
     // The page belongs to the query it was picked for; change the search, a filter or the sort
     // and it's back to page 1.
     const filterKey = JSON.stringify(params);
-    const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+    const [paging, setPaging] = useState({ key: filterKey, page: saved.page });
     const page = paging.key === filterKey ? paging.page : 1;
     const setPage = (p: number) => setPaging({ key: filterKey, page: p });
-    const { data, isLoading, isFetching } = useDeviceList({ ...params, page, per_page: PAGE_SIZE });
+    const { data, isLoading, isFetching, isPlaceholderData } = useDeviceList({ ...params, page, per_page: PAGE_SIZE });
     const { data: stats } = useDeviceStats();
     const filtered = data?.data ?? [];
     const matching = data?.meta.total ?? 0;
@@ -97,6 +100,33 @@ export function DevicesView() {
     const fleetTotal = stats?.total ?? matching;
     const filtersActive = query.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all' || versionFilter !== 'all';
     const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
+
+    useEffect(() => {
+        saveListPrefs({ query, status: statusFilter, type: typeFilter, monitored: monitoredFilter, map: mapFilter, version: versionFilter, sort, page });
+    }, [query, statusFilter, typeFilter, monitoredFilter, mapFilter, versionFilter, sort, page]);
+
+    // A remembered map or version that has since gone (map deleted, last device on that version
+    // upgraded) would filter to nothing with no visible option selected - drop back to "any".
+    useEffect(() => {
+        if (maps && filterMapId !== undefined && !maps.some((m) => m.id === filterMapId)) setMapFilter('all');
+    }, [maps, filterMapId]);
+    useEffect(() => {
+        if (versions && versionFilter !== 'all' && !versions.some((v) => v.version === versionFilter)) setVersionFilter('all');
+    }, [versions, versionFilter]);
+    // A remembered page past the end (devices removed since) - go to the last page there is.
+    useEffect(() => {
+        if (data && !isPlaceholderData && page > data.meta.last_page) setPaging({ key: filterKey, page: Math.max(1, data.meta.last_page) });
+    }, [data, isPlaceholderData, page, filterKey]);
+
+    function clearFilters() {
+        const d = DEFAULT_LIST_PREFS;
+        setQuery(d.query);
+        setStatusFilter(d.status);
+        setTypeFilter(d.type);
+        setMonitoredFilter(d.monitored);
+        setMapFilter(d.map);
+        setVersionFilter(d.version);
+    }
 
     function open(id: number) {
         selectDevice(id);
@@ -320,7 +350,7 @@ export function DevicesView() {
                                     ))}
                                 </select>
                                 {filtersActive && (
-                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); setVersionFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
+                                    <button onClick={clearFilters} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
                                         Clear
                                     </button>
                                 )}
