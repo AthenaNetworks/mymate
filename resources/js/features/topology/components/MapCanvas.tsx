@@ -35,6 +35,7 @@ import { MapSwitcher } from '../../maps/components/MapSwitcher';
 import { MapBreadcrumb } from '../../maps/components/MapBreadcrumb';
 import { MapSearch } from './MapSearch';
 import { MapNodeMenu, type NodeMenuState } from './MapNodeMenu';
+import { BulkEditDevicesDialog } from '../../devices/components/BulkEditDevicesDialog';
 import { SetParentDialog } from './SetParentDialog';
 import { DeleteDeviceDialog } from './DeleteDeviceDialog';
 import { MapControls } from './MapControls';
@@ -209,6 +210,7 @@ export function MapCanvas() {
     const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null);
     const [parentForId, setParentForId] = useState<number | null>(null); // parent picker
     const [deleteDeviceId, setDeleteDeviceId] = useState<number | null>(null); // delete confirmation
+    const [bulkEditIds, setBulkEditIds] = useState<number[] | null>(null); // bulk edit of a multi-selection
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
     const requestDelete = useCallback((linkId: number) => setDeleteLinkId(linkId), []);
@@ -921,7 +923,10 @@ export function MapCanvas() {
                     if (!isAdmin || node.type !== 'device') return;
                     e.preventDefault();
                     selectDevice(Number(node.id));
-                    setNodeMenu({ deviceId: Number(node.id), x: e.clientX, y: e.clientY });
+                    // Right-clicking a card inside a multi-selection keeps the selection and offers
+                    // to edit them all; a card outside it gets the single-device menu as before.
+                    const selection = node.selected ? selectedDevices.map((n) => Number(n.id)) : [];
+                    setNodeMenu({ deviceId: Number(node.id), x: e.clientX, y: e.clientY, selectionIds: selection.length >= 2 ? selection : undefined });
                 }}
                 // Click the empty canvas to deselect - the inspector then shows the map tools.
                 onPaneClick={() => selectDevice(null)}
@@ -1322,9 +1327,14 @@ export function MapCanvas() {
                             onRemoveFromMap={() => activeMapId !== null && removeFromMap.mutate({ mapId: activeMapId, deviceId: d.id })}
                             onDelete={() => setDeleteDeviceId(d.id)}
                             onClose={() => setNodeMenu(null)}
+                            selectionCount={nodeMenu.selectionIds?.length ?? 0}
+                            onBulkEdit={() => nodeMenu.selectionIds && setBulkEditIds(nodeMenu.selectionIds)}
                         />
                     );
                 })()}
+
+            {/* Edit every selected device card at once - from the node menu on a multi-selection. */}
+            {bulkEditIds !== null && <BulkEditDevicesDialog deviceIds={bulkEditIds} onClose={() => setBulkEditIds(null)} />}
 
             {/* Re-home a device onto its real uplink - from the node menu or the inspector. */}
             {parentForId !== null && devices?.some((d) => d.id === parentForId) && (

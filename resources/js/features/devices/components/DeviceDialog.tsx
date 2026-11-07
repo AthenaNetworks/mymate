@@ -1,8 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ImageSquare, X } from '@phosphor-icons/react';
-import { iconImageId, imageAssetUrl, IMAGE_ICON_PREFIX } from '../../../lib/imageAssets';
-import { ImageLibraryDialog } from '../../maps/components/ImageLibraryDialog';
+import { X } from '@phosphor-icons/react';
 import { useCreateDevice } from '../api/createDevice';
 import { useUpdateDevice } from '../api/updateDevice';
 import { useAgents } from '../../settings/api/agents';
@@ -12,7 +10,7 @@ import { useGeocode, useMapConfig } from '../../geo/api/geo';
 import { pushToast } from '../../../lib/toast';
 import { Toggle } from '../../../components/Toggle';
 import { UseSnmpLocationButton } from './UseSnmpLocationButton';
-import { DEVICE_ICONS, DEVICE_ICON_KEYS, ICON_COLORS } from '../../../components/deviceIcons';
+import { DeviceIconPicker } from './DeviceIconPicker';
 import type { Device, DeviceType, PollMethod } from '../../../types';
 
 // Small field label so an operator knows what each input is (placeholders vanish once filled).
@@ -73,7 +71,6 @@ export function DeviceDialog({
     const [pingSource, setPingSource] = useState<string>(device?.ping_source ?? '');
     const [icon, setIcon] = useState<string | null>(device?.icon ?? null);
     const [iconColor, setIconColor] = useState<string | null>(device?.icon_color ?? null);
-    const [pickImage, setPickImage] = useState(false); // custom icon from the image library (GitHub #53)
     // Latency quality thresholds (internet/upstream card). Empty string = use the card default.
     const [latencyGood, setLatencyGood] = useState<string>(device?.latency_good_ms != null ? String(device.latency_good_ms) : '');
     const [latencyBad, setLatencyBad] = useState<string>(device?.latency_bad_ms != null ? String(device.latency_bad_ms) : '');
@@ -342,68 +339,7 @@ export function DeviceDialog({
                     {mode === 'edit' && (
                         <div className="space-y-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 ring-1 ring-white/10">
                             <span className="block text-xs font-medium text-white/55">Icon (map + sidebar)</span>
-                            <div className="grid grid-cols-8 gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setIcon(null)}
-                                    title="Auto - product photo, vendor mark, or device type"
-                                    className={`grid h-8 place-items-center rounded-lg text-[9px] font-semibold ring-1 transition ${icon === null ? 'bg-emerald-500/20 text-emerald-200 ring-emerald-400/40' : 'text-white/50 ring-white/10 hover:bg-white/5'}`}
-                                >
-                                    Auto
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setPickImage(true)}
-                                    title="Use your own image from the library"
-                                    className={`grid h-8 place-items-center overflow-hidden rounded-lg ring-1 transition ${iconImageId(icon) !== null ? 'bg-emerald-500/20 ring-emerald-400/40' : 'text-white/50 ring-white/10 hover:bg-white/5'}`}
-                                >
-                                    {iconImageId(icon) !== null
-                                        ? <img src={imageAssetUrl(iconImageId(icon)!)} alt="" className="h-5 w-5 object-contain" />
-                                        : <ImageSquare weight="duotone" className="h-4 w-4" />}
-                                </button>
-                                {DEVICE_ICON_KEYS.map((key) => {
-                                    const I = DEVICE_ICONS[key];
-                                    return (
-                                        <button
-                                            key={key}
-                                            type="button"
-                                            onClick={() => setIcon(key)}
-                                            title={key}
-                                            className={`grid h-8 place-items-center rounded-lg ring-1 transition ${icon === key ? 'bg-emerald-500/20 ring-emerald-400/40' : 'ring-white/10 hover:bg-white/5'}`}
-                                        >
-                                            <I weight="duotone" className="h-4 w-4" style={{ color: iconColor ?? undefined }} />
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            <span className="block text-xs font-medium text-white/55">Colour</span>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <button
-                                    type="button"
-                                    onClick={() => setIconColor(null)}
-                                    title="Default colour"
-                                    className={`grid h-6 w-6 place-items-center rounded-full bg-white/5 text-[9px] text-white/50 ring-1 ${iconColor === null ? 'ring-white/60' : 'ring-white/15'}`}
-                                >
-                                    A
-                                </button>
-                                {ICON_COLORS.map((c) => (
-                                    <button
-                                        key={c}
-                                        type="button"
-                                        onClick={() => setIconColor(c)}
-                                        title={c}
-                                        className={`h-6 w-6 rounded-full ring-2 transition ${iconColor === c ? 'ring-white' : 'ring-transparent hover:ring-white/30'}`}
-                                        style={{ background: c }}
-                                    />
-                                ))}
-                                <input
-                                    type="color"
-                                    value={iconColor ?? '#34d399'}
-                                    onChange={(e) => setIconColor(e.target.value)}
-                                    title="Custom colour"
-                                    className="h-6 w-6 cursor-pointer rounded-full border-0 bg-transparent p-0 [color-scheme:dark]"
-                                />
-                            </div>
+                            <DeviceIconPicker icon={icon} iconColor={iconColor} onIconChange={setIcon} onColorChange={setIconColor} />
                         </div>
                     )}
 
@@ -423,16 +359,6 @@ export function DeviceDialog({
                     {isError && <p className="text-xs text-rose-400/90">{serverError ?? "Couldn't save - check the fields (a valid, routable IP is required)."}</p>}
                 </div>
             </form>
-            {pickImage && (
-                <ImageLibraryDialog
-                    title="Pick an icon"
-                    onClose={() => setPickImage(false)}
-                    onPick={(asset) => {
-                        setIcon(`${IMAGE_ICON_PREFIX}${asset.id}`);
-                        setPickImage(false);
-                    }}
-                />
-            )}
         </div>,
         document.body,
     );
