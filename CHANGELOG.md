@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- The Devices tab's map filter lists every map (nested maps indented, with a device count), so
+  you can show just the devices on one map, as well as "On a map" and "Not on any map".
+- The Devices tab remembers its search, filters, sort and page, so opening a device and coming
+  back (or reloading) shows the same list. Clear resets the search and filters. This is saved
+  per browser.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters
@@ -39,6 +44,9 @@ of commit subjects.
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
+- The map switcher's drop-down list widens to fit the longest map name, so names are no longer
+  cut off at a fixed 16rem. It stops at 28rem, or at the right edge of the screen on a small
+  device; a name that still doesn't fit shows in full on hover.
 
 ### Fixed
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's

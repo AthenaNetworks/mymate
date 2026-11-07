@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TrashSimple, ArrowRight, ListDashes, DownloadSimple, PencilSimple, Pause, Play, MagnifyingGlass, MapTrifold, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import { useDebounced, useDeviceList, useDeviceStats, useDeviceVersions, type DeviceListParams } from '../api/getDevices';
 import { useDeleteDevice } from '../api/deleteDevice';
@@ -8,6 +8,8 @@ import { useUpgradeDevices, useUpgradePreflight, type UpgradePlanRow } from '../
 import { DeviceForm } from './DeviceForm';
 import { DeviceEditModal } from './DeviceEditModal';
 import { useIsAdmin } from '../../auth/api/auth';
+import { useMaps } from '../../maps/api/maps';
+import { DEFAULT_LIST_PREFS, loadListPrefs, saveListPrefs, type MapFilter } from '../lib/listPrefs';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
 import { UpgradeStatusBadge } from '../../../components/UpgradeStatusBadge';
@@ -15,7 +17,7 @@ import { selectDevice, setView } from '../../../lib/shellStore';
 import { openDevicePage } from '../../device-page/lib/location';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
-import type { Device } from '../../../types';
+import type { Device, NetworkMap } from '../../../types';
 
 type PendingUpgrade = { ids: number[]; willUpgrade: UpgradePlanRow[]; skipped: UpgradePlanRow[] };
 
@@ -58,32 +60,39 @@ export function DevicesView() {
     const [confirmBulkUnplace, setConfirmBulkUnplace] = useState(false);
 
     // Search, filters, sort and paging all happen on the server (GitHub #22) - the list only ever
-    // holds one page, so it stays quick at 25k devices.
-    const [query, setQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | 'up' | 'down' | 'unknown'>('all');
-    const [typeFilter, setTypeFilter] = useState<'all' | Device['device_type']>('all');
-    const [monitoredFilter, setMonitoredFilter] = useState<'all' | 'live' | 'paused'>('all');
-    const [mapFilter, setMapFilter] = useState<'all' | 'placed' | 'unplaced'>('all'); // on a map / hidden from every map
-    const [versionFilter, setVersionFilter] = useState<string>('all'); // RouterOS version (GH #60)
+    // holds one page, so it stays quick at 25k devices. They start from what this browser last
+    // had (listPrefs) so opening a device and coming back, or reloading, keeps the same list.
+    const [saved] = useState(() => loadListPrefs(SORTS.map((s) => s.value), DEVICE_TYPES));
+    const [query, setQuery] = useState(saved.query);
+    const [statusFilter, setStatusFilter] = useState(saved.status);
+    const [typeFilter, setTypeFilter] = useState(saved.type);
+    const [monitoredFilter, setMonitoredFilter] = useState(saved.monitored);
+    // on a map / hidden from every map / on one particular map (`map:<id>`)
+    const [mapFilter, setMapFilter] = useState<MapFilter>(saved.map);
+    const { data: maps } = useMaps();
+    const mapOptions = mapsInTreeOrder(maps ?? []);
+    const filterMapId = mapFilter.startsWith('map:') ? Number(mapFilter.slice(4)) : undefined;
+    const [versionFilter, setVersionFilter] = useState(saved.version); // RouterOS version (GH #60)
     const { data: versions } = useDeviceVersions();
-    const [sort, setSort] = useState<NonNullable<DeviceListParams['sort']>>('name');
+    const [sort, setSort] = useState(saved.sort);
     const q = useDebounced(query.trim());
     const params: DeviceListParams = {
         q: q || undefined,
         status: statusFilter === 'all' ? undefined : statusFilter,
         device_type: typeFilter === 'all' ? undefined : typeFilter,
         monitored: monitoredFilter === 'all' ? undefined : monitoredFilter === 'live',
-        placed: mapFilter === 'all' ? undefined : mapFilter === 'placed',
+        placed: mapFilter === 'placed' ? true : mapFilter === 'unplaced' ? false : undefined,
+        map_id: filterMapId,
         os_version: versionFilter === 'all' ? undefined : versionFilter,
         sort,
     };
     // The page belongs to the query it was picked for; change the search, a filter or the sort
     // and it's back to page 1.
     const filterKey = JSON.stringify(params);
-    const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+    const [paging, setPaging] = useState({ key: filterKey, page: saved.page });
     const page = paging.key === filterKey ? paging.page : 1;
     const setPage = (p: number) => setPaging({ key: filterKey, page: p });
-    const { data, isLoading, isFetching } = useDeviceList({ ...params, page, per_page: PAGE_SIZE });
+    const { data, isLoading, isFetching, isPlaceholderData } = useDeviceList({ ...params, page, per_page: PAGE_SIZE });
     const { data: stats } = useDeviceStats();
     const filtered = data?.data ?? [];
     const matching = data?.meta.total ?? 0;
@@ -91,6 +100,33 @@ export function DevicesView() {
     const fleetTotal = stats?.total ?? matching;
     const filtersActive = query.trim() !== '' || statusFilter !== 'all' || typeFilter !== 'all' || monitoredFilter !== 'all' || mapFilter !== 'all' || versionFilter !== 'all';
     const allSelected = filtered.length > 0 && filtered.every((d) => selected.has(d.id));
+
+    useEffect(() => {
+        saveListPrefs({ query, status: statusFilter, type: typeFilter, monitored: monitoredFilter, map: mapFilter, version: versionFilter, sort, page });
+    }, [query, statusFilter, typeFilter, monitoredFilter, mapFilter, versionFilter, sort, page]);
+
+    // A remembered map or version that has since gone (map deleted, last device on that version
+    // upgraded) would filter to nothing with no visible option selected - drop back to "any".
+    useEffect(() => {
+        if (maps && filterMapId !== undefined && !maps.some((m) => m.id === filterMapId)) setMapFilter('all');
+    }, [maps, filterMapId]);
+    useEffect(() => {
+        if (versions && versionFilter !== 'all' && !versions.some((v) => v.version === versionFilter)) setVersionFilter('all');
+    }, [versions, versionFilter]);
+    // A remembered page past the end (devices removed since) - go to the last page there is.
+    useEffect(() => {
+        if (data && !isPlaceholderData && page > data.meta.last_page) setPaging({ key: filterKey, page: Math.max(1, data.meta.last_page) });
+    }, [data, isPlaceholderData, page, filterKey]);
+
+    function clearFilters() {
+        const d = DEFAULT_LIST_PREFS;
+        setQuery(d.query);
+        setStatusFilter(d.status);
+        setTypeFilter(d.type);
+        setMonitoredFilter(d.monitored);
+        setMapFilter(d.map);
+        setVersionFilter(d.version);
+    }
 
     function open(id: number) {
         selectDevice(id);
@@ -275,10 +311,26 @@ export function DevicesView() {
                                     <option value="live">Live</option>
                                     <option value="paused">Paused</option>
                                 </select>
-                                <select value={mapFilter} onChange={(e) => setMapFilter(e.target.value as typeof mapFilter)} className={selectCls}>
+                                {/* Capped: a native select is as wide as its longest option, and map names can be long. */}
+                                <select
+                                    value={mapFilter}
+                                    onChange={(e) => setMapFilter(e.target.value as typeof mapFilter)}
+                                    title={filterMapId !== undefined ? maps?.find((m) => m.id === filterMapId)?.name : undefined}
+                                    className={`${selectCls} max-w-[11rem] truncate`}
+                                >
                                     <option value="all">Any map</option>
                                     <option value="placed">On a map</option>
                                     <option value="unplaced">Not on any map</option>
+                                    {mapOptions.length > 0 && (
+                                        <optgroup label="On this map">
+                                            {mapOptions.map(({ map, depth }) => (
+                                                <option key={map.id} value={`map:${map.id}`}>
+                                                    {'\u00a0\u00a0'.repeat(depth)}
+                                                    {map.name} ({map.device_count})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
                                 </select>
                                 {(versions?.length ?? 0) > 0 && (
                                     <select value={versionFilter} onChange={(e) => setVersionFilter(e.target.value)} title="RouterOS version" className={selectCls}>
@@ -298,7 +350,7 @@ export function DevicesView() {
                                     ))}
                                 </select>
                                 {filtersActive && (
-                                    <button onClick={() => { setQuery(''); setStatusFilter('all'); setTypeFilter('all'); setMonitoredFilter('all'); setMapFilter('all'); setVersionFilter('all'); }} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
+                                    <button onClick={clearFilters} className="rounded-lg px-2 py-1 text-xs text-white/45 ring-1 ring-white/10 hover:text-white/80">
                                         Clear
                                     </button>
                                 )}
@@ -599,4 +651,28 @@ export function DevicesView() {
             )}
         </div>
     );
+}
+
+/** Maps parent-first with their nesting depth, siblings in their saved order, for the map filter. */
+function mapsInTreeOrder(maps: NetworkMap[]): { map: NetworkMap; depth: number }[] {
+    const ids = new Set(maps.map((m) => m.id));
+    const children = new Map<number | null, NetworkMap[]>();
+    for (const m of maps) {
+        // A parent the viewer can't see is treated as the root so the map still shows up.
+        const parent = m.parent_map_id !== null && ids.has(m.parent_map_id) ? m.parent_map_id : null;
+        children.set(parent, [...(children.get(parent) ?? []), m]);
+    }
+    const out: { map: NetworkMap; depth: number }[] = [];
+    const seen = new Set<number>();
+    const walk = (parent: number | null, depth: number) => {
+        const kids = [...(children.get(parent) ?? [])].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+        for (const m of kids) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            out.push({ map: m, depth });
+            walk(m.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+    return out;
 }
