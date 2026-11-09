@@ -35,6 +35,13 @@ of commit subjects.
   its title), giving the map the room; click the rail to bring it back. Remembered per browser.
 - An "Orphaned only" toggle in Map tools narrows the device list to devices that aren't on any
   map yet, instead of everything missing from the current map. Remembered per browser.
+- Map notes support Markdown: bold, italic, strikethrough, code, lists, headings, quotes and
+  links, on the topology map, the geo map and the public wallboard. Pasted web addresses and
+  email addresses become links on their own, and web links open in a new tab. Notes can also
+  link to `winbox://`, `ssh://`, `telnet://` and `rdp://` addresses, which open the tool on your
+  computer. On the public wallboard those show as plain text. Raw HTML, images (only their alt
+  text shows), tables and any other kind of link aren't shown. Existing notes keep their line
+  breaks. The note editor is a little larger and shows a character count.
 
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
