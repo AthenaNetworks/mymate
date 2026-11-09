@@ -41,6 +41,8 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- The top bar's breadcrumb shows where you are - the page, plus the map's name on the maps and
+  the device's name on a device page - instead of always reading "Topology / Default Map".
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).

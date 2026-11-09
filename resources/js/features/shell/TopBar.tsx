@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { List, MagnifyingGlass, SignOut, Television } from '@phosphor-icons/react';
 import { useConnectionStatus } from '../topology/hooks/useConnectionStatus';
 import { StatusCounts } from './StatusCounts';
+import { Breadcrumb } from './Breadcrumb';
 import { setView, setNavOpen, setWallboard } from '../../lib/shellStore';
 import { useCurrentUser, useLogout } from '../auth/api/auth';
 import { Logomark } from '../../components/Logomark';
@@ -60,11 +61,7 @@ export function TopBar() {
                 </div>
             </div>
 
-            <div className="hidden items-center gap-1.5 text-xs text-white/40 sm:flex">
-                <span>Topology</span>
-                <span className="text-white/20">/</span>
-                <span className="text-white/70">Default Map</span>
-            </div>
+            <Breadcrumb />
 
             <div className="flex-1" />
 
