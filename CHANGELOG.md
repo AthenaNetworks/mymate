@@ -41,6 +41,8 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- Notes on the public wallboard's map view ignored their background colour and size and always
+  showed with the default look. They now match the map.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).
