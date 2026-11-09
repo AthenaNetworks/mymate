@@ -37,7 +37,10 @@
         "leaflet.markercluster": "^1.5.3",
         "pusher-js": "^8.5.0",
         "react": "^19.2.7",
-        "react-dom": "^19.2.7"
+        "react-dom": "^19.2.7",
+        "react-markdown": "^10.1.0",
+        "remark-breaks": "^4.0.0",
+        "remark-gfm": "^4.0.1"
     },
     "engines": {
         "node": ">=20"
