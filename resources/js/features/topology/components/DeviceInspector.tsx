@@ -1,6 +1,6 @@
 import { displayName } from '../../../lib/deviceName';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDoubleLeft, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Stack, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDoubleLeft, CaretDoubleRight, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Stack, Terminal, Trash, X } from '@phosphor-icons/react';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -13,6 +13,8 @@ import {
     setInspectorOpen,
     useMapToolsCollapsed,
     setMapToolsCollapsed,
+    useDeviceInspectorCollapsed,
+    setDeviceInspectorCollapsed,
     type IfaceFilter,
 } from '../../../lib/shellStore';
 import { useDevice, useDeviceStats, useDevicesByIds, useMapDevices } from '../../devices/api/getDevices';
@@ -435,8 +437,22 @@ function InterfacesList({
  * `open` drives the sheet; at `lg`+ the panel is always shown and `open` is ignored.
  * `collapsed` (lg+ only) folds the column down to a slim rail with an expand button, so the
  * map gets the room; below lg it's ignored and the sheet shows its content as usual.
+ * `rail` describes that folded rail: what it says and what expanding it does. The map tools
+ * and the device inspector each fold independently (separate persisted flags).
  */
-function InspectorShell({ open, collapsed = false, children }: { open: boolean; collapsed?: boolean; children: ReactNode }) {
+type InspectorRail = { title: string; onExpand: () => void; content: ReactNode };
+
+function InspectorShell({
+    open,
+    collapsed = false,
+    rail,
+    children,
+}: {
+    open: boolean;
+    collapsed?: boolean;
+    rail?: InspectorRail;
+    children: ReactNode;
+}) {
     return (
         <>
             {/* Backdrop - phone/tablet only; dims the map behind the sheet. */}
@@ -451,15 +467,14 @@ function InspectorShell({ open, collapsed = false, children }: { open: boolean; 
                     collapsed ? 'lg:w-12 lg:overflow-hidden lg:p-1.5' : 'lg:w-[22rem]'
                 } ${open ? 'translate-x-0' : 'translate-x-full'}`}
             >
-                {collapsed && (
+                {collapsed && rail && (
                     <button
-                        onClick={() => setMapToolsCollapsed(false)}
-                        title="Show map tools"
+                        onClick={rail.onExpand}
+                        title={rail.title}
                         className="hidden flex-1 flex-col items-center gap-3 rounded-lg py-2 text-white/50 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/85 lg:flex"
                     >
-                        <CaretDoubleLeft weight="bold" className="h-4 w-4" />
-                        <Stack weight="light" className="h-4 w-4" />
-                        <span className="text-xs font-semibold [writing-mode:vertical-rl]">Map tools</span>
+                        <CaretDoubleLeft weight="bold" className="h-4 w-4 shrink-0" />
+                        {rail.content}
                     </button>
                 )}
                 {/* Close - phone/tablet only; a top bar so it never overlaps the header. */}
@@ -555,6 +570,7 @@ export function DeviceInspector() {
     const chartMode = useDeviceChartMode(id ?? 0); // per-device chart toggle
     const inspectorOpen = useInspectorOpen(); // mobile slide-over open state
     const mapToolsCollapsed = useMapToolsCollapsed(); // desktop: map tools folded to a rail
+    const deviceInspectorCollapsed = useDeviceInspectorCollapsed(); // desktop: device card folded to a rail
     const activeMapId = useActiveMapId();
     // Just the selected device (GitHub #22) - it used to be looked up in the whole fleet, which
     // at 25k devices never arrived. Seeded from the map's rows, so a click paints straight away.
@@ -601,7 +617,7 @@ export function DeviceInspector() {
                 here.find((d) => d.device_type === 'internet') ??
                 here.find((d) => d.parent_device_id === null) ??
                 here[0];
-            if (root) selectDevice(root.id);
+            if (root) selectDevice(root.id, { reveal: false }); // auto-home keeps a persisted collapse
             else if (deleted) selectDevice(null); // nothing on the map -> deselect (show tools)
         }
         autoHomedOnce = true; // after devices first load, a plain deselect no longer re-homes
@@ -628,7 +644,20 @@ export function DeviceInspector() {
 
     if (!device) {
         return (
-            <InspectorShell open={inspectorOpen} collapsed={mapToolsCollapsed && isAdmin && stats?.total !== 0}>
+            <InspectorShell
+                open={inspectorOpen}
+                collapsed={mapToolsCollapsed && isAdmin && stats?.total !== 0}
+                rail={{
+                    title: 'Show map tools',
+                    onExpand: () => setMapToolsCollapsed(false),
+                    content: (
+                        <>
+                            <Stack weight="light" className="h-4 w-4" />
+                            <span className="text-xs font-semibold [writing-mode:vertical-rl]">Map tools</span>
+                        </>
+                    ),
+                }}
+            >
                 {stats?.total === 0 ? (
                     <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
                         No devices yet - add one to see its details here.
@@ -702,7 +731,20 @@ export function DeviceInspector() {
     ];
 
     return (
-        <InspectorShell open={inspectorOpen}>
+        <InspectorShell
+            open={inspectorOpen}
+            collapsed={deviceInspectorCollapsed}
+            rail={{
+                title: `Show device - ${displayName(device)}`,
+                onExpand: () => setDeviceInspectorCollapsed(false),
+                content: (
+                    <>
+                        <StatusDot status={device.status} />
+                        <span className="max-h-[60vh] truncate text-xs font-semibold [writing-mode:vertical-rl]">{displayName(device)}</span>
+                    </>
+                ),
+            }}
+        >
             {playback && <PlaybackInspectorBanner playback={playback} />}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -721,9 +763,19 @@ export function DeviceInspector() {
                         </div>
                     </div>
                 </div>
-                <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${badge.cls}`}>
-                    <StatusDot status={device.status} /> {badge.label}
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${badge.cls}`}>
+                        <StatusDot status={device.status} /> {badge.label}
+                    </span>
+                    {/* Desktop only: below lg the panel is a slide-over sheet with its own close. */}
+                    <button
+                        onClick={() => setDeviceInspectorCollapsed(true)}
+                        title="Collapse device panel"
+                        className="hidden rounded-lg p-1.5 text-white/40 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 lg:block"
+                    >
+                        <CaretDoubleRight weight="bold" className="h-4 w-4" />
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
