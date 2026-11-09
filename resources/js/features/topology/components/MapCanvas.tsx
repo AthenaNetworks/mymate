@@ -1397,6 +1397,8 @@ export function MapCanvas() {
                             heading={n === 1 ? first || 'Note' : `${n} notes`}
                             onClose={() => setNoteMenu(null)}
                             items={[
+                                { key: 'copy', label: 'Copy', icon: <Copy weight="light" className="h-4 w-4 text-sky-300" />, shortcut: shortcut('C'), onSelect: () => noteClip.copy(noteMenu.ids) },
+                                { key: 'duplicate', label: 'Duplicate', icon: <CopySimple weight="light" className="h-4 w-4 text-emerald-300" />, shortcut: shortcut('D'), onSelect: () => noteClip.duplicate(noteMenu.ids) },
                                 // Edit is one note at a time - and the way in for a note that is
                                 // all link, which leaves nowhere to double-click.
                                 ...(n === 1
@@ -1409,10 +1411,8 @@ export function MapCanvas() {
                                               const id = noteNodeId(noteMenu.ids[0]);
                                               setNodes((nds) => nds.map((x) => (x.id === id ? { ...x, data: { ...x.data, editRequest: Date.now() } } : x)));
                                           },
-                                      }, 'divider' as const]
+                                      }]
                                     : []),
-                                { key: 'copy', label: 'Copy', icon: <Copy weight="light" className="h-4 w-4 text-sky-300" />, shortcut: shortcut('C'), onSelect: () => noteClip.copy(noteMenu.ids) },
-                                { key: 'duplicate', label: 'Duplicate', icon: <CopySimple weight="light" className="h-4 w-4 text-emerald-300" />, shortcut: shortcut('D'), onSelect: () => noteClip.duplicate(noteMenu.ids) },
                                 'divider',
                                 { key: 'delete', label: n === 1 ? 'Delete note' : `Delete ${n} notes`, icon: <TrashSimple weight="light" className="h-4 w-4" />, danger: true, onSelect: () => noteClip.remove(noteMenu.ids) },
                             ]}

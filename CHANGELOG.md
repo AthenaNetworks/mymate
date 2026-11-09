@@ -15,7 +15,7 @@ of commit subjects.
 
 ### Added
 - Map notes can be copied, pasted and duplicated, including from one map to another.
-  Right-click a note to Edit, Copy, Duplicate or Delete it. Edit is handy for a note that is all
+  Right-click a note to Copy, Duplicate, Edit or Delete it. Edit is handy for a note that is all
   link, which leaves nowhere to double-click. With several notes selected, the menu acts on all of
   them (Edit is for one note at a time). Right-click an empty part of the map to paste where you clicked, or to add a
   new note there. Ctrl+C, Ctrl+V and Ctrl+D (⌘ on a Mac) do the same when the map has focus.
