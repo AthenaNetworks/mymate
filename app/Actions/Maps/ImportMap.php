@@ -86,11 +86,18 @@ class ImportMap
                 ]);
             }
 
+            // Style and geo position are optional (older exports have neither). A file is untrusted
+            // input, so a malformed value is dropped back to the default rather than stored.
             foreach ($data['notes'] ?? [] as $n) {
+                [$lat, $lng] = $this->geoPair($n['latitude'] ?? null, $n['longitude'] ?? null);
                 $map->mapNotes()->create([
                     'text' => (string) ($n['text'] ?? ''),
                     'x' => (float) ($n['x'] ?? 0), 'y' => (float) ($n['y'] ?? 0),
-                    'color' => $n['color'] ?? null,
+                    'color' => $this->hexColor($n['color'] ?? null),
+                    'background' => $this->hexColor($n['background'] ?? null),
+                    'size' => in_array($n['size'] ?? null, ['sm', 'md', 'lg'], true) ? $n['size'] : null,
+                    'latitude' => $lat,
+                    'longitude' => $lng,
                 ]);
             }
 
@@ -122,6 +129,28 @@ class ImportMap
 
             return $map;
         });
+    }
+
+    /** A #rrggbb colour as the notes API accepts it, or null. */
+    private function hexColor(mixed $value): ?string
+    {
+        return is_string($value) && preg_match('/^#[0-9a-fA-F]{6}$/', $value) === 1 ? $value : null;
+    }
+
+    /**
+     * A note's geo position: both coordinates in range, or neither (as the notes API requires).
+     *
+     * @return array{0: ?float, 1: ?float}
+     */
+    private function geoPair(mixed $lat, mixed $lng): array
+    {
+        if (! is_numeric($lat) || ! is_numeric($lng)) {
+            return [null, null];
+        }
+        $lat = (float) $lat;
+        $lng = (float) $lng;
+
+        return abs($lat) <= 90 && abs($lng) <= 180 ? [$lat, $lng] : [null, null];
     }
 
     /** A map name that doesn't collide - appends " (imported)" / a counter as needed. */
