@@ -39,6 +39,9 @@ of commit subjects.
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
+- The map switcher's drop-down list widens to fit the longest map name, so names are no longer
+  cut off at a fixed 16rem. It stops at 28rem, or at the right edge of the screen on a small
+  device; a name that still doesn't fit shows in full on hover.
 
 ### Fixed
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
