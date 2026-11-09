@@ -62,6 +62,7 @@ type ShellState = {
     wallboard: boolean; // big-screen / TV presentation mode
     mapToolsCollapsed: boolean; // map tools panel folded to a slim rail on the right (lg+ only)
     mapToolsOrphansOnly: boolean; // map tools device list: only devices on no map at all
+    deviceInspectorCollapsed: boolean; // device inspector folded to a slim rail on the right (lg+ only)
     // Dashboard: which devices the card grid shows + the auto-page interval.
     // `dashboardAll` is a mode flag (not a frozen id list) so new devices auto-appear.
     dashboardAll: boolean;
@@ -125,6 +126,7 @@ type Persisted = Pick<
     | 'wallboard'
     | 'mapToolsCollapsed'
     | 'mapToolsOrphansOnly'
+    | 'deviceInspectorCollapsed'
     | 'dashboardAll'
     | 'dashboardIds'
     | 'dashboardCycleS'
@@ -168,6 +170,7 @@ let state: ShellState = {
     wallboard: saved.wallboard ?? false,
     mapToolsCollapsed: saved.mapToolsCollapsed ?? false,
     mapToolsOrphansOnly: saved.mapToolsOrphansOnly ?? false,
+    deviceInspectorCollapsed: saved.deviceInspectorCollapsed ?? false,
     dashboardAll: saved.dashboardAll ?? true,
     dashboardIds: saved.dashboardIds ?? [],
     dashboardCycleS: saved.dashboardCycleS ?? 10,
@@ -178,13 +181,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly, deviceInspectorCollapsed,
             mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly, deviceInspectorCollapsed,
                 mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -235,9 +238,20 @@ export function navigateTo(url: string, opts: { replace?: boolean } = {}): void 
     window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
-export function selectDevice(id: number | null): void {
+/**
+ * Select a device for the inspector. Picking a DIFFERENT device while the desktop device
+ * inspector is collapsed unfolds it - clicking a node is a request to see its card. Pass
+ * `reveal: false` for programmatic selection (the inspector's auto-home on load) so a
+ * persisted collapse survives a reload.
+ */
+export function selectDevice(id: number | null, opts: { reveal?: boolean } = {}): void {
     if (state.selectedDeviceId !== id) {
-        state = { ...state, selectedDeviceId: id };
+        const reveal = (opts.reveal ?? true) && id !== null;
+        state = {
+            ...state,
+            selectedDeviceId: id,
+            deviceInspectorCollapsed: reveal ? false : state.deviceInspectorCollapsed,
+        };
         emit();
     }
 }
@@ -437,6 +451,19 @@ export function setMapToolsCollapsed(collapsed: boolean): void {
 
 export function useMapToolsCollapsed(): boolean {
     return useSyncExternalStore(subscribe, () => state.mapToolsCollapsed);
+}
+
+// Device inspector collapsed to a slim rail (the selected device's status + name stay
+// visible). Separate from mapToolsCollapsed: folding the tools palette shouldn't hide a
+// device card you then click, and vice versa. Global + persisted, lg+ only.
+export function setDeviceInspectorCollapsed(collapsed: boolean): void {
+    if (state.deviceInspectorCollapsed === collapsed) return;
+    state = { ...state, deviceInspectorCollapsed: collapsed };
+    emit();
+}
+
+export function useDeviceInspectorCollapsed(): boolean {
+    return useSyncExternalStore(subscribe, () => state.deviceInspectorCollapsed);
 }
 
 // Map tools device list filter: only orphaned devices (on no map at all) instead of everything

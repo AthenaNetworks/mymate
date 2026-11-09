@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- The device panel on the right of the map can be collapsed to a slim rail, like the map tools
+  panel: the rail keeps the selected device's status and name in view, and selecting another
+  device opens the panel again. The setting is remembered across reloads.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters
