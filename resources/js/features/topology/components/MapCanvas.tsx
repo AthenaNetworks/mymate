@@ -14,7 +14,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlignBottom, AlignCenterHorizontal, AlignCenterVertical, AlignLeft, AlignRight, AlignTop, ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, ClipboardText, Columns, Copy, CopySimple, Cube, DotsNine, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Rows, Sparkle, TrashSimple, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { AlignBottom, AlignCenterHorizontal, AlignCenterVertical, AlignLeft, AlignRight, AlignTop, ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, ClipboardText, Columns, Copy, CopySimple, Cube, DotsNine, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, PencilSimple, Plus, PushPin, Rows, Sparkle, TrashSimple, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useContrast, useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -1397,6 +1397,20 @@ export function MapCanvas() {
                             heading={n === 1 ? first || 'Note' : `${n} notes`}
                             onClose={() => setNoteMenu(null)}
                             items={[
+                                // Edit is one note at a time - and the way in for a note that is
+                                // all link, which leaves nowhere to double-click.
+                                ...(n === 1
+                                    ? [{
+                                          key: 'edit',
+                                          label: 'Edit',
+                                          icon: <PencilSimple weight="light" className="h-4 w-4 text-amber-300" />,
+                                          title: 'Edit the text (or double-click the note)',
+                                          onSelect: () => {
+                                              const id = noteNodeId(noteMenu.ids[0]);
+                                              setNodes((nds) => nds.map((x) => (x.id === id ? { ...x, data: { ...x.data, editRequest: Date.now() } } : x)));
+                                          },
+                                      }, 'divider' as const]
+                                    : []),
                                 { key: 'copy', label: 'Copy', icon: <Copy weight="light" className="h-4 w-4 text-sky-300" />, shortcut: shortcut('C'), onSelect: () => noteClip.copy(noteMenu.ids) },
                                 { key: 'duplicate', label: 'Duplicate', icon: <CopySimple weight="light" className="h-4 w-4 text-emerald-300" />, shortcut: shortcut('D'), onSelect: () => noteClip.duplicate(noteMenu.ids) },
                                 'divider',

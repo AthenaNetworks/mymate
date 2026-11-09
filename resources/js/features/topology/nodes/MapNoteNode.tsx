@@ -16,6 +16,9 @@ export type MapNoteNodeData = {
     onSave?: (text: string) => void;
     onSaveStyle?: (patch: MapNoteStylePatch) => void;
     onRemove?: () => void;
+    // Set (to a fresh value each time) to open the editor from outside - the right-click menu's
+    // "Edit", for a note that is all link and has nowhere left to double-click.
+    editRequest?: number;
 };
 
 // Size preset -> text size utility. Default (null) is md.
@@ -25,7 +28,8 @@ const PICK_TEXT = '#e8e6dc';
 const PICK_BG = '#15151b';
 
 /**
- * A free-text note / label on the map (GitHub #11). Double-click to edit (admin); blur or Enter
+ * A free-text note / label on the map (GitHub #11). Double-click, or right-click > Edit, to edit
+ * (admin); blur or Enter
  * saves, Escape cancels. When selected, an admin gets a small toolbar to set the text colour,
  * background and size. Colours default to theme-aware tokens so an unstyled note reads on both the
  * light and dark themes (the old hardcoded white vanished on light).
@@ -38,8 +42,14 @@ export function MapNoteNode({ data, selected }: NodeProps) {
 
     useEffect(() => setDraft(d.text), [d.text]);
     useEffect(() => {
-        if (editing) ref.current?.focus();
+        if (!editing || !ref.current) return;
+        ref.current.focus();
+        const end = ref.current.value.length; // caret at the end, ready to add to the note
+        ref.current.setSelectionRange(end, end);
     }, [editing]);
+    useEffect(() => {
+        if (d.editRequest && d.editable) setEditing(true);
+    }, [d.editRequest, d.editable]);
 
     const commit = () => {
         setEditing(false);
