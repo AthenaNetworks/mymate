@@ -1174,3 +1174,12 @@ label,
         animation: none !important;
     }
 }
+
+/* The box React Flow leaves around a multi-selection sits above the cards by default (z 3 over
+   the viewport's 2), so a card inside it can't be clicked or right-clicked. Drop it below the
+   viewport: cards and links take their own clicks, the gaps between them still grab the box to
+   drag the group, and arrow-key nudging is untouched. The extra class out-ranks React Flow's own
+   stylesheet, which is imported from JS and loads after this one. */
+.react-flow .react-flow__nodesselection {
+    z-index: 1;
+}
