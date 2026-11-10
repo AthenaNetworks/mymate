@@ -14,6 +14,9 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- The Workspace menu can be collapsed on a wide screen too: the « button next to its heading folds
+  it into the top bar's ☰ menu, giving the page its width. The » button in that menu puts it back.
+  The choice is remembered.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters

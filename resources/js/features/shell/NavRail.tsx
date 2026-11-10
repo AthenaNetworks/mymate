@@ -1,5 +1,5 @@
-import { MapTrifold, GlobeHemisphereWest, SquaresFour, ListDashes, MagnifyingGlass, ChartLine, Wrench, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, type Icon } from '@phosphor-icons/react';
-import { useView, setView, useNavOpen, setNavOpen, type View } from '../../lib/shellStore';
+import { MapTrifold, GlobeHemisphereWest, SquaresFour, ListDashes, MagnifyingGlass, ChartLine, Wrench, Warning, Bell, ArrowCircleUp, Archive, GearSix, DownloadSimple, X, CaretDoubleLeft, CaretDoubleRight, type Icon } from '@phosphor-icons/react';
+import { useView, setView, useNavOpen, setNavOpen, useNavCollapsed, setNavCollapsed, type View } from '../../lib/shellStore';
 import { useUpdateCheck } from '../settings/api/updateCheck';
 import { MapLegend } from './MapLegend';
 
@@ -21,7 +21,7 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
 
 /** The nav body - shared by the desktop rail and the mobile drawer so the two stay
  *  in lock-step. Tapping an item navigates and closes the drawer (a no-op at lg+). */
-function NavContent({ outageCount, alertCount }: { outageCount: number; alertCount: number }) {
+function NavContent({ outageCount, alertCount, collapsible = false }: { outageCount: number; alertCount: number; collapsible?: boolean }) {
     const view = useView();
     // This install's version, from the update-check endpoint (VERSION file / MYMATE_VERSION).
     const { data: update } = useUpdateCheck();
@@ -29,7 +29,20 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
 
     return (
         <>
-            <p className="px-2 pt-1 text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">Workspace</p>
+            <div className="flex items-center justify-between">
+                <p className="px-2 pt-1 text-[10px] font-medium uppercase tracking-[0.2em] text-white/30">Workspace</p>
+                {/* The desktop rail only: fold the menu into the top bar's hamburger. */}
+                {collapsible && (
+                    <button
+                        onClick={() => setNavCollapsed(true)}
+                        title="Collapse menu"
+                        aria-label="Collapse menu"
+                        className="rounded-lg p-1 text-white/35 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80"
+                    >
+                        <CaretDoubleLeft weight="bold" className="h-3.5 w-3.5" />
+                    </button>
+                )}
+            </div>
 
             <ul className="space-y-0.5">
                 {ITEMS.map((it) => {
@@ -83,23 +96,26 @@ function NavContent({ outageCount, alertCount }: { outageCount: number; alertCou
 }
 
 /** Left workspace rail - switches the active view; legend + engine footer pinned to the bottom.
- *  Responsive: a static column at `lg`+, a hamburger-triggered off-canvas drawer below.
+ *  Responsive: a static column at `lg`+, a hamburger-triggered off-canvas drawer below. The
+ *  user can also collapse the column, and the drawer then serves wide screens too.
  *  `outageCount` is the live number of ongoing outages (badge), `alertCount` the alerts firing now,
  *  both passed from AppShell. */
 export function NavRail({ outageCount = 0, alertCount = 0 }: { outageCount?: number; alertCount?: number }) {
     const navOpen = useNavOpen();
+    // Folded away by the user: the drawer + hamburger then serve wide screens too.
+    const collapsed = useNavCollapsed();
 
     return (
         <>
             {/* Desktop / large screens: a static column in the shell row. */}
-            <nav className="mm-navrail z-10 hidden min-h-0 w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-white/10 bg-white/[0.02] p-3 backdrop-blur-2xl lg:flex">
-                <NavContent outageCount={outageCount} alertCount={alertCount} />
+            <nav className={`mm-navrail z-10 hidden min-h-0 w-52 shrink-0 flex-col gap-6 overflow-y-auto border-r border-white/10 bg-white/[0.02] p-3 backdrop-blur-2xl ${collapsed ? '' : 'lg:flex'}`}>
+                <NavContent outageCount={outageCount} alertCount={alertCount} collapsible />
             </nav>
 
             {/* Phone / tablet: an off-canvas drawer (below lg) that slides in over the map.
                 Always mounted so it can animate; pointer-events gated while closed. */}
             <div
-                className={`fixed inset-0 z-40 lg:hidden ${navOpen ? '' : 'pointer-events-none'}`}
+                className={`fixed inset-0 z-40 ${collapsed ? '' : 'lg:hidden'} ${navOpen ? '' : 'pointer-events-none'}`}
                 aria-hidden={!navOpen}
             >
                 <div
@@ -120,6 +136,18 @@ export function NavRail({ outageCount = 0, alertCount = 0 }: { outageCount?: num
                     >
                         <X weight="bold" className="h-4 w-4" />
                     </button>
+                    {/* Folded away on a wide screen: put the menu back as a fixed column. Below lg
+                        there's no room for one, so it's offered at lg+ only. */}
+                    {collapsed && (
+                        <button
+                            onClick={() => setNavCollapsed(false)}
+                            title="Keep menu open"
+                            aria-label="Keep menu open"
+                            className="absolute right-10 top-2 hidden rounded-lg p-1.5 text-white/40 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 lg:block"
+                        >
+                            <CaretDoubleRight weight="bold" className="h-4 w-4" />
+                        </button>
+                    )}
                     <NavContent outageCount={outageCount} alertCount={alertCount} />
                 </nav>
             </div>

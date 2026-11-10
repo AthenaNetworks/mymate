@@ -61,6 +61,7 @@ type ShellState = {
     mapGridColorLight: string; // dot colour on the light theme (hex)
     wallboard: boolean; // big-screen / TV presentation mode
     mapToolsCollapsed: boolean; // map tools panel folded to a slim rail on the right (lg+ only)
+    navCollapsed: boolean; // workspace menu folded into the top bar's hamburger at lg+ too (below lg it always is)
     mapToolsOrphansOnly: boolean; // map tools device list: only devices on no map at all
     // Dashboard: which devices the card grid shows + the auto-page interval.
     // `dashboardAll` is a mode flag (not a frozen id list) so new devices auto-appear.
@@ -124,6 +125,7 @@ type Persisted = Pick<
     | 'mapGridColorLight'
     | 'wallboard'
     | 'mapToolsCollapsed'
+    | 'navCollapsed'
     | 'mapToolsOrphansOnly'
     | 'dashboardAll'
     | 'dashboardIds'
@@ -167,6 +169,7 @@ let state: ShellState = {
     mapGridColorLight: saved.mapGridColorLight ?? MAP_GRID_DEFAULT_COLOR.light,
     wallboard: saved.wallboard ?? false,
     mapToolsCollapsed: saved.mapToolsCollapsed ?? false,
+    navCollapsed: saved.navCollapsed ?? false,
     mapToolsOrphansOnly: saved.mapToolsOrphansOnly ?? false,
     dashboardAll: saved.dashboardAll ?? true,
     dashboardIds: saved.dashboardIds ?? [],
@@ -178,13 +181,13 @@ function persist(): void {
     if (typeof window === 'undefined') return;
     try {
         const {
-            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
+            selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly, navCollapsed,
             mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
         } = state;
         window.localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
-                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly,
+                selectedDeviceId, activeMapId, chartModeById, ifaceFilterById, tileMetricById, edgeStyle, edgeAttach, ospfCostSize, ospfCostColor, layoutKind, wallboard, mapToolsCollapsed, mapToolsOrphansOnly, navCollapsed,
                 mapGrid, mapGridSize, mapGridColorDark, mapGridColorLight, dashboardAll, dashboardIds, dashboardCycleS,
             }),
         );
@@ -252,7 +255,8 @@ export function useSelectedDeviceId(): number | null {
 
 // Transient off-canvas UI: the mobile nav drawer + inspector sheet.
 // Below `lg` the nav rail and inspector are overlays toggled by these flags; at `lg`+
-// they\'re always-visible columns and the flags are ignored. Not persisted.
+// they\'re always-visible columns and the flags are ignored - except the nav drawer, which
+// also serves wide screens once the menu is collapsed (navCollapsed). Not persisted.
 export function setNavOpen(open: boolean): void {
     if (state.navOpen === open) return;
     state = { ...state, navOpen: open };
@@ -261,6 +265,19 @@ export function setNavOpen(open: boolean): void {
 
 export function useNavOpen(): boolean {
     return useSyncExternalStore(subscribe, () => state.navOpen);
+}
+
+// Workspace menu folded away on a wide screen too, behind the same hamburger and drawer the
+// narrow layout uses, to give the page the rail's width. Global + persisted. Changing it closes
+// the drawer, so pinning the menu back open doesn't leave the drawer over the page.
+export function setNavCollapsed(collapsed: boolean): void {
+    if (state.navCollapsed === collapsed && !state.navOpen) return;
+    state = { ...state, navCollapsed: collapsed, navOpen: false };
+    emit();
+}
+
+export function useNavCollapsed(): boolean {
+    return useSyncExternalStore(subscribe, () => state.navCollapsed);
 }
 
 export function setInspectorOpen(open: boolean): void {
