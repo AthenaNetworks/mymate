@@ -205,6 +205,21 @@ export function MapCanvas() {
     const [showChildLinks, setShowChildLinks] = useState(true); // toggle the aggregated device links between child maps (GitHub #9)
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
+    // The overflow menu can be taller than a short window: cap it at the room below its button
+    // (re-measured on open and on resize) and let it scroll, so nothing is cut off at the bottom.
+    const toolsMenuAnchor = useRef<HTMLDivElement>(null);
+    const [toolsMenuMaxH, setToolsMenuMaxH] = useState<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        if (!toolsMenu) return;
+        const measure = () => {
+            const box = toolsMenuAnchor.current?.getBoundingClientRect();
+            // 8px gap below the button (mt-2) + 12px clear of the window's bottom edge.
+            if (box) setToolsMenuMaxH(Math.max(160, window.innerHeight - box.bottom - 20));
+        };
+        measure();
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [toolsMenu]);
     // Right-click device management (GitHub #45): the node menu, and the two dialogs it opens.
     const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null);
     const [parentForId, setParentForId] = useState<number | null>(null); // parent picker
@@ -1001,6 +1016,89 @@ export function MapCanvas() {
                 here since neither knew the other\'s width. */}
             <div ref={setToolbarEl} className="mm-toolbar absolute inset-x-0 top-0 z-10 flex flex-col items-start gap-2.5 border-b border-white/10 bg-surface px-4 py-3.5">
                 <div className="flex flex-wrap items-center gap-2">
+                    {/* Below lg: one overflow button holding every map tool, at the start of the first
+                        row (the tools row below is hidden then), so the toolbar takes one row fewer. */}
+                    <div ref={toolsMenuAnchor} className="relative lg:hidden">
+                        <button
+                            onClick={() => setToolsMenu((o) => !o)}
+                            title="Map tools"
+                            className="flex items-center justify-center rounded-full bg-white/5 p-2 text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                        >
+                            <DotsThreeVertical weight="bold" className="h-4 w-4" />
+                        </button>
+                        {toolsMenu && (
+                            <>
+                                <div className="fixed inset-0 z-10" onClick={() => setToolsMenu(false)} />
+                                {/* Opens rightward: below lg the toolbar stacks its rows flush left, so this button sits
+                                    at the window's left edge and a right-anchored panel would run off-screen. */}
+                                <div style={{ maxHeight: toolsMenuMaxH }} className="animate-rise absolute left-0 top-full z-20 mt-2 w-52 overflow-y-auto overscroll-contain rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Links</p>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setEdgeStyle('curved'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'curved' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <WaveSine weight="bold" className="h-4 w-4" /> Curved
+                                        </button>
+                                        <button onClick={() => { setEdgeStyle('straight'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'straight' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <LineSegment weight="bold" className="h-4 w-4" /> Straight
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setEdgeAttach('auto'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'auto' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <MagnetStraight weight="bold" className="h-4 w-4" /> Auto
+                                        </button>
+                                        <button onClick={() => { setEdgeAttach('fixed'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'fixed' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <PushPin weight="bold" className="h-4 w-4" /> Pinned
+                                        </button>
+                                    </div>
+                                    <div className="flex gap-1 px-1 pb-1.5">
+                                        <button onClick={() => { setMapGrid(!showGrid); setToolsMenu(false); }} aria-pressed={showGrid} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${showGrid ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
+                                            <DotsNine weight="bold" className="h-4 w-4" /> Dot grid
+                                        </button>
+                                    </div>
+                                    {isAdmin && (
+                                        <>
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <button onClick={() => { setDeviceDialog({}); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Plus weight="bold" className="h-4 w-4 text-emerald-300" /> Add device
+                                            </button>
+                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Internet', mgmt_ip: '1.1.1.1', device_type: 'internet', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Globe weight="light" className="h-4 w-4 text-sky-300" /> Add internet object
+                                            </button>
+                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Switch', mgmt_ip: '', device_type: 'switch', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
+                                                <Cube weight="light" className="h-4 w-4 text-amber-300" /> Add static object
+                                            </button>
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
+                                            {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
+                                                <button key={kind} onClick={() => runLayout(kind)} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${layoutKind === kind ? 'text-emerald-300' : 'text-white/75'}`}>
+                                                    <Icon weight="light" className={`h-4 w-4 ${iconClass ?? ''}`} />
+                                                    <span className="flex-1">{label}</span>
+                                                </button>
+                                            ))}
+                                            <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
+                                                <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
+                                            </button>
+                                            {/* Always listed, as in the desktop Tidy menu: options that need more
+                                                devices selected are greyed out, with a hint saying how many. */}
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
+                                            {!canAlign && <p className="px-2.5 pb-1 text-[11px] text-white/40">Select two or more devices (Ctrl/⌘-click or Shift-drag)</p>}
+                                            {canAlign && selectedDevices.length < 3 && <p className="px-2.5 pb-1 text-[11px] text-white/40">Distribute needs three or more</p>}
+                                            {ALIGNS.map(({ kind, Icon }) => (
+                                                <button key={kind} onClick={() => alignSelected(kind)} disabled={!alignable(kind) || captureSnapshot.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-40">
+                                                    <Icon weight="light" className="h-4 w-4" /> {ALIGN_LABEL[kind]}
+                                                </button>
+                                            ))}
+                                            {snapshotCount > 0 && (
+                                                <button onClick={undoLayout} disabled={undoLayoutMut.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
+                                                    <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" /> Undo tidy
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
                     <MapBreadcrumb />
                     <MapSwitcher />
                     <PlaybackBadge pb={play.pb} />
@@ -1023,12 +1121,11 @@ export function MapCanvas() {
                     )}
                     <MapSearch devices={mapDevices} onSelect={focusDevice} />
                 </div>
-                {/* ml-auto keeps this cluster right-aligned whether it shares the first line
-                    or wraps to its own - plain justify-between would collapse a lone wrapped
-                    item to the left edge instead. */}
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Desktop / tablet: the tool clusters inline. Below lg they collapse into the
-                        single overflow menu below so the toolbar never wraps over the map. */}
+                {/* The tools row, lg and up only. Below lg it's hidden outright (not just emptied,
+                    or the column's gap would still leave a strip) and the tools live in the
+                    overflow menu at the start of the first row. */}
+                <div className="hidden flex-wrap items-center gap-2 lg:flex">
+                    {/* Desktop / tablet: the tool clusters inline. */}
                     <div className="hidden items-center gap-2 lg:flex">
                     {/* High contrast draws the two toggles below as one segmented group; `contents` keeps them separate otherwise. */}
                     <div className="mm-seg contents">
@@ -1189,88 +1286,6 @@ export function MapCanvas() {
                         )}
                     </div>
                     )}
-                    </div>
-
-                    {/* Below lg: one overflow button holding every map tool, so the toolbar stays a
-                        single row on a phone instead of wrapping across the top of the map. */}
-                    <div className="relative lg:hidden">
-                        <button
-                            onClick={() => setToolsMenu((o) => !o)}
-                            title="Map tools"
-                            className="flex items-center justify-center rounded-full bg-white/5 p-2 text-white/75 ring-1 ring-white/10 backdrop-blur-xl transition-colors hover:bg-white/10 hover:text-white active:scale-[0.98]"
-                        >
-                            <DotsThreeVertical weight="bold" className="h-4 w-4" />
-                        </button>
-                        {toolsMenu && (
-                            <>
-                                <div className="fixed inset-0 z-10" onClick={() => setToolsMenu(false)} />
-                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
-                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Links</p>
-                                    <div className="flex gap-1 px-1 pb-1.5">
-                                        <button onClick={() => { setEdgeStyle('curved'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'curved' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
-                                            <WaveSine weight="bold" className="h-4 w-4" /> Curved
-                                        </button>
-                                        <button onClick={() => { setEdgeStyle('straight'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'straight' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
-                                            <LineSegment weight="bold" className="h-4 w-4" /> Straight
-                                        </button>
-                                    </div>
-                                    <div className="flex gap-1 px-1 pb-1.5">
-                                        <button onClick={() => { setEdgeAttach('auto'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'auto' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
-                                            <MagnetStraight weight="bold" className="h-4 w-4" /> Auto
-                                        </button>
-                                        <button onClick={() => { setEdgeAttach('fixed'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeAttach === 'fixed' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
-                                            <PushPin weight="bold" className="h-4 w-4" /> Pinned
-                                        </button>
-                                    </div>
-                                    <div className="flex gap-1 px-1 pb-1.5">
-                                        <button onClick={() => { setMapGrid(!showGrid); setToolsMenu(false); }} aria-pressed={showGrid} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${showGrid ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>
-                                            <DotsNine weight="bold" className="h-4 w-4" /> Dot grid
-                                        </button>
-                                    </div>
-                                    {isAdmin && (
-                                        <>
-                                            <div className="my-1 h-px bg-white/10" />
-                                            <button onClick={() => { setDeviceDialog({}); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
-                                                <Plus weight="bold" className="h-4 w-4 text-emerald-300" /> Add device
-                                            </button>
-                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Internet', mgmt_ip: '1.1.1.1', device_type: 'internet', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
-                                                <Globe weight="light" className="h-4 w-4 text-sky-300" /> Add internet object
-                                            </button>
-                                            <button onClick={() => { setDeviceDialog({ defaults: { name: 'Switch', mgmt_ip: '', device_type: 'switch', poll_method: 'none' } }); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/80 transition-colors hover:bg-white/10">
-                                                <Cube weight="light" className="h-4 w-4 text-amber-300" /> Add static object
-                                            </button>
-                                            <div className="my-1 h-px bg-white/10" />
-                                            <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Auto-layout</p>
-                                            {LAYOUTS.map(({ kind, label, Icon, iconClass }) => (
-                                                <button key={kind} onClick={() => runLayout(kind)} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/10 ${layoutKind === kind ? 'text-emerald-300' : 'text-white/75'}`}>
-                                                    <Icon weight="light" className={`h-4 w-4 ${iconClass ?? ''}`} />
-                                                    <span className="flex-1">{label}</span>
-                                                </button>
-                                            ))}
-                                            <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
-                                                <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
-                                            </button>
-                                            {canAlign && (
-                                                <>
-                                                    <div className="my-1 h-px bg-white/10" />
-                                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
-                                                    {ALIGNS.filter(({ kind }) => alignable(kind)).map(({ kind, Icon }) => (
-                                                        <button key={kind} onClick={() => alignSelected(kind)} disabled={captureSnapshot.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
-                                                            <Icon weight="light" className="h-4 w-4" /> {ALIGN_LABEL[kind]}
-                                                        </button>
-                                                    ))}
-                                                </>
-                                            )}
-                                            {snapshotCount > 0 && (
-                                                <button onClick={undoLayout} disabled={undoLayoutMut.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
-                                                    <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" /> Undo tidy
-                                                </button>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </>
-                        )}
                     </div>
                 </div>
             </div>

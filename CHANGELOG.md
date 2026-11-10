@@ -41,6 +41,12 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- On a narrow window the map's ⋮ tools menu opened off the left edge of the screen and could be
+  cut off at the bottom. It now opens rightward from the button and scrolls when it's taller than
+  the room below it. Its Align and Distribute section is always listed too, as in the desktop Tidy
+  menu, with options greyed out until enough devices are selected.
+- On a narrow window the map's ⋮ tools button sits at the start of the toolbar's first row, in front
+  of the map list, instead of on a row of its own, giving that row back to the map.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).
