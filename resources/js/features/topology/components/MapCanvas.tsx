@@ -1267,17 +1267,17 @@ export function MapCanvas() {
                                             <button onClick={() => { removeOverlaps(); setToolsMenu(false); }} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10">
                                                 <ArrowsOutCardinal weight="light" className="h-4 w-4" /> Remove overlaps
                                             </button>
-                                            {canAlign && (
-                                                <>
-                                                    <div className="my-1 h-px bg-white/10" />
-                                                    <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
-                                                    {ALIGNS.filter(({ kind }) => alignable(kind)).map(({ kind, Icon }) => (
-                                                        <button key={kind} onClick={() => alignSelected(kind)} disabled={captureSnapshot.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
-                                                            <Icon weight="light" className="h-4 w-4" /> {ALIGN_LABEL[kind]}
-                                                        </button>
-                                                    ))}
-                                                </>
-                                            )}
+                                            {/* Always listed, as in the desktop Tidy menu: options that need more
+                                                devices selected are greyed out, with a hint saying how many. */}
+                                            <div className="my-1 h-px bg-white/10" />
+                                            <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Align and Distribute</p>
+                                            {!canAlign && <p className="px-2.5 pb-1 text-[11px] text-white/40">Select two or more devices (Ctrl/⌘-click or Shift-drag)</p>}
+                                            {canAlign && selectedDevices.length < 3 && <p className="px-2.5 pb-1 text-[11px] text-white/40">Distribute needs three or more</p>}
+                                            {ALIGNS.map(({ kind, Icon }) => (
+                                                <button key={kind} onClick={() => alignSelected(kind)} disabled={!alignable(kind) || captureSnapshot.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:pointer-events-none disabled:opacity-40">
+                                                    <Icon weight="light" className="h-4 w-4" /> {ALIGN_LABEL[kind]}
+                                                </button>
+                                            ))}
                                             {snapshotCount > 0 && (
                                                 <button onClick={undoLayout} disabled={undoLayoutMut.isPending} className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/10 disabled:opacity-40">
                                                     <ArrowCounterClockwise weight="bold" className="h-4 w-4 text-emerald-300" /> Undo tidy
