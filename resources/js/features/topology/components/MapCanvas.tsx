@@ -205,6 +205,21 @@ export function MapCanvas() {
     const [showChildLinks, setShowChildLinks] = useState(true); // toggle the aggregated device links between child maps (GitHub #9)
     const [layoutMenu, setLayoutMenu] = useState(false); // the "Tidy ▾" layout-algorithm dropdown
     const [toolsMenu, setToolsMenu] = useState(false); // mobile: all map tools behind one overflow button
+    // The overflow menu can be taller than a short window: cap it at the room below its button
+    // (re-measured on open and on resize) and let it scroll, so nothing is cut off at the bottom.
+    const toolsMenuAnchor = useRef<HTMLDivElement>(null);
+    const [toolsMenuMaxH, setToolsMenuMaxH] = useState<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        if (!toolsMenu) return;
+        const measure = () => {
+            const box = toolsMenuAnchor.current?.getBoundingClientRect();
+            // 8px gap below the button (mt-2) + 12px clear of the window's bottom edge.
+            if (box) setToolsMenuMaxH(Math.max(160, window.innerHeight - box.bottom - 20));
+        };
+        measure();
+        window.addEventListener('resize', measure);
+        return () => window.removeEventListener('resize', measure);
+    }, [toolsMenu]);
     // Right-click device management (GitHub #45): the node menu, and the two dialogs it opens.
     const [nodeMenu, setNodeMenu] = useState<NodeMenuState | null>(null);
     const [parentForId, setParentForId] = useState<number | null>(null); // parent picker
@@ -1193,7 +1208,7 @@ export function MapCanvas() {
 
                     {/* Below lg: one overflow button holding every map tool, so the toolbar stays a
                         single row on a phone instead of wrapping across the top of the map. */}
-                    <div className="relative lg:hidden">
+                    <div ref={toolsMenuAnchor} className="relative lg:hidden">
                         <button
                             onClick={() => setToolsMenu((o) => !o)}
                             title="Map tools"
@@ -1204,7 +1219,9 @@ export function MapCanvas() {
                         {toolsMenu && (
                             <>
                                 <div className="fixed inset-0 z-10" onClick={() => setToolsMenu(false)} />
-                                <div className="animate-rise absolute right-0 top-full z-20 mt-2 w-52 rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
+                                {/* Opens rightward: below lg the toolbar stacks its rows flush left, so this button sits
+                                    at the window's left edge and a right-anchored panel would run off-screen. */}
+                                <div style={{ maxHeight: toolsMenuMaxH }} className="animate-rise absolute left-0 top-full z-20 mt-2 w-52 overflow-y-auto overscroll-contain rounded-2xl bg-surface/95 p-1.5 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-xl">
                                     <p className="px-2.5 pb-1 pt-1 text-[10px] uppercase tracking-wide text-white/30">Links</p>
                                     <div className="flex gap-1 px-1 pb-1.5">
                                         <button onClick={() => { setEdgeStyle('curved'); setToolsMenu(false); }} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs ${edgeStyle === 'curved' ? 'bg-white/10 text-emerald-300' : 'text-white/70 hover:bg-white/5'}`}>

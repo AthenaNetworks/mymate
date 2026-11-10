@@ -41,6 +41,9 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- On a narrow window the map's ⋮ tools menu opened off the left edge of the screen and could be
+  cut off at the bottom. It now opens rightward from the button and scrolls when it's taller than
+  the room below it.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).
