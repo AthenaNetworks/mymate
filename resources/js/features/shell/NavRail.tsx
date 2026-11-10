@@ -19,6 +19,12 @@ const ITEMS: { id: View; label: string; icon: Icon }[] = [
     { id: 'settings', label: 'Settings', icon: GearSix },
 ];
 
+/** A page's name as the nav shows it, for the top bar's breadcrumb. The device page sits under Devices. */
+export function viewLabel(view: View): string {
+    const id = view === 'device' ? 'devices' : view;
+    return ITEMS.find((it) => it.id === id)?.label ?? '';
+}
+
 /** The nav body - shared by the desktop rail and the mobile drawer so the two stay
  *  in lock-step. Tapping an item navigates and closes the drawer (a no-op at lg+). */
 function NavContent({ outageCount, alertCount }: { outageCount: number; alertCount: number }) {
