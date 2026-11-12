@@ -25,6 +25,7 @@ export interface UserInput {
     map_ids?: number[];
     group_ids?: number[];
     passkey_exempt?: boolean;
+    disabled?: boolean; // switched off: can't sign in, sessions end, API keys refused
 }
 
 export function useSaveUser() {

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\UpdatePasswordRequest;
+use App\Models\User;
 use App\Support\AuthSettings;
 use App\Support\PasskeyRecovery;
 use App\Support\EngineLog;
@@ -25,6 +26,18 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         $credentials = $request->only('email', 'password');
+
+        // No password login for an account without one (created by SSO - it signs in with SSO), nor
+        // for a disabled account. Same generic failure as a wrong password: nothing to enumerate.
+        $account = User::where('email', $credentials['email'])->first();
+        if ($account !== null && (! $account->hasPassword() || $account->disabled_at !== null)) {
+            EngineLog::warning('auth: password login refused', [
+                'user_id' => $account->id,
+                'reason' => $account->disabled_at !== null ? 'disabled' : 'no_password',
+                'ip' => $request->ip(),
+            ]);
+            throw ValidationException::withMessages(['email' => __('auth.failed')]);
+        }
 
         if (! Auth::guard('web')->attempt($credentials, $request->boolean('remember'))) {
             EngineLog::warning('auth: failed login', ['email' => $request->input('email'), 'ip' => $request->ip()]);
@@ -74,6 +87,9 @@ class AuthController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'is_admin' => $user->isAdmin(),
+            // SSO-linked, and whether there's a password to change (SSO-created accounts have none).
+            'sso' => $user->usesSso(),
+            'has_password' => $user->hasPassword(),
             'restricted' => $user->isRestricted(), // GitHub #28: confined to granted maps
             // Passkey state drives the SPA's post-login gate (enrol / 2FA challenge / straight in).
             'passkey_required' => app(AuthSettings::class)->passkeyRequired(),
