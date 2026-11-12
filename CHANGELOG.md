@@ -23,6 +23,10 @@ of commit subjects.
   moved straight away. A copy is kept in the browser, so it survives a reload and can be pasted
   in another tab. Admin only, and not during history playback.
 
+### Changed
+- Deleting a note on the map now asks first, the way deleting a device does - from the note's
+  right-click menu (one note or a selection) and from the delete button on the note itself.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

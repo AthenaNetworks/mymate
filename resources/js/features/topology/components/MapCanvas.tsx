@@ -44,7 +44,7 @@ import { MapControls } from './MapControls';
 import { MapBackground } from './MapBackground';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
+import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useMapCanvasPlayback } from '../hooks/useMapCanvasPlayback';
 import { PlaybackBadge, PlaybackBar } from '../../geo/components/PlaybackBar';
@@ -130,6 +130,11 @@ const edgeBtn = (active: boolean): string =>
         active ? 'bg-white/10 text-emerald-300 ring-1 ring-white/15' : 'text-white/45 hover:text-white/80'
     }`;
 
+/** A note's first line, minus any Markdown marker in front - how a menu or dialog names it. */
+function noteHeading(text: string | undefined): string {
+    return (text ?? '').split('\n')[0].replace(/^\s*(#+|[-*+>]|\d+\.)\s+/, '').trim();
+}
+
 export function MapCanvas() {
     const isAdmin = useIsAdmin();
     const activeMapId = useActiveMapId();
@@ -159,7 +164,6 @@ export function MapCanvas() {
     const deleteMapLink = useDeleteMapLink();
     const createMapNote = useCreateMapNote();
     const updateMapNote = useUpdateMapNote();
-    const deleteMapNote = useDeleteMapNote();
     const createMapImage = useCreateMapImage();
     const updateMapImage = useUpdateMapImage();
     const deleteMapImage = useDeleteMapImage();
@@ -231,6 +235,8 @@ export function MapCanvas() {
     const [bulkEditIds, setBulkEditIds] = useState<number[] | null>(null); // bulk edit of a multi-selection
     // Right-click a note (copy / duplicate / delete) or the empty canvas (paste / add a note).
     const [noteMenu, setNoteMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null);
+    // Notes waiting on "Delete?" - from the note menu or the card's own delete button.
+    const [confirmDeleteNoteIds, setConfirmDeleteNoteIds] = useState<number[] | null>(null);
     const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; at: { x: number; y: number } } | null>(null);
     // The canvas wrapper: keyboard shortcuts only act while focus is inside it (or on nothing).
     const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
@@ -533,7 +539,7 @@ export function MapCanvas() {
                 noteId: n.id, text: n.text, color: n.color, background: n.background, size: n.size, editable: isAdmin,
                 onSave: isAdmin ? (text: string) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, text }); } : undefined,
                 onSaveStyle: isAdmin ? (patch: MapNoteStylePatch) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, ...patch }); } : undefined,
-                onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapNote.mutate({ mapId: m, noteId: n.id }); } : undefined,
+                onRemove: isAdmin ? () => setConfirmDeleteNoteIds([n.id]) : undefined,
             },
             draggable: canDrag,
             selectable: true,
@@ -1388,8 +1394,7 @@ export function MapCanvas() {
             {noteMenu !== null &&
                 (() => {
                     const n = noteMenu.ids.length;
-                    // One note: its first line, minus any Markdown marker in front, as the heading.
-                    const first = n === 1 ? (mapNotes.find((x) => x.id === noteMenu.ids[0])?.text ?? '').split('\n')[0].replace(/^\s*(#+|[-*+>]|\d+\.)\s+/, '') : '';
+                    const first = n === 1 ? noteHeading(mapNotes.find((x) => x.id === noteMenu.ids[0])?.text) : '';
                     return (
                         <CanvasMenu
                             x={noteMenu.x}
@@ -1414,8 +1419,38 @@ export function MapCanvas() {
                                       }]
                                     : []),
                                 'divider',
-                                { key: 'delete', label: n === 1 ? 'Delete note' : `Delete ${n} notes`, icon: <TrashSimple weight="light" className="h-4 w-4" />, danger: true, onSelect: () => noteClip.remove(noteMenu.ids) },
+                                { key: 'delete', label: n === 1 ? 'Delete note' : `Delete ${n} notes`, icon: <TrashSimple weight="light" className="h-4 w-4" />, danger: true, onSelect: () => setConfirmDeleteNoteIds(noteMenu.ids) },
                             ]}
+                        />
+                    );
+                })()}
+
+            {/* Deleting notes asks first, as deleting a device does. */}
+            {confirmDeleteNoteIds !== null &&
+                (() => {
+                    const n = confirmDeleteNoteIds.length;
+                    const heading = n === 1 ? noteHeading(mapNotes.find((x) => x.id === confirmDeleteNoteIds[0])?.text) : '';
+                    const first = heading.length > 60 ? `${heading.slice(0, 60).trimEnd()}...` : heading;
+                    return (
+                        <ConfirmDialog
+                            title={n === 1 ? 'Delete note' : `Delete ${n} notes`}
+                            icon={<TrashSimple weight="light" className="h-5 w-5" />}
+                            message={
+                                n === 1 ? (
+                                    <>
+                                        Delete {first ? <span className="font-semibold text-white/85">"{first}"</span> : 'this note'} from this map? This can't be undone.
+                                    </>
+                                ) : (
+                                    <>Delete the {n} selected notes from this map? This can't be undone.</>
+                                )
+                            }
+                            confirmLabel={n === 1 ? 'Delete note' : `Delete ${n} notes`}
+                            tone="danger"
+                            onConfirm={() => {
+                                noteClip.remove(confirmDeleteNoteIds);
+                                setConfirmDeleteNoteIds(null);
+                            }}
+                            onClose={() => setConfirmDeleteNoteIds(null)}
                         />
                     );
                 })()}
