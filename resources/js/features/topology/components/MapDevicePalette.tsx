@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { CaretDoubleRight, LinkBreak, MagnifyingGlass, Plus, Stack } from '@phosphor-icons/react';
+import { CaretDoubleRight, LinkBreak, MagnifyingGlass, Plus, Stack, X } from '@phosphor-icons/react';
 import { useDebounced, useDeviceList } from '../../devices/api/getDevices';
 import { useAddDeviceToMap } from '../../maps/api/maps';
-import { useActiveMapId, selectDevice, setMapToolsCollapsed, useMapToolsOrphansOnly, setMapToolsOrphansOnly } from '../../../lib/shellStore';
+import { useActiveMapId, setMapToolsCollapsed, useMapToolsOrphansOnly, setMapToolsOrphansOnly } from '../../../lib/shellStore';
+import { flashPlacedDevice, setMapToolsSearch, useMapToolsSearch } from '../lib/mapToolsSession';
 import { useIsAdmin } from '../../auth/api/auth';
 import { StatusDot } from '../../../components/StatusDot';
 import { DeviceTypeBadge } from '../../../components/DeviceTypeBadge';
@@ -14,13 +14,17 @@ const RESULTS = 100;
  * devices not yet on the current map. Drag one onto the canvas to place it precisely (handled
  * by MapCanvas's onDrop), or click to drop it in. Admin-only. The "Orphaned only" toggle narrows
  * the list to devices on no map at all.
+ *
+ * Placing a device doesn't select it, so the palette stays open for the next one; the new card
+ * flashes on the map instead. The search text outlives the palette (it unmounts while a device is
+ * selected), so going back to Map tools keeps what you searched for.
  */
 export function MapDevicePalette() {
     const isAdmin = useIsAdmin();
     const activeMapId = useActiveMapId();
     const addToMap = useAddDeviceToMap();
     const orphansOnly = useMapToolsOrphansOnly();
-    const [q, setQ] = useState('');
+    const q = useMapToolsSearch();
     const query = useDebounced(q.trim());
     // Searched server-side (GitHub #22); a page is plenty for a drag-and-drop palette.
     const { data } = useDeviceList(
@@ -47,7 +51,7 @@ export function MapDevicePalette() {
         // Click-to-place drops it near the top-left with a little scatter so repeats don't stack.
         const x = 120 + Math.random() * 260;
         const y = 120 + Math.random() * 200;
-        addToMap.mutate({ mapId: activeMapId, deviceId, x, y }, { onSuccess: () => selectDevice(deviceId) });
+        addToMap.mutate({ mapId: activeMapId, deviceId, x, y }, { onSuccess: () => flashPlacedDevice(deviceId) });
     }
 
     return (
@@ -71,10 +75,21 @@ export function MapDevicePalette() {
                 <MagnifyingGlass weight="bold" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
                 <input
                     value={q}
-                    onChange={(e) => setQ(e.target.value)}
+                    onChange={(e) => setMapToolsSearch(e.target.value)}
                     placeholder={orphansOnly ? 'Search devices on no map...' : 'Search devices not on this map...'}
-                    className="w-full rounded-lg bg-white/[0.04] py-1.5 pl-8 pr-3 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40 placeholder:text-white/30"
+                    className="w-full rounded-lg bg-white/[0.04] py-1.5 pl-8 pr-8 text-xs text-white ring-1 ring-white/10 outline-none transition focus:ring-emerald-400/40 placeholder:text-white/30"
                 />
+                {/* The search is remembered while you go back and forth, so make it easy to clear. */}
+                {q !== '' && (
+                    <button
+                        type="button"
+                        onClick={() => setMapToolsSearch('')}
+                        title="Clear search"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-white/35 transition-colors hover:bg-white/5 hover:text-white/80"
+                    >
+                        <X weight="bold" className="h-3 w-3" />
+                    </button>
+                )}
             </div>
 
             <div className="flex flex-wrap gap-1.5">

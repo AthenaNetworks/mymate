@@ -37,6 +37,10 @@ of commit subjects.
   map yet, instead of everything missing from the current map. Remembered per browser.
 
 ### Changed
+- Placing a device from Map tools, by clicking it or dragging it onto the map, no longer selects
+  it, so Map tools stays open for the next one. The new card flashes twice instead. Map tools also
+  remembers its search while you go back and forth (until the page is reloaded), and the search
+  box has a clear button.
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
