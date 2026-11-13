@@ -53,6 +53,9 @@ of commit subjects.
   health, slow SNMP counters): each point stood alone and no line was drawn. Short sampling gaps are
   now bridged, real outages still show as gaps (#59).
 - The config backup viewer showed only the first screen of a config or diff and wouldn't scroll (#41).
+- Subnet discovery failed on every scan that found a live host when a static map object (a device
+  with no management IP) existed, logging "array_flip(): Can only flip string and integer values".
+  Static objects are now left out of the already-a-device check.
 
 ## [2.1.1] - 2026-11-03
 
