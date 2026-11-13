@@ -5,6 +5,7 @@ import { StatusDot } from '../../../components/StatusDot';
 import { DeviceGlyph } from './DeviceGlyph';
 import { linkColor } from '../lib/linkColor';
 import { useDeviceTileMetric, setDeviceTileMetric } from '../../../lib/shellStore';
+import { useDevicePlacedFlash } from '../lib/mapToolsSession';
 
 export type DeviceNodeData = {
     label: string;
@@ -121,6 +122,8 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
 
     // Which resource this tile shows (per-device, persisted). Clicking the chip cycles it.
     const metric = useDeviceTileMetric(Number(id));
+    // Just placed from Map tools: flash once so you can spot it (placing no longer selects it).
+    const justPlaced = useDevicePlacedFlash(Number(id));
     const cycle = () => setDeviceTileMetric(Number(id), METRICS[(METRICS.indexOf(metric) + 1) % METRICS.length]);
 
     // Resolve the chosen metric to a bar width (0-100), a colour, and a value label.
@@ -166,6 +169,7 @@ export const DeviceNode = memo(function DeviceNode({ id, data, selected }: NodeP
                         : 'ring-white/5 shadow-[0_10px_34px_-10px_rgba(0,0,0,0.7)]'
             }`}
         >
+            {justPlaced && <span aria-hidden className="animate-placed pointer-events-none absolute inset-0 rounded-[1.25rem]" />}
             {/* Selected: a soft emerald corner tab so selection reads even at a glance / zoomed out. */}
             {selected && (
                 <span className="pointer-events-none absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_2px_rgba(16,185,129,0.8)]" />
