@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\RouterosPackageDownloadController;
+use App\Http\Controllers\SsoController;
 use App\Models\MapShare;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Session\Middleware\StartSession;
@@ -12,6 +13,12 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 // present (the SPA fetches /sanctum/csrf-cookie first). Login is rate-limited.
 Route::post('login', [AuthController::class, 'login'])->middleware('throttle:6,1')->name('login');
 Route::post('logout', [AuthController::class, 'logout'])->name('logout');
+
+// Single sign-on (OpenID Connect - Entra ID first). Full-page navigations, not API calls: the
+// browser goes to the provider and comes back to the callback with a one-time code. 404 while
+// SSO is off. The callback URL is the redirect URI an admin registers at the provider.
+Route::get('auth/sso/redirect', [SsoController::class, 'redirect'])->middleware('throttle:20,1')->name('sso.redirect');
+Route::get('auth/sso/callback', [SsoController::class, 'callback'])->middleware('throttle:20,1')->name('sso.callback');
 
 // RouterOS package download for routers (/tool/fetch). Unauthenticated by necessity - a
 // router carries no session - but gated by the package's unguessable token. Must be declared

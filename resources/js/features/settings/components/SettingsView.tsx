@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, DotsNine, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, Info, Key, LockKey, Palette, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, DotsNine, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, IdentificationBadge, Info, Key, LockKey, Palette, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useGenerateRecoveryCodes, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -11,6 +11,7 @@ import { WallEmbedSection } from './WallEmbedSection';
 import { CmrControllerSection } from './CmrControllerSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
+import { useSsoSettings, useTestSso, useUpdateSsoSettings, type SsoSettingsInput, type SsoTestResult } from '../api/ssoSettings';
 import { useBackupSettings, useUpdateBackupSettings, useTestBackupEngine, type BackupSettingsInput } from '../api/backupSettings';
 import { useAgents, useEnrolAgent, useDeleteAgent, useUpgradeAgent } from '../api/agents';
 import { useApiTokens, useCreateApiToken, useDeleteApiToken, type ApiToken } from '../api/apiTokens';
@@ -476,6 +477,7 @@ function validationError(e: unknown, fields: string[]): string | null {
 }
 
 function AccountSection() {
+    const { data: me } = useCurrentUser();
     const update = useUpdatePassword();
     const [currentPassword, setCurrentPassword] = useState('');
     const [password, setPassword] = useState('');
@@ -502,6 +504,21 @@ function AccountSection() {
                     setError(message ?? 'Lost the response after sending this - check by logging out and back in with the new password before retrying.');
                 },
             },
+        );
+    }
+
+    // Created by single sign-on: there's no My Mate password - the company account is the login.
+    if (me && me.has_password === false) {
+        return (
+            <section className={card}>
+                <div className="flex items-center gap-2">
+                    <IdentificationBadge weight="light" className="h-4 w-4 text-white/40" />
+                    <div>
+                        <h2 className="text-sm font-bold text-white">Signed in with SSO</h2>
+                        <p className="text-xs text-white/40">You sign in with your company account, so there's no My Mate password to change. Use "Login with SSO" on the sign-in page.</p>
+                    </div>
+                </div>
+            </section>
         );
     }
 
@@ -710,13 +727,20 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         passkey_exempt: initial?.passkey_exempt ?? false,
         map_ids: initial?.map_ids ?? [],
         group_ids: initial?.group_ids ?? [],
+        disabled: initial?.disabled ?? false,
     });
+    const { data: me } = useCurrentUser();
     const { data: groups } = useUserGroups(); // UserForm is admin-only, so this is always allowed
+    const { data: sso } = useSsoSettings(); // admin-only too
     const [password, setPassword] = useState('');
+    // New account for someone who'll sign in with SSO: no password, admin comes from their role.
+    const [ssoOnly, setSsoOnly] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const set = <K extends keyof UserInput>(k: K, v: UserInput[K]) => setForm((f) => ({ ...f, [k]: v }));
     const editing = Boolean(initial);
+    const offerSsoOnly = !editing && (sso?.configured ?? false);
+    const creatingSsoOnly = offerSsoOnly && ssoOnly;
 
     function generate() {
         const pw = generatePassword();
@@ -732,13 +756,13 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         if (save.isPending) return;
         setError(null);
         save.mutate(
-            { ...form, password: password || undefined },
+            creatingSsoOnly ? { ...form, is_admin: false, sso_only: true, password: undefined } : { ...form, password: password || undefined },
             {
                 onSuccess: () => {
-                    pushToast({ title: editing ? 'Operator updated' : 'Operator added', tone: 'up' });
+                    pushToast({ title: editing ? 'Operator updated' : 'Operator added', detail: creatingSsoOnly ? 'Their first SSO sign-in with this email links to it.' : undefined, tone: 'up' });
                     onDone();
                 },
-                onError: (e) => setError(validationError(e, ['name', 'email', 'password', 'is_admin']) ?? 'Couldn\'t save the operator.'),
+                onError: (e) => setError(validationError(e, ['name', 'email', 'password', 'sso_only', 'is_admin', 'disabled']) ?? 'Couldn\'t save the operator.'),
             },
         );
     }
@@ -754,13 +778,34 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                 value={form.email ?? ''}
                 onChange={(e) => set('email', e.target.value)}
             />
+            {offerSsoOnly && (
+                <label className="flex cursor-pointer items-start gap-2.5 px-1 py-1 text-sm text-white/70">
+                    <input
+                        type="checkbox"
+                        checked={ssoOnly}
+                        onChange={(e) => setSsoOnly(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                    />
+                    <span>
+                        <span className="flex items-center gap-1.5">
+                            <IdentificationBadge weight="bold" className="h-3.5 w-3.5 text-sky-300/80" /> SSO only - no password
+                        </span>
+                        <span className="block text-xs text-white/40">Set them up before they first sign in. The email must match their SSO email exactly.</span>
+                    </span>
+                </label>
+            )}
+            {!creatingSsoOnly && (
             <div className="flex items-center gap-2">
                 <div className="relative min-w-0 flex-1">
                     <input
                         className={`${field} pr-9`}
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="new-password"
-                        placeholder={editing ? 'New password (leave blank to keep)' : 'Password - 10+ chars, mixed case & a number'}
+                        placeholder={
+                    editing
+                        ? initial?.has_password === false ? 'No password - signs in with SSO (set one to allow password sign-in)' : 'New password (leave blank to keep)'
+                        : 'Password - 10+ chars, mixed case & a number'
+                }
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                     />
@@ -784,6 +829,13 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <ArrowsClockwise weight="bold" className="h-3.5 w-3.5" /> Generate
                 </button>
             </div>
+            )}
+            {creatingSsoOnly ? (
+                <p className="flex items-start gap-1.5 px-1 text-xs text-white/45">
+                    <ShieldCheck weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    Administrator or operator comes from their role at the identity provider when they sign in.
+                </p>
+            ) : (
             <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
                 <input
                     type="checkbox"
@@ -795,9 +847,16 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <ShieldCheck weight="bold" className="h-3.5 w-3.5 text-emerald-300/80" /> Administrator - can manage operator accounts
                 </span>
             </label>
+            )}
+            {initial?.sso && (
+                <p className="flex items-start gap-1.5 px-1 text-xs text-white/45">
+                    <IdentificationBadge weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    Signs in with SSO. Administrator is set from their role at the identity provider each time they sign in, so a change here only lasts until then.
+                </p>
+            )}
 
             {/* Per-map access (GitHub #28). Only meaningful for non-admins; admins see everything. */}
-            {!form.is_admin && (
+            {(creatingSsoOnly || !form.is_admin) && (
                 <>
                     <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
                         <input
@@ -844,6 +903,21 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <Fingerprint weight="bold" className="h-3.5 w-3.5 text-white/40" /> Exclude from mandatory passkey (wallboard / kiosk)
                 </span>
             </label>
+            {/* Switch the account off without deleting it - not your own. */}
+            {editing && initial && initial.id !== me?.id && (
+                <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
+                    <input
+                        type="checkbox"
+                        checked={form.disabled ?? false}
+                        onChange={(e) => set('disabled', e.target.checked)}
+                        className="h-4 w-4 rounded border-white/20 bg-white/[0.05] text-rose-500 focus:ring-rose-400/60"
+                    />
+                    <span>
+                        Disabled - can't sign in; sessions end and API keys stop working
+                        {initial.disabled_reason === 'sso' && <span className="block text-xs text-white/40">Disabled by SSO: they no longer have a My Mate role at the identity provider.</span>}
+                    </span>
+                </label>
+            )}
             {/* Lost their passkeys: remove them, so the next password sign-in sets up a new one. */}
             {editing && initial && (
                 <button
@@ -876,7 +950,7 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                 </button>
                 <button
                     onClick={submit}
-                    disabled={save.isPending || form.name === '' || (form.email ?? '') === '' || (!editing && password === '')}
+                    disabled={save.isPending || form.name === '' || (form.email ?? '') === '' || (!editing && !creatingSsoOnly && password === '')}
                     className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
                 >
                     {save.isPending ? 'Saving...' : 'Save'}
@@ -952,6 +1026,21 @@ function UsersSection() {
                             {u.restricted && (
                                 <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300/90 ring-1 ring-amber-400/20">
                                     Restricted
+                                </span>
+                            )}
+                            {!u.sso && u.has_password === false && (
+                                <span title="Set up for single sign-on - not signed in yet" className="shrink-0 rounded-full bg-sky-500/[0.06] px-2 py-0.5 text-[10px] font-semibold text-sky-300/70 ring-1 ring-sky-400/20">
+                                    SSO pending
+                                </span>
+                            )}
+                            {u.sso && (
+                                <span title={u.sso_last_login_at ? `Last SSO sign-in ${new Date(u.sso_last_login_at).toLocaleString()}` : 'Linked to single sign-on'} className="shrink-0 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-300/90 ring-1 ring-sky-400/20">
+                                    SSO
+                                </span>
+                            )}
+                            {u.disabled && (
+                                <span title={u.disabled_reason === 'sso' ? 'No My Mate role at the identity provider' : 'Disabled by an administrator'} className="shrink-0 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300/90 ring-1 ring-rose-400/20">
+                                    Disabled
                                 </span>
                             )}
                             {(u.group_ids ?? []).map((id) => (
@@ -1555,6 +1644,207 @@ function PasskeysSection() {
  * are bounced. Wallboard/kiosk accounts on TVs are the ones to watch (mark them exempt on the
  * operator first); public share-link wallboards use unauthenticated tokens and are unaffected.
  */
+/**
+ * Single sign-on (Settings > Security, admin). OpenID Connect: Microsoft Entra ID by tenant, or any
+ * provider by issuer URL. The client secret is write-only (blank keeps the stored one). Who may sign
+ * in, and as what, comes from the provider's role claim (Entra app roles) at every sign-in.
+ */
+function SsoSection() {
+    const { data } = useSsoSettings();
+    const update = useUpdateSsoSettings();
+    const test = useTestSso();
+    const { data: groups } = useUserGroups(); // Settings > Security is admin-only
+    const [form, setForm] = useState<SsoSettingsInput | null>(null);
+    const [secret, setSecret] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [result, setResult] = useState<SsoTestResult | null>(null);
+
+    // Seed the form once the saved settings load.
+    useEffect(() => {
+        if (!data || form) return;
+        setForm({
+            enabled: data.enabled, provider: data.provider, tenant: data.tenant, issuer: data.issuer, client_id: data.client_id,
+            role_claim: data.role_claim, admin_role: data.admin_role, operator_role: data.operator_role,
+            restrict_new_users: data.restrict_new_users, default_group_ids: data.default_group_ids,
+        });
+    }, [data, form]);
+
+    if (!data || !form) return <section className={card}><p className="text-xs text-white/40">Loading single sign-on settings...</p></section>;
+
+    const set = <K extends keyof SsoSettingsInput>(k: K, v: SsoSettingsInput[K]) => setForm((f) => (f ? { ...f, [k]: v } : f));
+    const entra = form.provider === 'entra';
+    const label = 'block px-1 pb-1 text-[11px] font-medium text-white/55';
+
+    function save() {
+        if (!form || update.isPending) return;
+        setError(null);
+        update.mutate(
+            { ...form, client_secret: secret === '' ? null : secret },
+            {
+                onSuccess: () => { setSecret(''); pushToast({ title: 'Single sign-on settings saved', tone: 'up' }); },
+                onError: (e) => {
+                    const errors = (e as { response?: { data?: { errors?: Record<string, string[]>; message?: string } } }).response?.data;
+                    setError(errors?.errors ? Object.values(errors.errors)[0]?.[0] ?? null : errors?.message ?? 'Couldn\'t save the settings.');
+                },
+            },
+        );
+    }
+
+    return (
+        <section className={card}>
+            <div className="mb-4 flex items-center gap-2">
+                <IdentificationBadge weight="light" className="h-4 w-4 text-white/40" />
+                <div>
+                    <h2 className="text-sm font-bold text-white">Single sign-on</h2>
+                    <p className="text-xs text-white/40">Let people sign in with your company account (Microsoft Entra ID or another OpenID Connect provider) instead of a My Mate password.</p>
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                <label className="flex items-center justify-between gap-4">
+                    <span className="min-w-0 flex-1 text-sm text-white/70">
+                        Show "Login with SSO" on the sign-in page
+                        <span className="block text-xs text-white/40">Password sign-in keeps working for accounts that have a password.</span>
+                    </span>
+                    <Toggle checked={form.enabled} onChange={(v) => set('enabled', v)} />
+                </label>
+
+                <div>
+                    <span className={label}>Provider</span>
+                    <select className={field} value={form.provider} onChange={(e) => set('provider', e.target.value as SsoSettingsInput['provider'])}>
+                        <option value="entra">Microsoft Entra ID</option>
+                        <option value="oidc">Other OpenID Connect provider</option>
+                    </select>
+                </div>
+
+                {entra ? (
+                    <div>
+                        <span className={label}>Directory (tenant) ID</span>
+                        <input className={field} value={form.tenant} onChange={(e) => set('tenant', e.target.value)} placeholder="00000000-0000-0000-0000-000000000000 or yourco.onmicrosoft.com" />
+                    </div>
+                ) : (
+                    <div>
+                        <span className={label}>Issuer URL</span>
+                        <input className={field} value={form.issuer} onChange={(e) => set('issuer', e.target.value)} placeholder="https://id.example.com/application/o/mymate" />
+                    </div>
+                )}
+
+                <div>
+                    <span className={label}>{entra ? 'Application (client) ID' : 'Client ID'}</span>
+                    <input className={field} value={form.client_id} onChange={(e) => set('client_id', e.target.value)} autoComplete="off" />
+                </div>
+                <div>
+                    <span className={label}>Client secret {entra ? '' : '(if your provider issued one)'}</span>
+                    <input
+                        className={field}
+                        type="password"
+                        autoComplete="new-password"
+                        value={secret}
+                        onChange={(e) => setSecret(e.target.value)}
+                        placeholder={data.client_secret_set ? 'Saved - leave blank to keep it' : 'Paste the secret value'}
+                    />
+                    {entra && <p className="px-1 pt-1 text-[11px] text-white/35">Entra secrets expire (at most 24 months). Put a reminder in to replace it before then.</p>}
+                </div>
+
+                <div>
+                    <span className={label}>Redirect URI - register this at the provider</span>
+                    <div className="flex items-center gap-2">
+                        <input className={`${field} font-mono text-xs`} value={data.callback_url} readOnly onFocus={(e) => e.currentTarget.select()} />
+                        <button
+                            type="button"
+                            onClick={() => navigator.clipboard?.writeText(data.callback_url).then(() => pushToast({ title: 'Redirect URI copied', tone: 'info' }))}
+                            title="Copy"
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.04] text-white/60 ring-1 ring-white/10 hover:text-white"
+                        >
+                            <Copy weight="bold" className="h-4 w-4" />
+                        </button>
+                    </div>
+                    <p className="px-1 pt-1 text-[11px] text-white/35">Built from the address you're using now - open these settings from the address everyone uses (https).</p>
+                </div>
+
+                <div className="space-y-2 border-t border-white/5 pt-3">
+                    <p className="px-1 text-xs text-white/45">
+                        Roles come from the provider at every sign-in. {entra ? 'Create these as app roles on the app registration and assign people or groups to them.' : 'Your provider must put them in the claim below.'} Anyone with neither role can't sign in.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div>
+                            <span className={label}>Administrator role</span>
+                            <input className={field} value={form.admin_role} onChange={(e) => set('admin_role', e.target.value)} />
+                        </div>
+                        <div>
+                            <span className={label}>Operator role (read-only)</span>
+                            <input className={field} value={form.operator_role} onChange={(e) => set('operator_role', e.target.value)} />
+                        </div>
+                    </div>
+                    {!entra && (
+                        <div>
+                            <span className={label}>Role claim</span>
+                            <input className={field} value={form.role_claim} onChange={(e) => set('role_claim', e.target.value)} placeholder="roles" />
+                        </div>
+                    )}
+                </div>
+
+                {/* Accounts SSO creates itself: nobody set one up with that email (or it was mistyped). */}
+                <div className="space-y-2 border-t border-white/5 pt-3">
+                    <p className="px-1 text-xs text-white/45">
+                        New accounts. When someone signs in with SSO and no account has their email, one is created for them. To give people their maps before they first sign in, add them under Operators as "SSO only" instead.
+                    </p>
+                    <label className="flex items-center justify-between gap-4">
+                        <span className="min-w-0 flex-1 text-sm text-white/70">
+                            New users start restricted
+                            <span className="block text-xs text-white/40">They see no maps until an administrator grants some, or a default group below does. Administrators are never restricted.</span>
+                        </span>
+                        <Toggle checked={form.restrict_new_users} onChange={(v) => set('restrict_new_users', v)} />
+                    </label>
+                    <div className="space-y-1 px-1">
+                        <p className="text-xs text-white/45">Default groups for new users{(groups ?? []).length === 0 ? ' - create groups under Operators first' : ''}</p>
+                        {(groups ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {(groups ?? []).map((g) => {
+                                    const on = form.default_group_ids.includes(g.id);
+                                    return (
+                                        <button
+                                            key={g.id}
+                                            type="button"
+                                            onClick={() => set('default_group_ids', on ? form.default_group_ids.filter((id) => id !== g.id) : [...form.default_group_ids, g.id])}
+                                            title={g.restricted ? 'Restricted to the group\'s maps' : 'Read-only, all maps'}
+                                            className={`rounded-full px-2.5 py-1 text-xs ring-1 transition ${on ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30' : 'bg-white/[0.03] text-white/55 ring-white/10 hover:text-white/80'}`}
+                                        >
+                                            {g.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {error && <p className="mt-3 text-xs text-rose-400/90">{error}</p>}
+            {result && (
+                <p className={`mt-3 text-xs ${result.ok ? 'text-emerald-300/90' : 'text-rose-400/90'}`}>
+                    {result.ok ? `Reached ${result.issuer}.` : `Test failed: ${result.message}`}
+                </p>
+            )}
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+                <button
+                    type="button"
+                    onClick={() => { setResult(null); test.mutate(undefined, { onSuccess: setResult, onError: () => pushToast({ title: 'Couldn\'t run the test', tone: 'down' }) }); }}
+                    disabled={test.isPending || !data.configured}
+                    title={data.configured ? 'Check the saved settings reach your provider' : 'Save the provider settings first'}
+                    className="rounded-lg px-3 py-1.5 text-sm text-white/60 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/85 disabled:opacity-40"
+                >
+                    {test.isPending ? 'Testing...' : 'Test'}
+                </button>
+                <button onClick={save} disabled={update.isPending} className="rounded-lg bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 hover:bg-emerald-400 disabled:opacity-40">
+                    {update.isPending ? 'Saving...' : 'Save'}
+                </button>
+            </div>
+        </section>
+    );
+}
+
 function SecuritySection() {
     const { data } = useSecuritySettings();
     const update = useUpdateSecuritySettings();
@@ -2143,7 +2433,7 @@ interface Tab {
 // keep just their account, the rosters and the API keys.
 const TABS: Tab[] = [
     { id: 'account', label: 'Account', icon: LockKey, render: () => <TwoCol><AccountSection /><PasskeysSection /><ApiKeysSection /></TwoCol> },
-    { id: 'security', label: 'Security', icon: ShieldCheck, adminOnly: true, render: () => <TwoCol><SecuritySection /><WallEmbedSection /></TwoCol> },
+    { id: 'security', label: 'Security', icon: ShieldCheck, adminOnly: true, render: () => <TwoCol><SecuritySection /><SsoSection /><WallEmbedSection /></TwoCol> },
     { id: 'engine', label: 'Engine', icon: GearSix, adminOnly: true, render: () => <EngineSettings /> },
     { id: 'mail', label: 'Mail', icon: Envelope, adminOnly: true, render: () => <MailServerSection /> },
     { id: 'backups', label: 'Backups', icon: FloppyDisk, adminOnly: true, render: () => <BackupEngineSection /> },

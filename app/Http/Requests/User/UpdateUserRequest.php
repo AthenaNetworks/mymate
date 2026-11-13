@@ -31,6 +31,8 @@ class UpdateUserRequest extends FormRequest
             // Restricted access (GitHub #28): confine the operator to specific maps.
             'restricted' => ['sometimes', 'boolean'],
             'passkey_exempt' => ['sometimes', 'boolean'],
+            // Switch the account off without deleting it: no sign-in, sessions end, API keys refused.
+            'disabled' => ['sometimes', 'boolean'],
             'map_ids' => ['sometimes', 'array'],
             'map_ids.*' => ['integer', 'exists:maps,id'],
             // Named groups (GitHub #28) - their access applies on top, see User::isRestricted().

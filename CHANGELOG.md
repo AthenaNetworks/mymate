@@ -14,6 +14,22 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- Single sign-on: people can sign in with their company account through Microsoft Entra ID or any
+  OpenID Connect provider, using a new Login with SSO button on the sign-in page. Admins set it up
+  under Settings > Security (see SSO.md). Who may sign in, and whether as an administrator or a
+  read-only operator, comes from app roles at the provider, checked at every sign-in. Accounts are
+  created on first sign-in without a password, or linked to an existing account with the same
+  email. Password sign-in keeps working for accounts that have a password. When passkeys are
+  required, the provider's MFA counts as the second factor if the sign-in token says it was used.
+- SSO-only operator accounts: add someone under Settings > Operators with "SSO only - no password"
+  to set up their maps and groups before they first sign in with SSO. Their first sign-in links to
+  it by email.
+- New accounts that SSO creates (no account had that email) can start restricted, seeing no maps
+  until granted, and join a default set of groups. Both are set under Settings > Security > Single
+  sign-on; starting restricted is on by default.
+- Operator accounts can be disabled without deleting them (Settings > Operators). A disabled account
+  can't sign in, its sessions end at once, and its API keys stop working. Losing your My Mate role at
+  the single sign-on provider disables your account the same way.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters

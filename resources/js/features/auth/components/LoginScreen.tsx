@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
-import { Eye, EyeSlash, SignIn } from '@phosphor-icons/react';
+import { Eye, EyeSlash, IdentificationBadge, SignIn } from '@phosphor-icons/react';
 import { useLogin } from '../api/auth';
+import { SSO_LOGIN_URL, ssoEnabled, takeSsoError } from '../lib/sso';
 import { Logomark } from '../../../components/Logomark';
 import { ThemeToggle } from '../../../components/ThemeToggle';
 import { ContrastToggle } from '../../../components/ContrastToggle';
@@ -9,9 +10,14 @@ const field =
     'w-full rounded-xl bg-white/[0.03] px-3.5 py-2.5 text-sm text-white ring-1 ring-white/10 outline-none ' +
     'transition duration-300 ease-fluid placeholder:text-white/30 focus:bg-white/[0.05] focus:ring-2 focus:ring-emerald-400/60';
 
+// Read once when the app loads: a failed single sign-on comes back as ?sso_error=..., which is then
+// removed from the URL (reading it during render would lose it to StrictMode's double render).
+const ssoError = takeSsoError();
+
 /** Full-screen sign-in gate. Shown until an operator authenticates. */
 export function LoginScreen() {
     const login = useLogin();
+    const sso = ssoEnabled();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -80,8 +86,10 @@ export function LoginScreen() {
                         </label>
                     </div>
 
-                    {login.isError && (
+                    {login.isError ? (
                         <p className="mt-3 text-xs text-rose-400/90">Sign-in failed - check your email and password.</p>
+                    ) : (
+                        ssoError && <p className="mt-3 text-xs text-rose-400/90">{ssoError}</p>
                     )}
 
                     <button
@@ -92,6 +100,24 @@ export function LoginScreen() {
                         <span>{login.isPending ? 'Signing in...' : 'Sign in'}</span>
                         <SignIn weight="bold" className="h-4 w-4 transition-transform duration-500 ease-fluid group-hover:translate-x-0.5" />
                     </button>
+
+                    {/* Single sign-on: a full-page trip to the company's identity provider and back. */}
+                    {sso && (
+                        <>
+                            <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-[0.2em] text-white/30">
+                                <span className="h-px flex-1 bg-white/10" />
+                                or
+                                <span className="h-px flex-1 bg-white/10" />
+                            </div>
+                            <a
+                                href={SSO_LOGIN_URL}
+                                className="flex w-full items-center justify-center gap-2 rounded-full bg-white/[0.04] py-2.5 text-sm font-semibold text-white/85 ring-1 ring-white/15 transition-all duration-500 ease-fluid hover:bg-white/[0.08] hover:text-white active:scale-[0.98]"
+                            >
+                                <IdentificationBadge weight="bold" className="h-4 w-4" />
+                                Login with SSO
+                            </a>
+                        </>
+                    )}
                 </div>
             </form>
         </div>
