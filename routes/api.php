@@ -483,4 +483,6 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->name('discovery-candidates.approve');
     Route::post('discovery-candidates/{candidate}/ignore', [DiscoveryCandidateController::class, 'ignore'])
         ->name('discovery-candidates.ignore');
+    Route::post('discovery-candidates/{candidate}/restore', [DiscoveryCandidateController::class, 'restore'])
+        ->name('discovery-candidates.restore');
 });
