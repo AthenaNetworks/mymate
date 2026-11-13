@@ -35,6 +35,9 @@ of commit subjects.
   its title), giving the map the room; click the rail to bring it back. Remembered per browser.
 - An "Orphaned only" toggle in Map tools narrows the device list to devices that aren't on any
   map yet, instead of everything missing from the current map. Remembered per browser.
+- An ignored discovery candidate can be restored. Under All in the review queue, ignored hosts
+  have a Restore button (admins) that puts them back under New, so a mistaken Ignore can be undone
+  and the device added after all.
 
 ### Changed
 - Ping sweeps pace fping at 1ms between hosts by default (`MYMATE_PING_INTERVAL_MS`, was fping's
