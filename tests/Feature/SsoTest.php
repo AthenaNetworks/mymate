@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Map;
 use App\Models\Setting;
 use App\Models\User;
+use App\Models\UserGroup;
 use App\Services\Sso\OidcClient;
 use App\Support\AuthSettings;
 use App\Support\SsoSettings;
@@ -423,6 +425,134 @@ class SsoTest extends TestCase
 
         $this->enable(['issuer' => 'https://nowhere.example.test']);
         $this->postJson('/api/settings/sso/test')->assertStatus(422)->assertJsonPath('ok', false)->assertJsonPath('reason', 'provider_unreachable');
+    }
+
+    private function group(string $name, array $maps = []): UserGroup
+    {
+        $group = new UserGroup(['name' => $name]);
+        $group->restricted = true;
+        $group->save();
+        $group->maps()->attach(array_map(fn (Map $m) => $m->id, $maps));
+
+        return $group;
+    }
+
+    public function test_an_admin_can_add_an_sso_only_account_with_no_password(): void
+    {
+        $this->actingAsUser();
+        $this->enable(['enabled' => false]); // set up but not switched on yet - still allowed
+        $map = Map::factory()->create();
+
+        $this->postJson('/api/users', [
+            'name' => 'Pat', 'email' => 'pat@yourco.com', 'sso_only' => true,
+            'is_admin' => true, // ignored: the role comes from the provider at sign-in
+            'restricted' => true, 'map_ids' => [$map->id],
+        ])->assertCreated()->assertJsonPath('has_password', false)->assertJsonPath('sso', false)->assertJsonPath('is_admin', false);
+
+        $pat = User::where('email', 'pat@yourco.com')->firstOrFail();
+        $this->assertNull($pat->getRawOriginal('password')); // null, never a hash of ''
+        $this->assertFalse($pat->is_admin);
+        $this->assertTrue($pat->restricted);
+
+        // No password, so the password form can't be used for it.
+        auth()->guard('web')->logout();
+        $this->postJson('/login', ['email' => 'pat@yourco.com', 'password' => 'Anything-123'])->assertStatus(422);
+    }
+
+    public function test_sso_only_needs_sso_set_up_and_otherwise_a_password_is_still_required(): void
+    {
+        $this->actingAsUser();
+
+        // SSO not set up: refused.
+        $this->postJson('/api/users', ['name' => 'Pat', 'email' => 'pat@yourco.com', 'sso_only' => true])
+            ->assertStatus(422)->assertJsonValidationErrors('sso_only');
+
+        $this->enable();
+        // Not SSO-only: a password is still required.
+        $this->postJson('/api/users', ['name' => 'Pat', 'email' => 'pat@yourco.com'])
+            ->assertStatus(422)->assertJsonValidationErrors('password');
+        // SSO-only with a password makes no sense.
+        $this->postJson('/api/users', ['name' => 'Pat', 'email' => 'pat@yourco.com', 'sso_only' => true, 'password' => 'Strong-password-1'])
+            ->assertStatus(422)->assertJsonValidationErrors('password');
+        $this->assertSame(0, User::where('email', 'pat@yourco.com')->count());
+    }
+
+    public function test_a_prepared_account_is_linked_on_first_sign_in_and_keeps_its_access(): void
+    {
+        $this->enable(['default_group_ids' => [$this->group('Default')->id]]);
+        $map = Map::factory()->create();
+        $own = $this->group('Field team', [$map]);
+        $prepared = User::factory()->create(['email' => 'pat@yourco.com', 'restricted' => false]);
+        $prepared->forceFill(['password' => null])->save();
+        $prepared->groups()->attach($own->id);
+
+        $this->ssoCallback($this->claims(['preferred_username' => 'Pat@YourCo.com']))->assertRedirect('/');
+
+        $prepared->refresh();
+        $this->assertAuthenticatedAs($prepared);
+        $this->assertSame(1, User::count());
+        $this->assertFalse($prepared->restricted); // "new users start restricted" is for accounts SSO creates
+        $this->assertSame([$own->id], $prepared->groups()->pluck('user_groups.id')->all()); // no default groups added
+        $this->assertSame([$map->id], $prepared->visibleMapIds());
+    }
+
+    public function test_a_new_sso_operator_starts_restricted_and_joins_the_default_groups(): void
+    {
+        $map = Map::factory()->create();
+        Map::factory()->create(); // another map they must not see
+        $default = $this->group('Default', [$map]);
+        $this->enable(['restrict_new_users' => true, 'default_group_ids' => [$default->id]]);
+
+        $this->ssoCallback($this->claims())->assertRedirect('/');
+
+        $user = User::where('email', 'pat@yourco.com')->firstOrFail();
+        $this->assertTrue($user->restricted);
+        $this->assertSame([$default->id], $user->groups()->pluck('user_groups.id')->all());
+        $this->assertSame([$map->id], $user->visibleMapIds());
+    }
+
+    public function test_a_new_sso_operator_is_unrestricted_when_the_setting_is_off(): void
+    {
+        $this->enable(['restrict_new_users' => false]);
+
+        $this->ssoCallback($this->claims())->assertRedirect('/');
+
+        $user = User::where('email', 'pat@yourco.com')->firstOrFail();
+        $this->assertFalse($user->restricted);
+        $this->assertSame([], $user->groups()->pluck('user_groups.id')->all());
+    }
+
+    public function test_a_new_sso_admin_is_never_restricted_or_put_in_default_groups(): void
+    {
+        $this->enable(['restrict_new_users' => true, 'default_group_ids' => [$this->group('Default')->id]]);
+
+        $this->ssoCallback($this->claims(['roles' => ['MyMate.Admin']]))->assertRedirect('/');
+
+        $user = User::where('email', 'pat@yourco.com')->firstOrFail();
+        $this->assertTrue($user->is_admin);
+        $this->assertFalse($user->restricted);
+        $this->assertSame(0, $user->groups()->count());
+    }
+
+    public function test_new_user_settings_save_and_a_deleted_group_drops_out(): void
+    {
+        $this->actingAsUser();
+        $a = $this->group('A');
+        $b = $this->group('B');
+        $base = ['enabled' => true, 'provider' => 'oidc', 'issuer' => self::ISSUER, 'client_id' => 'id', 'admin_role' => 'A', 'operator_role' => 'O'];
+
+        // Starts restricted by default.
+        $this->getJson('/api/settings/sso')->assertOk()->assertJsonPath('data.restrict_new_users', true)->assertJsonPath('data.default_group_ids', []);
+
+        $this->putJson('/api/settings/sso', [...$base, 'restrict_new_users' => false, 'default_group_ids' => [$b->id, $a->id]])
+            ->assertOk()->assertJsonPath('data.restrict_new_users', false)->assertJsonPath('data.default_group_ids', [$a->id, $b->id]);
+        // A client that doesn't send them keeps what's stored.
+        $this->putJson('/api/settings/sso', $base)->assertOk()->assertJsonPath('data.restrict_new_users', false);
+
+        $this->putJson('/api/settings/sso', [...$base, 'default_group_ids' => [999999]])->assertStatus(422)->assertJsonValidationErrors('default_group_ids.0');
+
+        $b->delete();
+        $this->getJson('/api/settings/sso')->assertJsonPath('data.default_group_ids', [$a->id]);
     }
 
     public function test_the_login_page_only_offers_sso_when_it_is_on(): void

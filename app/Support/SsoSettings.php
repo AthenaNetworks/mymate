@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Setting;
+use App\Models\UserGroup;
 use Illuminate\Support\Facades\Crypt;
 
 /**
@@ -18,6 +19,11 @@ use Illuminate\Support\Facades\Crypt;
  *
  * Roles come from the provider: the `role_claim` in the ID token (Entra app roles arrive in
  * `roles`) must hold `admin_role` or `operator_role`, else the sign-in is refused.
+ *
+ * Accounts that SSO creates itself (nobody had made one with that email) can start locked down:
+ * `restrict_new_users` makes a new operator restricted (no maps until an admin grants some), and
+ * `default_group_ids` puts them in those groups, whose maps they then see. A mistyped email on an
+ * account an admin set up in advance therefore fails closed instead of opening every map.
  */
 class SsoSettings
 {
@@ -38,6 +44,8 @@ class SsoSettings
         'role_claim' => 'roles',
         'admin_role' => 'MyMate.Admin',
         'operator_role' => 'MyMate.Operator',
+        'restrict_new_users' => true,
+        'default_group_ids' => [],
     ];
 
     /** @return array<string,mixed> */
@@ -99,6 +107,26 @@ class SsoSettings
         return (string) $this->raw()['operator_role'];
     }
 
+    /** A new operator created by SSO starts restricted (sees no maps until granted some). */
+    public function restrictNewUsers(): bool
+    {
+        return (bool) $this->raw()['restrict_new_users'];
+    }
+
+    /**
+     * Groups a new operator created by SSO joins. Only groups that still exist - a deleted group
+     * simply drops out of the list.
+     *
+     * @return list<int>
+     */
+    public function defaultGroupIds(): array
+    {
+        $ids = $this->raw()['default_group_ids'];
+        $ids = is_array($ids) ? array_values(array_filter($ids, 'is_int')) : [];
+
+        return $ids === [] ? [] : UserGroup::whereIn('id', $ids)->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
     /** Everything a sign-in needs is present (an Entra web app always needs its secret). */
     public function configured(): bool
     {
@@ -138,6 +166,8 @@ class SsoSettings
             'role_claim' => (string) $c['role_claim'],
             'admin_role' => (string) $c['admin_role'],
             'operator_role' => (string) $c['operator_role'],
+            'restrict_new_users' => $this->restrictNewUsers(),
+            'default_group_ids' => $this->defaultGroupIds(),
             'configured' => $this->configured(),
         ];
     }
@@ -168,6 +198,9 @@ class SsoSettings
                 'role_claim' => trim((string) ($input['role_claim'] ?? '')) ?: 'roles',
                 'admin_role' => trim((string) $input['admin_role']),
                 'operator_role' => trim((string) $input['operator_role']),
+                // Absent (an older client) keeps what's stored.
+                'restrict_new_users' => (bool) ($input['restrict_new_users'] ?? $c['restrict_new_users']),
+                'default_group_ids' => array_values(array_unique(array_map('intval', (array) ($input['default_group_ids'] ?? $c['default_group_ids'])))),
             ],
         ]);
     }

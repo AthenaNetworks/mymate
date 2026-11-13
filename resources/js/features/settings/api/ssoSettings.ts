@@ -14,6 +14,8 @@ export interface SsoSettingsView {
     role_claim: string;
     admin_role: string;
     operator_role: string;
+    restrict_new_users: boolean; // an operator account SSO creates itself starts restricted (no maps)
+    default_group_ids: number[]; // ...and joins these groups
     configured: boolean;
     callback_url: string; // the redirect URI to register at the provider
 }
@@ -28,6 +30,8 @@ export interface SsoSettingsInput {
     role_claim: string;
     admin_role: string;
     operator_role: string;
+    restrict_new_users: boolean;
+    default_group_ids: number[];
 }
 
 export type SsoTestResult = { ok: true; issuer: string; authorization_endpoint: string } | { ok: false; reason: string; message: string };

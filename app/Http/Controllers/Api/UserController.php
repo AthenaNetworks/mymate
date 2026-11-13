@@ -42,8 +42,11 @@ class UserController extends Controller
         $user = new User;
         $user->name = $request->validated('name');
         $user->email = $request->validated('email');
-        $user->password = $request->validated('password'); // 'hashed' cast
-        $user->is_admin = $request->boolean('is_admin'); // explicit - never mass-assigned
+        $ssoOnly = $request->boolean('sso_only');
+        // SSO-only: no password at all (null, never a hash of ''), so password sign-in is refused.
+        // Admin comes from their identity-provider role at the first sign-in, so it isn't set here.
+        $user->password = $ssoOnly ? null : $request->validated('password'); // 'hashed' cast
+        $user->is_admin = ! $ssoOnly && $request->boolean('is_admin'); // explicit - never mass-assigned
         $this->applyAccess($user, $request);
         $user->save();
         $this->syncMaps($user, $request);
@@ -53,6 +56,7 @@ class UserController extends Controller
             'actor_id' => $request->user()->id,
             'user_id' => $user->id,
             'is_admin' => $user->is_admin,
+            'sso_only' => $ssoOnly,
             'ip' => $request->ip(),
         ]);
 

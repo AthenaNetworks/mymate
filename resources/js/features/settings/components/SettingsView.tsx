@@ -731,11 +731,16 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
     });
     const { data: me } = useCurrentUser();
     const { data: groups } = useUserGroups(); // UserForm is admin-only, so this is always allowed
+    const { data: sso } = useSsoSettings(); // admin-only too
     const [password, setPassword] = useState('');
+    // New account for someone who'll sign in with SSO: no password, admin comes from their role.
+    const [ssoOnly, setSsoOnly] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const set = <K extends keyof UserInput>(k: K, v: UserInput[K]) => setForm((f) => ({ ...f, [k]: v }));
     const editing = Boolean(initial);
+    const offerSsoOnly = !editing && (sso?.configured ?? false);
+    const creatingSsoOnly = offerSsoOnly && ssoOnly;
 
     function generate() {
         const pw = generatePassword();
@@ -751,13 +756,13 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
         if (save.isPending) return;
         setError(null);
         save.mutate(
-            { ...form, password: password || undefined },
+            creatingSsoOnly ? { ...form, is_admin: false, sso_only: true, password: undefined } : { ...form, password: password || undefined },
             {
                 onSuccess: () => {
-                    pushToast({ title: editing ? 'Operator updated' : 'Operator added', tone: 'up' });
+                    pushToast({ title: editing ? 'Operator updated' : 'Operator added', detail: creatingSsoOnly ? 'Their first SSO sign-in with this email links to it.' : undefined, tone: 'up' });
                     onDone();
                 },
-                onError: (e) => setError(validationError(e, ['name', 'email', 'password', 'is_admin', 'disabled']) ?? 'Couldn\'t save the operator.'),
+                onError: (e) => setError(validationError(e, ['name', 'email', 'password', 'sso_only', 'is_admin', 'disabled']) ?? 'Couldn\'t save the operator.'),
             },
         );
     }
@@ -773,6 +778,23 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                 value={form.email ?? ''}
                 onChange={(e) => set('email', e.target.value)}
             />
+            {offerSsoOnly && (
+                <label className="flex cursor-pointer items-start gap-2.5 px-1 py-1 text-sm text-white/70">
+                    <input
+                        type="checkbox"
+                        checked={ssoOnly}
+                        onChange={(e) => setSsoOnly(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/[0.05] text-emerald-500 focus:ring-emerald-400/60"
+                    />
+                    <span>
+                        <span className="flex items-center gap-1.5">
+                            <IdentificationBadge weight="bold" className="h-3.5 w-3.5 text-sky-300/80" /> SSO only - no password
+                        </span>
+                        <span className="block text-xs text-white/40">Set them up before they first sign in. The email must match their SSO email exactly.</span>
+                    </span>
+                </label>
+            )}
+            {!creatingSsoOnly && (
             <div className="flex items-center gap-2">
                 <div className="relative min-w-0 flex-1">
                     <input
@@ -807,6 +829,13 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <ArrowsClockwise weight="bold" className="h-3.5 w-3.5" /> Generate
                 </button>
             </div>
+            )}
+            {creatingSsoOnly ? (
+                <p className="flex items-start gap-1.5 px-1 text-xs text-white/45">
+                    <ShieldCheck weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    Administrator or operator comes from their role at the identity provider when they sign in.
+                </p>
+            ) : (
             <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
                 <input
                     type="checkbox"
@@ -818,6 +847,7 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                     <ShieldCheck weight="bold" className="h-3.5 w-3.5 text-emerald-300/80" /> Administrator - can manage operator accounts
                 </span>
             </label>
+            )}
             {initial?.sso && (
                 <p className="flex items-start gap-1.5 px-1 text-xs text-white/45">
                     <IdentificationBadge weight="bold" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -826,7 +856,7 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
             )}
 
             {/* Per-map access (GitHub #28). Only meaningful for non-admins; admins see everything. */}
-            {!form.is_admin && (
+            {(creatingSsoOnly || !form.is_admin) && (
                 <>
                     <label className="flex cursor-pointer items-center gap-2.5 px-1 py-1 text-sm text-white/70">
                         <input
@@ -920,7 +950,7 @@ function UserForm({ initial, onDone }: { initial?: Operator; onDone: () => void 
                 </button>
                 <button
                     onClick={submit}
-                    disabled={save.isPending || form.name === '' || (form.email ?? '') === '' || (!editing && password === '')}
+                    disabled={save.isPending || form.name === '' || (form.email ?? '') === '' || (!editing && !creatingSsoOnly && password === '')}
                     className="rounded-full bg-emerald-500 px-4 py-1.5 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 active:scale-[0.98] disabled:opacity-40"
                 >
                     {save.isPending ? 'Saving...' : 'Save'}
@@ -996,6 +1026,11 @@ function UsersSection() {
                             {u.restricted && (
                                 <span className="shrink-0 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300/90 ring-1 ring-amber-400/20">
                                     Restricted
+                                </span>
+                            )}
+                            {!u.sso && u.has_password === false && (
+                                <span title="Set up for single sign-on - not signed in yet" className="shrink-0 rounded-full bg-sky-500/[0.06] px-2 py-0.5 text-[10px] font-semibold text-sky-300/70 ring-1 ring-sky-400/20">
+                                    SSO pending
                                 </span>
                             )}
                             {u.sso && (
@@ -1618,6 +1653,7 @@ function SsoSection() {
     const { data } = useSsoSettings();
     const update = useUpdateSsoSettings();
     const test = useTestSso();
+    const { data: groups } = useUserGroups(); // Settings > Security is admin-only
     const [form, setForm] = useState<SsoSettingsInput | null>(null);
     const [secret, setSecret] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -1629,6 +1665,7 @@ function SsoSection() {
         setForm({
             enabled: data.enabled, provider: data.provider, tenant: data.tenant, issuer: data.issuer, client_id: data.client_id,
             role_claim: data.role_claim, admin_role: data.admin_role, operator_role: data.operator_role,
+            restrict_new_users: data.restrict_new_users, default_group_ids: data.default_group_ids,
         });
     }, [data, form]);
 
@@ -1745,6 +1782,41 @@ function SsoSection() {
                             <input className={field} value={form.role_claim} onChange={(e) => set('role_claim', e.target.value)} placeholder="roles" />
                         </div>
                     )}
+                </div>
+
+                {/* Accounts SSO creates itself: nobody set one up with that email (or it was mistyped). */}
+                <div className="space-y-2 border-t border-white/5 pt-3">
+                    <p className="px-1 text-xs text-white/45">
+                        New accounts. When someone signs in with SSO and no account has their email, one is created for them. To give people their maps before they first sign in, add them under Operators as "SSO only" instead.
+                    </p>
+                    <label className="flex items-center justify-between gap-4">
+                        <span className="min-w-0 flex-1 text-sm text-white/70">
+                            New users start restricted
+                            <span className="block text-xs text-white/40">They see no maps until an administrator grants some, or a default group below does. Administrators are never restricted.</span>
+                        </span>
+                        <Toggle checked={form.restrict_new_users} onChange={(v) => set('restrict_new_users', v)} />
+                    </label>
+                    <div className="space-y-1 px-1">
+                        <p className="text-xs text-white/45">Default groups for new users{(groups ?? []).length === 0 ? ' - create groups under Operators first' : ''}</p>
+                        {(groups ?? []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                                {(groups ?? []).map((g) => {
+                                    const on = form.default_group_ids.includes(g.id);
+                                    return (
+                                        <button
+                                            key={g.id}
+                                            type="button"
+                                            onClick={() => set('default_group_ids', on ? form.default_group_ids.filter((id) => id !== g.id) : [...form.default_group_ids, g.id])}
+                                            title={g.restricted ? 'Restricted to the group\'s maps' : 'Read-only, all maps'}
+                                            className={`rounded-full px-2.5 py-1 text-xs ring-1 transition ${on ? 'bg-emerald-500/15 text-emerald-200 ring-emerald-400/30' : 'bg-white/[0.03] text-white/55 ring-white/10 hover:text-white/80'}`}
+                                        >
+                                            {g.name}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 

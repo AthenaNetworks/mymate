@@ -38,6 +38,10 @@ class SsoSettingController extends Controller
             'role_claim' => ['nullable', 'string', 'max:100'],
             'admin_role' => ['required', 'string', 'max:255'],
             'operator_role' => ['required', 'string', 'max:255', 'different:admin_role'],
+            // Accounts SSO creates itself: start restricted, and join these groups.
+            'restrict_new_users' => ['sometimes', 'boolean'],
+            'default_group_ids' => ['sometimes', 'array', 'max:100'],
+            'default_group_ids.*' => ['integer', 'distinct', 'exists:user_groups,id'],
         ], [
             'tenant.not_in' => 'Use your own tenant id or domain - the shared common / organizations / consumers endpoints would let any Microsoft account sign in.',
         ]);
@@ -58,6 +62,8 @@ class SsoSettingController extends Controller
             'actor_id' => $request->user()->id,
             'enabled' => (bool) $data['enabled'],
             'provider' => $data['provider'],
+            'restrict_new_users' => $settings->restrictNewUsers(),
+            'default_group_ids' => $settings->defaultGroupIds(),
             'ip' => $request->ip(),
         ]);
 

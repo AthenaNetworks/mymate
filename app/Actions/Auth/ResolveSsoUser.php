@@ -18,6 +18,10 @@ use Illuminate\Support\Facades\DB;
  *  - First sign-in: an existing account with the same email that isn't linked to another identity
  *    is linked (keeping its history, API keys and password); otherwise a new account is created
  *    with no password. Only emails from the configured issuer reach here, so this is our tenant.
+ *    An admin can set the account up in advance (Settings > Operators, "SSO only") so its maps and
+ *    groups are in place before the first sign-in.
+ *  - An account created here for an operator starts restricted when `restrict_new_users` is on,
+ *    and joins the `default_group_ids` groups - so an email that matched nothing fails closed.
  *  - The role claim must hold the admin or the operator role. Without either the sign-in is
  *    refused, and an account already linked to this identity is disabled (reason 'sso'), which
  *    ends its sessions and blocks its API keys. A later sign-in with a role lifts an SSO disable;
@@ -99,11 +103,17 @@ class ResolveSsoUser
             $user->is_admin = $isAdmin; // explicit - never mass-assigned
             if ($isAdmin) {
                 $user->restricted = false;
+            } elseif ($created) {
+                // Nobody set this account up (or its email didn't match one that was): start it
+                // locked down if configured, so a typo fails closed rather than opening every map.
+                $user->restricted = $this->settings->restrictNewUsers();
             }
             $user->sso_last_login_at = now();
             $user->save();
             if ($isAdmin) {
                 $user->groups()->detach();
+            } elseif ($created && ($groupIds = $this->settings->defaultGroupIds()) !== []) {
+                $user->groups()->sync($groupIds);
             }
 
             if ($created || $wasAdmin !== $isAdmin) {

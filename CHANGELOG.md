@@ -21,6 +21,12 @@ of commit subjects.
   created on first sign-in without a password, or linked to an existing account with the same
   email. Password sign-in keeps working for accounts that have a password. When passkeys are
   required, the provider's MFA counts as the second factor if the sign-in token says it was used.
+- SSO-only operator accounts: add someone under Settings > Operators with "SSO only - no password"
+  to set up their maps and groups before they first sign in with SSO. Their first sign-in links to
+  it by email.
+- New accounts that SSO creates (no account had that email) can start restricted, seeing no maps
+  until granted, and join a default set of groups. Both are set under Settings > Security > Single
+  sign-on; starting restricted is on by default.
 - Operator accounts can be disabled without deleting them (Settings > Operators). A disabled account
   can't sign in, its sessions end at once, and its API keys stop working. Losing your My Mate role at
   the single sign-on provider disables your account the same way.

@@ -19,7 +19,8 @@ Google Workspace, Authentik or Keycloak work with the generic option.
   have none, so they can only use SSO. Keep at least one local administrator with a password as a
   way in if the provider or its secret ever breaks.
 - **Restricted map access stays in My Mate.** Mark an operator restricted, or add them to user
-  groups, under Settings > Operators as usual.
+  groups, under Settings > Operators as usual. You can set this up before someone's first sign-in
+  (see below).
 
 ## Requirements
 
@@ -65,6 +66,37 @@ issued one. Register the Redirect URI with the provider and request the `openid 
 scopes. The provider must put the role values in a claim in the ID token; set **Role claim** to that
 claim's name (default `roles`). A provider that marks the email as unverified can't create or link
 accounts.
+
+## Preparing accounts before the first sign-in
+
+To give someone their maps and groups before they ever sign in, add them under Settings >
+Operators > **Add** and tick **SSO only - no password** (offered once SSO is set up, even before
+it's switched on). Fill in the restricted maps and groups as usual. Their first SSO sign-in links
+to that account by email.
+
+- **The email must match their SSO email exactly** (case doesn't matter). With Entra that's the
+  `email` claim, or their user principal name when it has none.
+- **Administrator or operator still comes from their role at the provider**, so the form doesn't
+  offer the Administrator box for SSO-only accounts.
+- Until they sign in, the account shows **SSO pending**; afterwards it shows **SSO**.
+- **SSO-only accounts have no password,** so they can't use password sign-in, and they can't set
+  one themselves. If SSO is ever switched off, an administrator can give one a password (edit the
+  operator), or use `php artisan mymate:user:password <email>` on the server.
+- An existing password account can't be turned into an SSO-only one. Delete it and add it again
+  with **SSO only**, or simply let its first SSO sign-in link to it (it keeps its password).
+
+### New accounts start locked down
+
+If someone signs in and no account has their email (nobody prepared one, or the email was typed
+differently), an account is created for them. Under Settings > Security > Single sign-on:
+
+- **New users start restricted** (on by default): a new operator sees no maps until an
+  administrator grants some. That way a typo fails closed instead of showing every map.
+- **Default groups for new users:** a new operator joins these groups and sees their maps straight
+  away. Combine the two to give everyone a safe starting set.
+
+Neither applies to administrators (they're never restricted), or to accounts that already existed
+or were prepared in advance.
 
 ## Passkeys and MFA
 
