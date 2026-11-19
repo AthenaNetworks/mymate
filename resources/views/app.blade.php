@@ -11,6 +11,11 @@
     {{-- Max dude.db upload size (KB), so the import form can pre-check a file before
          uploading instead of failing server-side after a long transfer. --}}
     <meta name="mymate:max-upload-kb" content="{{ (int) config('mymate.import.max_upload_kb') }}">
+    {{-- The Reverb app key the live socket connects with, read from the server's config at runtime
+         so it always matches what Reverb expects. A key fixed into the frontend at build time can
+         drift from the server's (the Docker image's did), and then every live update is refused.
+         Not a secret: the browser sends it in the socket URL anyway. --}}
+    <meta name="mymate:reverb-key" content="{{ config('broadcasting.connections.reverb.key') }}">
 
     {{-- Link-preview (Open Graph + Twitter) card --}}
     <meta name="description" content="My Mate - live network monitoring, the modern way. A web-based replacement for MikroTik's The Dude: live topology map, up/down pings, SNMP/RouterOS throughput.">

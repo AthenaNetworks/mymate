@@ -121,6 +121,37 @@ class PingFleetTest extends TestCase
         });
     }
 
+    public function test_live_latency_for_a_big_sweep_is_split_under_the_message_size(): void
+    {
+        // One event for a whole shard was refused by Reverb as "Payload too large", so the internet
+        // cards never updated live. Each event must stay under the cap and together cover them all.
+        config(['mymate.poll.broadcast.max_bytes_per_event' => 1000]);
+        Event::fake([DeviceLatencyUpdated::class]);
+        $ips = [];
+        for ($i = 1; $i <= 60; $i++) {
+            $ips[] = "10.0.1.{$i}";
+            Device::factory()->create(['mgmt_ip' => "10.0.1.{$i}", 'status' => DeviceStatus::Up]);
+        }
+        $this->fakePinger($ips);
+
+        app(PingFleet::class)();
+
+        $seen = [];
+        $events = 0;
+        Event::assertDispatched(DeviceLatencyUpdated::class, function (DeviceLatencyUpdated $e) use (&$seen, &$events) {
+            $events++;
+            $this->assertLessThanOrEqual(1000, strlen((string) json_encode($e->broadcastWith())));
+            foreach ($e->devices as $f) {
+                $seen[] = $f['device_id'];
+            }
+
+            return true;
+        });
+        $this->assertGreaterThan(1, $events);
+        $this->assertCount(60, array_unique($seen));
+        $this->assertCount(60, $seen); // no device sent twice
+    }
+
     public function test_unchanged_status_emits_no_event(): void
     {
         Event::fake([DeviceStatusChanged::class]);

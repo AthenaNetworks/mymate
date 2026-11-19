@@ -538,7 +538,9 @@ class IngestAgentResults
             DB::table('ping_samples')->insert($rows);
         }
         if ($frames !== [] && config('mymate.device_metrics.broadcast', true)) {
-            LiveBroadcast::send(new DeviceLatencyUpdated($frames));
+            // Split to stay under Reverb's message size: one event for a whole shard (or agent)
+            // was refused as "Payload too large", so the latency readouts never updated live.
+            LiveBroadcast::sendFrames(static fn (array $chunk) => new DeviceLatencyUpdated($chunk), $frames);
         }
     }
 

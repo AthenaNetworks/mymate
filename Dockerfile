@@ -15,8 +15,9 @@ RUN npm ci --no-audit --no-fund
 COPY resources ./resources
 COPY public ./public
 COPY vite.config.ts tsconfig.json ./
-# The public Pusher-protocol app key baked into the SPA (channel auth uses the per-install
-# REVERB_APP_SECRET at runtime, so this is safe to share).
+# A fallback Pusher-protocol app key for the SPA. The page normally hands the browser the key the
+# server runs with (the mymate:reverb-key meta tag), so a REVERB_APP_KEY set at runtime is what's
+# used; this only applies to a page without that tag.
 ARG VITE_REVERB_APP_KEY=mymate
 RUN VITE_REVERB_APP_KEY="$VITE_REVERB_APP_KEY" npx vite build
 
