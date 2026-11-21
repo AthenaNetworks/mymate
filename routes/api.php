@@ -46,6 +46,7 @@ use App\Http\Controllers\Api\SecuritySettingController;
 use App\Http\Controllers\Api\SensorController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SiteController;
+use App\Http\Controllers\Api\SiteLinkController;
 use App\Http\Controllers\Api\SsoSettingController;
 use App\Http\Controllers\Api\SubnetController;
 use App\Http\Controllers\Api\SystemStatusController;
@@ -344,6 +345,11 @@ Route::middleware(['auth:sanctum', EnsureAccountActive::class, EnsurePasskeyVeri
 
     // Topology links (interface-to-interface). Update re-binds either end.
     Route::apiResource('links', LinkController::class)->only(['index', 'store', 'update', 'destroy']);
+
+    // Site-to-site backhauls: bind an end / set the intended role, and the two-direction
+    // throughput series behind the geo map's hover + click drill-down (GitHub #85).
+    Route::patch('site-links/{siteLink}', [SiteLinkController::class, 'update'])->name('site-links.update');
+    Route::get('site-links/{siteLink}/throughput', [SiteLinkController::class, 'throughput'])->name('site-links.throughput');
 
     // Multiple maps: tree + per-map device placements/positions + inter-map links.
     Route::apiResource('maps', MapController::class)->only(['index', 'show', 'store', 'update', 'destroy']);

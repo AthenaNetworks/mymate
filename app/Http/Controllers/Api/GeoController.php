@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Models\SiteLink;
 use App\Support\DeviceGeo;
+use App\Support\SiteLinkLiveness;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -95,23 +97,31 @@ class GeoController extends Controller
     }
 
     /**
-     * Site-to-site backhaul links as coordinate pairs, for the geo map. Both ends resolved to
-     * their site's coordinates in SQL; only links whose sites are both placed are returned.
+     * Site-to-site backhaul links as coordinate pairs, for the geo map, with their binding and
+     * live state when they have one (GitHub #85). Both ends must be placed; the map colours an
+     * edge from `state`/`util` exactly as it does for device links.
+     *
+     * Hydrated through the model rather than a hand-built join: the backbone is small (tens to
+     * low hundreds of links), and SiteLinkLiveness is then the single place the rules live.
      */
     public function backhauls(): JsonResponse
     {
-        $rows = DB::table('site_links as l')
-            ->join('sites as a', 'a.id', '=', 'l.site_a_id')
-            ->join('sites as b', 'b.id', '=', 'l.site_b_id')
-            ->whereNotNull('a.latitude')->whereNotNull('b.latitude')
-            ->selectRaw('l.id, l.media_type, a.longitude AS a_lng, a.latitude AS a_lat, b.longitude AS b_lng, b.latitude AS b_lat')
+        $rows = SiteLink::query()
+            ->with(['siteA', 'siteB', 'aInterface', 'bInterface'])
             ->get()
-            ->map(fn ($r) => [
-                'id' => (int) $r->id,
-                'media_type' => $r->media_type,
-                'a' => [(float) $r->a_lng, (float) $r->a_lat],
-                'b' => [(float) $r->b_lng, (float) $r->b_lat],
-            ]);
+            ->filter(fn (SiteLink $l): bool => $l->siteA?->isPlaced() && $l->siteB?->isPlaced())
+            ->map(fn (SiteLink $l): array => [
+                'id' => $l->id,
+                'media_type' => $l->media_type,
+                'role' => $l->role,
+                'a' => [$l->siteA->longitude, $l->siteA->latitude],
+                'b' => [$l->siteB->longitude, $l->siteB->latitude],
+                'a_interface_id' => $l->a_interface_id,
+                'b_interface_id' => $l->b_interface_id,
+                'binding_source' => $l->binding_source,
+                'binding_confidence' => $l->binding_confidence,
+            ] + SiteLinkLiveness::evaluate($l))
+            ->values();
 
         return response()->json(['data' => $rows]);
     }
