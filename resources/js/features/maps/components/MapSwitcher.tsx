@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CaretDown, DownloadSimple, GlobeHemisphereWest, ImageSquare, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
@@ -33,6 +33,22 @@ export function MapSwitcher() {
     const importMap = useImportMap();
     const fileRef = useRef<HTMLInputElement>(null);
     const [open, setOpen] = useState(false);
+    // The list sizes to its longest map name (CSS `w-max`), but can't run past the right
+    // edge of the viewport: measure the room right of the panel's left edge on open/resize.
+    const panelRef = useRef<HTMLDivElement>(null);
+    const [panelMaxW, setPanelMaxW] = useState<number | undefined>(undefined);
+    useLayoutEffect(() => {
+        if (!open) return;
+        const fit = () => {
+            const el = panelRef.current;
+            if (!el) return;
+            const left = el.getBoundingClientRect().left;
+            setPanelMaxW(Math.max(160, window.innerWidth - left - 16)); // 16px gutter
+        };
+        fit();
+        window.addEventListener('resize', fit);
+        return () => window.removeEventListener('resize', fit);
+    }, [open]);
     const [dialog, setDialog] = useState<MapDialog | null>(null);
     const [sharing, setSharing] = useState(false); // the "Share wallboard" dialog for the active map
 
@@ -105,7 +121,14 @@ export function MapSwitcher() {
                 {open && (
                     <>
                         <button aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setOpen(false)} />
-                        <div className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-64 flex-col rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                        <div
+                            ref={panelRef}
+                            style={
+                                panelMaxW !== undefined
+                                    ? { maxWidth: `min(28rem, ${panelMaxW}px)`, minWidth: `min(16rem, ${panelMaxW}px)` }
+                                    : undefined
+                            }
+                            className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-max min-w-[min(16rem,calc(100vw-2rem))] max-w-[min(28rem,calc(100vw-2rem))] flex-col rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
                             <div className="min-h-0 flex-1 overflow-y-auto">
                             {maps?.map((m) => (
                                 <div key={m.id} className={`group flex items-center gap-0.5 rounded-lg ${m.id === activeId ? 'bg-emerald-500/10' : ''}`}>
@@ -114,7 +137,8 @@ export function MapSwitcher() {
                                             setActiveMap(m.id);
                                             setOpen(false);
                                         }}
-                                        className="min-w-0 flex-1 truncate px-2.5 py-1.5 text-left text-sm text-white/85"
+                                        title={m.name}
+                                        className="min-w-0 flex-1 truncate whitespace-nowrap px-2.5 py-1.5 text-left text-sm text-white/85"
                                     >
                                         {m.parent_map_id ? '- ' : ''}
                                         {m.name}
