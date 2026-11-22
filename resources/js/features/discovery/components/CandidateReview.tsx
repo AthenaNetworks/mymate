@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Check, Prohibit, CircleNotch } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Check, Prohibit, CircleNotch } from '@phosphor-icons/react';
 import { useCandidates } from '../api/getCandidates';
 import { useApproveCandidate } from '../api/approveCandidate';
 import { useIgnoreCandidate } from '../api/ignoreCandidate';
+import { useRestoreCandidate } from '../api/restoreCandidate';
 import { useIsAdmin } from '../../auth/api/auth';
 import { relativeTime } from '../../../lib/relativeTime';
 import { pushToast } from '../../../lib/toast';
@@ -64,6 +65,7 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
     const { data: candidates, isLoading } = useCandidates(status, { enabled: open, refetchMs: scanning ? 3000 : 10_000 });
     const approve = useApproveCandidate();
     const ignore = useIgnoreCandidate();
+    const restore = useRestoreCandidate();
 
     return (
         <section className="space-y-3">
@@ -155,6 +157,28 @@ export function CandidateReview({ open, scanning }: { open: boolean; scanning?: 
                                     className="rounded-lg p-1.5 text-white/30 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-rose-400 disabled:opacity-40"
                                 >
                                     <Prohibit weight="light" className="h-4 w-4" />
+                                </button>
+                            </span>
+                        ) : c.status === 'ignored' && isAdmin ? (
+                            <span className="flex shrink-0 items-center gap-2">
+                                <span className={`text-[11px] capitalize ${statusBadge[c.status]}`}>{c.status}</span>
+                                <button
+                                    onClick={() =>
+                                        restore.mutate(c.id, {
+                                            onSuccess: () =>
+                                                pushToast({ title: `${c.sysname ?? c.ip} is back in the queue`, detail: 'It is listed under New again.', tone: 'info' }),
+                                            onError: (e: unknown) => {
+                                                const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
+                                                pushToast({ title: `Couldn't restore ${c.sysname ?? c.ip}`, detail: msg, tone: 'down' });
+                                            },
+                                        })
+                                    }
+                                    disabled={restore.isPending}
+                                    title="Restore -> back to New, so it can be added"
+                                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-white/60 ring-1 ring-white/10 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/90 disabled:opacity-40"
+                                >
+                                    <ArrowCounterClockwise weight="bold" className="h-3.5 w-3.5" />
+                                    Restore
                                 </button>
                             </span>
                         ) : (

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Actions\Discovery\CmrAddressTaken;
 use App\Actions\Discovery\IgnoreCandidate;
 use App\Actions\Discovery\PromoteCandidate;
+use App\Actions\Discovery\RestoreCandidate;
 use App\Enums\DiscoveryStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\DeviceResource;
@@ -55,5 +56,17 @@ class DiscoveryCandidateController extends Controller
     public function ignore(DiscoveryCandidate $candidate, IgnoreCandidate $ignore): DiscoveryCandidateResource
     {
         return new DiscoveryCandidateResource($ignore($candidate));
+    }
+
+    /** Restore -> undo an Ignore, putting the candidate back in the queue as New. */
+    public function restore(DiscoveryCandidate $candidate, RestoreCandidate $restore): DiscoveryCandidateResource
+    {
+        abort_if(
+            $candidate->status !== DiscoveryStatus::Ignored,
+            Response::HTTP_UNPROCESSABLE_ENTITY,
+            'Only an ignored candidate can be restored.'
+        );
+
+        return new DiscoveryCandidateResource($restore($candidate));
     }
 }

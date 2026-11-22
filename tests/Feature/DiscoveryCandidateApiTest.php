@@ -6,6 +6,7 @@ use App\Enums\DiscoveryStatus;
 use App\Enums\PollMethod;
 use App\Models\Credential;
 use App\Models\DiscoveryCandidate;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -86,6 +87,56 @@ class DiscoveryCandidateApiTest extends TestCase
         $this->postJson("/api/discovery-candidates/{$candidate->id}/ignore")
             ->assertOk()
             ->assertJsonPath('data.status', 'ignored');
+
+        $this->assertSame(DiscoveryStatus::Ignored, $candidate->fresh()->status);
+    }
+
+    public function test_restore_puts_an_ignored_candidate_back_in_the_queue(): void
+    {
+        $candidate = DiscoveryCandidate::factory()->create(['status' => DiscoveryStatus::Ignored]);
+
+        $this->postJson("/api/discovery-candidates/{$candidate->id}/restore")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'new');
+
+        $this->assertSame(DiscoveryStatus::New, $candidate->fresh()->status);
+    }
+
+    public function test_a_restored_candidate_can_then_be_approved(): void
+    {
+        Queue::fake();
+        $cred = Credential::factory()->routeros()->create();
+        $candidate = DiscoveryCandidate::factory()->create([
+            'ip' => '10.0.0.9',
+            'status' => DiscoveryStatus::Ignored,
+            'detected_method' => PollMethod::RouterOs,
+            'matched_credential_id' => $cred->id,
+        ]);
+
+        $this->postJson("/api/discovery-candidates/{$candidate->id}/restore")->assertOk();
+        $this->postJson("/api/discovery-candidates/{$candidate->id}/approve")->assertCreated();
+
+        $this->assertDatabaseHas('devices', ['mgmt_ip' => '10.0.0.9']);
+        $this->assertSame(DiscoveryStatus::Approved, $candidate->fresh()->status);
+    }
+
+    public function test_only_an_ignored_candidate_can_be_restored(): void
+    {
+        foreach ([DiscoveryStatus::New, DiscoveryStatus::Approved] as $status) {
+            $candidate = DiscoveryCandidate::factory()->create(['status' => $status]);
+
+            $this->postJson("/api/discovery-candidates/{$candidate->id}/restore")->assertStatus(422);
+
+            $this->assertSame($status, $candidate->fresh()->status);
+        }
+    }
+
+    public function test_an_operator_cannot_restore_a_candidate(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $candidate = DiscoveryCandidate::factory()->create(['status' => DiscoveryStatus::Ignored]);
+
+        $this->postJson("/api/discovery-candidates/{$candidate->id}/restore")->assertForbidden();
 
         $this->assertSame(DiscoveryStatus::Ignored, $candidate->fresh()->status);
     }
