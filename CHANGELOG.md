@@ -14,6 +14,11 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- The generic Webhook alert transport now sends structured fields beside `text`: `event`
+  (`alert.firing`, `alert.resolved` or `test`), `alert` (its id, a `dedupe_key` that stays the
+  same for the life of the condition, status, times and a link) and `policy` (id, name,
+  condition). An on-call tool such as NOCgenie can then pair each recovery with its alert
+  without parsing the wording. Slack, Teams, Messenger and Discord still get only the text.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters

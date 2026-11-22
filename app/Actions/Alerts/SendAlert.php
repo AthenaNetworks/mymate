@@ -26,10 +26,11 @@ class SendAlert
     {
         $delivered = false;
         $text = $this->firingText($event);
+        $context = $this->webhookContext('alert.firing', $policy, $event);
 
         foreach ($policy->transports->where('enabled', true) as $transport) {
             try {
-                $this->deliver($transport, $text);
+                $this->deliver($transport, $text, $context);
                 $delivered = true;
             } catch (\Throwable $e) {
                 EngineLog::error('alert: transport failed', [
@@ -51,10 +52,11 @@ class SendAlert
     public function sendRecovery(AlertPolicy $policy, AlertEvent $event): void
     {
         $message = $this->recoveryText($event);
+        $context = $this->webhookContext('alert.resolved', $policy, $event);
 
         foreach ($policy->transports->where('enabled', true) as $transport) {
             try {
-                $this->deliver($transport, $message);
+                $this->deliver($transport, $message, $context);
             } catch (\Throwable $e) {
                 EngineLog::error('alert: recovery transport failed', [
                     'transport_id' => $transport->id,
@@ -102,8 +104,49 @@ class SendAlert
         return '✅ Resolved: '.$event->message;
     }
 
-    /** Send one message through one transport. `config` is the decrypted array. */
-    public function deliver(AlertTransport $transport, string $message): void
+    /**
+     * The structured part of a generic Webhook POST, sent beside `text` so a receiver
+     * (an on-call tool, a script) can pair a recovery with its alert without parsing the
+     * wording. `alert.dedupe_key` is stable for the life of the condition; `message`
+     * can change while it fires (a latency or utilisation figure), so match on the key.
+     *
+     * @return array<string, mixed>
+     */
+    private function webhookContext(string $kind, AlertPolicy $policy, AlertEvent $event): array
+    {
+        $condition = $policy->condition;
+
+        return [
+            'source' => 'mymate',
+            'version' => 1,
+            'event' => $kind,
+            'instance' => rtrim((string) config('app.url'), '/'),
+            'alert' => [
+                'id' => $event->id,
+                'dedupe_key' => $event->dedupe_key,
+                'status' => $kind === 'alert.resolved' ? 'resolved' : 'firing',
+                'message' => $event->message,
+                'breach_started_at' => $event->breach_started_at?->toIso8601String(),
+                'fired_at' => $event->fired_at?->toIso8601String(),
+                'resolved_at' => $kind === 'alert.resolved' ? ($event->resolved_at ?? now())->toIso8601String() : null,
+                'url' => rtrim((string) config('app.url'), '/').'/alerts',
+            ],
+            'policy' => [
+                'id' => $policy->id,
+                'name' => $policy->name,
+                'condition' => $condition instanceof \BackedEnum ? $condition->value : $condition,
+            ],
+        ];
+    }
+
+    /**
+     * Send one message through one transport. `config` is the decrypted array. Only the
+     * generic Webhook type carries `$context` (Slack, Teams and Discord reject or ignore
+     * unknown fields, and they're for people, not programs).
+     *
+     * @param  array<string, mixed>|null  $context
+     */
+    public function deliver(AlertTransport $transport, string $message, ?array $context = null): void
     {
         $config = $transport->config;
 
@@ -118,8 +161,9 @@ class SendAlert
             //  SSRF hardening: re-check the target immediately before sending (closes
             // the DNS-rebinding gap since save-time validation) and never follow a redirect
             // (a validated public URL could otherwise 302 to an internal target).
-            TransportType::Slack, TransportType::Teams, TransportType::Messenger,
-            TransportType::Webhook => $this->deliverWebhook($config, $message),
+            TransportType::Slack, TransportType::Teams, TransportType::Messenger => $this->deliverWebhook($config, $message),
+            // The generic Webhook also gets the structured fields (see webhookContext()).
+            TransportType::Webhook => $this->deliverWebhook($config, $message, extra: $context ?? ['source' => 'mymate', 'version' => 1, 'event' => 'test']),
             // Discord incoming webhooks want the message under "content", not "text".
             TransportType::Discord => $this->deliverWebhook($config, $message, key: 'content'),
             TransportType::Telegram => $this->deliverTelegram($config, $message),
@@ -127,8 +171,11 @@ class SendAlert
         };
     }
 
-    /** @param array<string, mixed> $config */
-    private function deliverWebhook(array $config, string $message, string $key = 'text'): void
+    /**
+     * @param  array<string, mixed>  $config
+     * @param  array<string, mixed>  $extra
+     */
+    private function deliverWebhook(array $config, string $message, string $key = 'text', array $extra = []): void
     {
         $url = (string) ($config['webhook_url'] ?? '');
 
@@ -136,7 +183,7 @@ class SendAlert
             throw new RuntimeException('Webhook target is not a safe outbound destination.');
         }
 
-        Http::asJson()->withoutRedirecting()->post($url, [$key => $message])->throw();
+        Http::asJson()->withoutRedirecting()->post($url, [$key => $message] + $extra)->throw();
     }
 
     /**

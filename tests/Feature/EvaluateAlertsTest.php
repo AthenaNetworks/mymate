@@ -65,6 +65,42 @@ class EvaluateAlertsTest extends TestCase
         $this->assertSame('resolved', AlertEvent::firstOrFail()->status);
     }
 
+    public function test_a_generic_webhook_gets_structured_fields_to_pair_the_recovery(): void
+    {
+        Http::fake();
+        config(['app.url' => 'https://mate.example.test']);
+        $slack = AlertTransport::factory()->create(['config' => ['webhook_url' => 'https://slack.example.test/s']]);
+        $hook = AlertTransport::factory()->create(['type' => 'webhook', 'config' => ['webhook_url' => 'https://hook.example.test/w']]);
+        $policy = AlertPolicy::factory()->create(['name' => 'Core down', 'condition' => AlertCondition::DeviceDown]);
+        $policy->transports()->attach([$slack->id, $hook->id]);
+        $device = Device::factory()->create(['name' => 'CPE1', 'status' => DeviceStatus::Down]);
+
+        app(EvaluateAlerts::class)();
+        $device->update(['status' => DeviceStatus::Up]);
+        app(EvaluateAlerts::class)();
+
+        $hooks = collect(Http::recorded())->map(fn ($r) => $r[0])->filter(fn ($r) => $r->url() === 'https://hook.example.test/w')->values();
+        $this->assertCount(2, $hooks);
+        [$fire, $clear] = [$hooks[0]->data(), $hooks[1]->data()];
+        $this->assertSame('alert.firing', $fire['event']);
+        $this->assertSame('mymate', $fire['source']);
+        $this->assertSame('https://mate.example.test', $fire['instance']);
+        $this->assertSame("device:{$device->id}", $fire['alert']['dedupe_key']);
+        $this->assertSame('firing', $fire['alert']['status']);
+        $this->assertSame(['id' => $policy->id, 'name' => 'Core down', 'condition' => 'device_down'], $fire['policy']);
+        $this->assertStringContainsString('CPE1', $fire['text']);
+        $this->assertSame('alert.resolved', $clear['event']);
+        $this->assertSame('resolved', $clear['alert']['status']);
+        $this->assertSame($fire['alert']['id'], $clear['alert']['id']);
+        $this->assertNotNull($clear['alert']['resolved_at']);
+        $this->assertStringStartsWith('✅ Resolved', $clear['text']);
+
+        // Chat webhooks still get only the text.
+        $chat = collect(Http::recorded())->map(fn ($r) => $r[0])->filter(fn ($r) => $r->url() === 'https://slack.example.test/s');
+        $this->assertCount(2, $chat);
+        $chat->each(fn ($r) => $this->assertSame(['text'], array_keys($r->data())));
+    }
+
     public function test_probe_slow_fires_over_the_threshold_and_resolves_under_it(): void
     {
         Http::fake();

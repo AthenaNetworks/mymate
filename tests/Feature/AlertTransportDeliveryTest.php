@@ -24,7 +24,8 @@ class AlertTransportDeliveryTest extends TestCase
         Http::fake();
         $this->deliver('webhook', ['webhook_url' => 'https://hook.example.test/x'], 'msg');
 
-        Http::assertSent(fn ($req) => $req->url() === 'https://hook.example.test/x' && $req['text'] === 'msg');
+        Http::assertSent(fn ($req) => $req->url() === 'https://hook.example.test/x' && $req['text'] === 'msg'
+            && $req['source'] === 'mymate' && $req['event'] === 'test');
     }
 
     public function test_discord_posts_a_content_field(): void
