@@ -105,4 +105,63 @@ class MapExportImportTest extends TestCase
 
         $this->postJson('/api/maps/import', $export)->assertCreated()->assertJsonPath('data.name', 'Site 7 (imported)');
     }
+
+    public function test_a_note_keeps_its_style_and_geo_position_through_export_and_import(): void
+    {
+        $map = Map::create(['name' => 'Styled']);
+        MapNote::create([
+            'map_id' => $map->id, 'text' => 'fibre hut', 'x' => 12, 'y' => 34,
+            'color' => '#112233', 'background' => '#fafafa', 'size' => 'lg',
+            'latitude' => -33.865, 'longitude' => 151.209,
+        ]);
+
+        $export = $this->getJson("/api/maps/{$map->id}/export")->assertOk()
+            ->assertJsonPath('notes.0.background', '#fafafa')
+            ->assertJsonPath('notes.0.size', 'lg')
+            ->json();
+
+        $newId = $this->postJson('/api/maps/import', $export)->assertCreated()->json('data.id');
+
+        $note = MapNote::where('map_id', $newId)->sole();
+        $this->assertSame('fibre hut', $note->text);
+        $this->assertSame('#112233', $note->color);
+        $this->assertSame('#fafafa', $note->background);
+        $this->assertSame('lg', $note->size);
+        $this->assertEqualsWithDelta(-33.865, $note->latitude, 1e-6);
+        $this->assertEqualsWithDelta(151.209, $note->longitude, 1e-6);
+    }
+
+    public function test_an_older_export_without_note_style_still_imports(): void
+    {
+        $newId = $this->postJson('/api/maps/import', [
+            'version' => 1,
+            'map' => ['name' => 'Old file'],
+            'notes' => [['text' => 'plain', 'x' => 1, 'y' => 2, 'color' => null]],
+        ])->assertCreated()->json('data.id');
+
+        $note = MapNote::where('map_id', $newId)->sole();
+        $this->assertSame('plain', $note->text);
+        $this->assertNull($note->background);
+        $this->assertNull($note->size);
+        $this->assertNull($note->latitude);
+    }
+
+    public function test_malformed_note_style_in_an_import_falls_back_to_defaults(): void
+    {
+        $newId = $this->postJson('/api/maps/import', [
+            'map' => ['name' => 'Hand edited'],
+            'notes' => [
+                ['text' => 'bad style', 'color' => 'red', 'background' => '#12345', 'size' => 'xl', 'latitude' => 95, 'longitude' => 10],
+                ['text' => 'half a position', 'latitude' => 10],
+            ],
+        ])->assertCreated()->json('data.id');
+
+        foreach (MapNote::where('map_id', $newId)->get() as $note) {
+            $this->assertNull($note->color);
+            $this->assertNull($note->background);
+            $this->assertNull($note->size);
+            $this->assertNull($note->latitude);
+            $this->assertNull($note->longitude);
+        }
+    }
 }

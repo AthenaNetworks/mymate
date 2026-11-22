@@ -74,6 +74,10 @@ of commit subjects.
 - A device that was already alerting no longer gets a false "recovered" when its parent (or
   its remote agent) goes down behind it, followed by a second "down" once the parent is back.
   Its alert stays open until the device itself comes back.
+- Exporting a map kept only each note's text, position and text colour, so after an import notes
+  lost their background colour, size and geo-map position. Exports now include all of them.
+  Older export files still import, and a hand-edited file with a bad colour, size or position
+  falls back to the default for that value instead of being stored as-is.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).

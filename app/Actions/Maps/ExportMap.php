@@ -56,7 +56,9 @@ class ExportMap
                 'b_handle' => $l->b_handle,
             ])->values()->all();
 
-        $notes = $map->mapNotes()->get(['text', 'x', 'y', 'color'])->all();
+        // The full note style, plus its geo-map position (GitHub #52) - older builds only read
+        // text/x/y/color and ignore the rest.
+        $notes = $map->mapNotes()->get(['text', 'x', 'y', 'color', 'background', 'size', 'latitude', 'longitude'])->all();
 
         $childMaps = $map->children()->get(['id', 'name', 'node_x', 'node_y'])
             ->map(fn (Map $c) => ['name' => $c->name, 'node_x' => $c->node_x, 'node_y' => $c->node_y])->all();
