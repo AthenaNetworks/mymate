@@ -30,6 +30,17 @@ class AlertTransportDeliveryTest extends TestCase
             && $req['source'] === 'mymate' && $req['event'] === 'test');
     }
 
+    public function test_teams_posts_an_adaptive_card_for_workflows_webhooks(): void
+    {
+        Http::fake();
+        $this->deliver('teams', ['webhook_url' => 'https://example.westus.logic.azure.com/workflows/x'], 'Device CORE is down.');
+        Http::assertSent(fn ($req) => $req['type'] === 'message'
+            && $req['attachments'][0]['contentType'] === 'application/vnd.microsoft.card.adaptive'
+            && $req['attachments'][0]['content']['type'] === 'AdaptiveCard'
+            && $req['attachments'][0]['content']['body'][0]['text'] === 'Device CORE is down.'
+            && $req['text'] === 'Device CORE is down.');
+    }
+
     public function test_discord_posts_a_content_field(): void
     {
         Http::fake();

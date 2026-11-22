@@ -346,6 +346,77 @@ class EvaluateAlertsTest extends TestCase
         $this->assertDatabaseHas('alert_events', ['dedupe_key' => "device:{$dist->id}", 'status' => 'firing']);
     }
 
+    public function test_an_open_child_alert_stays_open_when_its_parent_goes_down_behind_it(): void
+    {
+        // GitHub #86: switch down (alerts), then its parent router goes down. The switch must not
+        // get a false recovery, nor a second down once the router comes back.
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        $router = Device::factory()->create(['name' => 'Router1', 'status' => DeviceStatus::Up]);
+        $switch = Device::factory()->create(['name' => 'Switch1', 'status' => DeviceStatus::Down, 'parent_device_id' => $router->id]);
+
+        app(EvaluateAlerts::class)();
+        $switchEvent = AlertEvent::where('dedupe_key', "device:{$switch->id}")->sole();
+        $this->assertSame('firing', $switchEvent->status);
+        Http::assertSentCount(1);
+
+        $router->update(['status' => DeviceStatus::Down]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame('firing', $switchEvent->fresh()->status);
+        $this->assertDatabaseHas('alert_events', ['dedupe_key' => "device:{$router->id}", 'status' => 'firing']);
+        Http::assertSentCount(2); // the router's down, and nothing for the switch
+
+        $router->update(['status' => DeviceStatus::Up]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame(1, AlertEvent::where('dedupe_key', "device:{$switch->id}")->count());
+        $this->assertSame('firing', $switchEvent->fresh()->status);
+        Http::assertSentCount(3); // the router's recovery only
+
+        $switch->update(['status' => DeviceStatus::Up]);
+        app(EvaluateAlerts::class)();
+        $this->assertSame('resolved', $switchEvent->fresh()->status);
+        Http::assertSentCount(4);
+    }
+
+    public function test_a_resolving_child_goes_back_to_firing_when_it_is_down_behind_a_down_parent(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown, ['duration_minutes' => 5]);
+        $router = Device::factory()->create(['status' => DeviceStatus::Down]);
+        $switch = Device::factory()->create(['status' => DeviceStatus::Down, 'parent_device_id' => $router->id]);
+        $event = AlertEvent::create([
+            'alert_policy_id' => AlertPolicy::firstOrFail()->id,
+            'dedupe_key' => "device:{$switch->id}",
+            'status' => 'resolving',
+            'message' => 'Device is down.',
+            'breach_started_at' => now()->subHour(),
+            'fired_at' => now()->subHour(),
+            'recovery_started_at' => now()->subMinutes(10),
+        ]);
+
+        app(EvaluateAlerts::class)();
+
+        $this->assertSame('firing', $event->fresh()->status);
+        $this->assertNull($event->fresh()->recovery_started_at);
+    }
+
+    public function test_an_open_device_alert_stays_open_while_its_agent_is_down(): void
+    {
+        Http::fake();
+        $this->policyWithSlack(AlertCondition::DeviceDown);
+        $agent = Agent::factory()->create(['status' => AgentStatus::Online, 'last_seen_at' => now()]);
+        $device = Device::factory()->create(['status' => DeviceStatus::Down, 'agent_id' => $agent->id]);
+
+        app(EvaluateAlerts::class)();
+        $event = AlertEvent::where('dedupe_key', "device:{$device->id}")->sole();
+
+        $agent->update(['status' => AgentStatus::Offline, 'last_seen_at' => now()->subMinutes(5)]);
+        app(EvaluateAlerts::class)();
+
+        $this->assertTrue($agent->fresh()->isDown());
+        $this->assertSame('firing', $event->fresh()->status);
+    }
+
     public function test_dependency_suppression_can_be_disabled_per_policy(): void
     {
         Http::fake();

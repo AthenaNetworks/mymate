@@ -54,6 +54,12 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- Teams alerts arrive again on Workflows webhooks (the Office 365 connectors are retired).
+  My Mate now posts an Adaptive Card; the plain text it sent before was accepted and then
+  dropped inside the flow, so alerts showed as sent but never appeared.
+- A device that was already alerting no longer gets a false "recovered" when its parent (or
+  its remote agent) goes down behind it, followed by a second "down" once the parent is back.
+  Its alert stays open until the device itself comes back.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).
