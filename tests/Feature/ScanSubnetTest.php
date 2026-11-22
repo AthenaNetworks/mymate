@@ -93,6 +93,23 @@ class ScanSubnetTest extends TestCase
         $this->assertDatabaseHas('discovery_candidates', ['ip' => '10.80.111.5']);
     }
 
+    public function test_a_static_map_object_without_an_ip_does_not_break_the_scan(): void
+    {
+        // A static object (mgmt_ip NULL) used to make the device-IP lookup throw
+        // "array_flip(): Can only flip string and integer values", failing every scan.
+        Credential::factory()->create(['type' => 'snmp', 'snmp_community' => 'pub']);
+        Device::factory()->create(['mgmt_ip' => null]);
+        Device::factory()->create(['mgmt_ip' => '10.80.111.1']);
+        $subnet = Subnet::factory()->create(['cidr' => '10.80.111.0/29']);
+        $this->bindFakes(['10.80.111.1', '10.80.111.5'], $this->snmpFake('pub', 'CPE1'));
+
+        $new = app(ScanSubnet::class)($subnet);
+
+        $this->assertSame(1, $new);
+        $this->assertDatabaseMissing('discovery_candidates', ['ip' => '10.80.111.1']);
+        $this->assertDatabaseHas('discovery_candidates', ['ip' => '10.80.111.5']);
+    }
+
     public function test_job_never_scans_an_agent_assigned_subnet_centrally(): void
     {
         $agent = \App\Models\Agent::factory()->create();

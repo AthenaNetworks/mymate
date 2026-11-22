@@ -79,7 +79,9 @@ class ScanSubnet
             // IPs that are already devices (skip) and existing candidates (update, never dup). This
             // is a central scan, so only the central poll scope counts: an agent-polled device that
             // happens to share an IP is a different box on another site's network (GitHub #49).
-            $deviceIps = Device::inPollScope(null)->pluck('mgmt_ip')->flip();
+            // Only this sweep's responders are looked up, which also leaves out static map objects
+            // (mgmt_ip NULL) - a NULL can't be flipped into a key and would fail the whole scan.
+            $deviceIps = Device::inPollScope(null)->whereIn('mgmt_ip', $reachable)->pluck('mgmt_ip')->flip();
             $existing = DiscoveryCandidate::whereNull('agent_id')->whereNull('cmr_device_id')->whereIn('ip', $reachable)->get()->keyBy('ip');
 
             // Probing tries SNMP + RouterOS + SSH per host, which is slow; cap the wall-clock so
