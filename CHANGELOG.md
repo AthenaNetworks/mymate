@@ -64,6 +64,13 @@ of commit subjects.
 - An ignored discovery candidate can be restored. Under All in the review queue, ignored hosts
   have a Restore button (admins) that puts them back under New, so a mistaken Ignore can be undone
   and the device added after all.
+- Map notes support Markdown: bold, italic, strikethrough, code, lists, headings, quotes and
+  links, on the topology map, the geo map and the public wallboard. Pasted web addresses and
+  email addresses become links on their own, and web links open in a new tab. Notes can also
+  link to `winbox://`, `ssh://`, `telnet://` and `rdp://` addresses, which open the tool on your
+  computer. On the public wallboard those show as plain text. Raw HTML, images (only their alt
+  text shows), tables and any other kind of link aren't shown. Existing notes keep their line
+  breaks. The note editor is a little larger and shows a character count.
 
 ### Changed
 - Placing a device from Map tools, by clicking it or dragging it onto the map, no longer selects

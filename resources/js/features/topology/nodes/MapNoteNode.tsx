@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { type NodeProps } from '@xyflow/react';
 import { ArrowCounterClockwise, X } from '@phosphor-icons/react';
 import type { MapNoteSize } from '../../../types';
+import { NoteMarkdown } from './NoteMarkdown';
 
 export type MapNoteStylePatch = { color?: string | null; background?: string | null; size?: MapNoteSize | null };
 
@@ -90,21 +91,31 @@ export function MapNoteNode({ data, selected }: NodeProps) {
             )}
 
             {editing ? (
-                <textarea
-                    ref={ref}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onBlur={commit}
-                    onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
-                        if (e.key === 'Escape') { setDraft(d.text); setEditing(false); }
-                    }}
-                    rows={Math.min(6, Math.max(1, draft.split('\n').length))}
-                    maxLength={500}
-                    className="nodrag w-44 resize-none rounded bg-black/40 px-1 py-0.5 text-sm text-white outline-none ring-1 ring-emerald-400/40"
-                />
+                <>
+                    <textarea
+                        ref={ref}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={commit}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commit(); }
+                            if (e.key === 'Escape') { setDraft(d.text); setEditing(false); }
+                        }}
+                        rows={Math.min(10, Math.max(2, draft.split('\n').length))}
+                        maxLength={500}
+                        className="nodrag w-56 resize-none rounded bg-black/40 px-1 py-0.5 font-mono text-xs text-white outline-none ring-1 ring-emerald-400/40"
+                    />
+                    <p className="mt-1 flex w-56 justify-between text-[10px] font-normal text-white/45">
+                        <span>Markdown · Shift+Enter for a new line</span>
+                        <span>{draft.length}/500</span>
+                    </p>
+                </>
+            ) : d.text ? (
+                <div className="break-words font-medium">
+                    <NoteMarkdown text={d.text} />
+                </div>
             ) : (
-                <span className="whitespace-pre-wrap break-words font-medium">{d.text || '(empty note)'}</span>
+                <span className="font-medium italic opacity-60">(empty note)</span>
             )}
 
             {d.editable && d.onRemove && !editing && (
