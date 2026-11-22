@@ -1138,6 +1138,24 @@ label,
     animation: cardpulse 2s ease-in-out infinite;
 }
 
+/* A device just placed on the map from Map tools: two quick emerald glows on an overlay, so the
+   new card is easy to spot without selecting it. The overlay keeps a steady ring when motion is
+   reduced (see below), so the cue is still there. */
+@keyframes placed {
+    0%,
+    50%,
+    100% {
+        box-shadow: 0 0 0 2px rgba(52, 211, 153, 0), 0 0 0 0 rgba(52, 211, 153, 0);
+    }
+    25%,
+    75% {
+        box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.95), 0 0 36px 6px rgba(52, 211, 153, 0.55);
+    }
+}
+.animate-placed {
+    animation: placed 1.4s ease-in-out 1 both;
+}
+
 /* Indeterminate progress bar (a scanning sweep with no known %): a bright segment slides
    across the track left-to-right, forever. Used on the discovery scan banner. */
 @keyframes scanbar {
@@ -1165,8 +1183,12 @@ label,
     .animate-rise,
     .animate-toast,
     .animate-cardpulse,
-    .animate-scanbar {
+    .animate-scanbar,
+    .animate-placed {
         animation: none;
+    }
+    .animate-placed {
+        box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.9);
     }
     /* Stop the marching-dash link flow (set inline on the edge path + the flow accent). */
     .react-flow__edge-path,

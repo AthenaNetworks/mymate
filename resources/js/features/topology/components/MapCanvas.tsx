@@ -54,6 +54,7 @@ import { useDeleteLink } from '../api/deleteLink';
 import { useUpdateLink } from '../api/updateLink';
 import { computeLayout, dependencyLayout, declump, type LayoutKind } from '../lib/layout';
 import { alignBoxes, ALIGN_LABEL, ALIGN_MIN, type AlignKind } from '../lib/align';
+import { flashPlacedDevice } from '../lib/mapToolsSession';
 import { useCaptureLayoutSnapshot, useUndoLayout, useLayoutSnapshotCount } from '../api/layoutSnapshots';
 import { bundleParallel, computeData, linkUtil, metaOf, type EdgeMeta, type UtilMap } from '../lib/edgeData';
 import { selectDevice, setEdgeStyle, setEdgeAttach, setInspectorOpen, setLayoutKind, setMapGrid, useActiveMapId, useEdgeStyle, useEdgeAttach, useLayoutKind, useMapGrid, useMapGridColor, useMapGridSize, useSelectedDeviceId } from '../../../lib/shellStore';
@@ -939,7 +940,8 @@ export function MapCanvas() {
                     if (!deviceId) return;
                     const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
                     // Position rides along with the add, so there's no follow-up save to race the refetch.
-                    addToMap.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }, { onSuccess: () => selectDevice(deviceId) });
+                    // Not selected: that would swap the sidebar away from Map tools after every drop.
+                    addToMap.mutate({ mapId: activeMapId, deviceId, x: pos.x, y: pos.y }, { onSuccess: () => flashPlacedDevice(deviceId) });
                 }}
                 fitView
                 fitViewOptions={{ padding: fitPad }}
