@@ -13,6 +13,8 @@ of commit subjects.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-22
+
 ### Added
 - Suggested links from neighbour discovery (GitHub #85). On each discovery pass My Mate reads LLDP
   and CDP over SNMP, and the RouterOS neighbour list (MNDP, LLDP and CDP) over the API, and works
@@ -1374,7 +1376,8 @@ MikroTik's The Dude:
 - Remote agents for out-of-band networks. Ships as a `.deb`, a Proxmox LXC
   template and a Docker image.
 
-[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.1.1...HEAD
+[Unreleased]: https://github.com/AthenaNetworks/mymate/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/AthenaNetworks/mymate/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/AthenaNetworks/mymate/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/AthenaNetworks/mymate/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/AthenaNetworks/mymate/compare/v1.9.0...v2.0.0
