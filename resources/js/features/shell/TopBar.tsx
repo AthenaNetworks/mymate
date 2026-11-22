@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { List, MagnifyingGlass, SignOut, Television } from '@phosphor-icons/react';
 import { useConnectionStatus } from '../topology/hooks/useConnectionStatus';
 import { StatusCounts } from './StatusCounts';
-import { setView, setNavOpen, setWallboard } from '../../lib/shellStore';
+import { setView, setNavOpen, setWallboard, useNavCollapsed } from '../../lib/shellStore';
 import { useCurrentUser, useLogout } from '../auth/api/auth';
 import { Logomark } from '../../components/Logomark';
 import { ThemeToggle } from '../../components/ThemeToggle';
@@ -32,6 +32,7 @@ export function TopBar() {
     const c = conn[state] ?? conn.offline;
     const { data: user } = useCurrentUser();
     const logout = useLogout();
+    const navCollapsed = useNavCollapsed();
 
     // Enter wallboard + go fullscreen (needs this user gesture). AppShell syncs the flag
     // back off when fullscreen exits (Esc), so this only ever turns it on.
@@ -42,11 +43,12 @@ export function TopBar() {
 
     return (
         <header className="mm-header z-20 flex h-14 shrink-0 items-center gap-3 border-b border-white/10 bg-white/[0.02] px-3 backdrop-blur-2xl sm:gap-5 sm:px-4">
-            {/* Hamburger - opens the off-canvas nav drawer below lg. */}
+            {/* Hamburger - opens the off-canvas nav drawer below lg, and at any width once the
+                menu has been collapsed. */}
             <button
                 onClick={() => setNavOpen(true)}
                 title="Menu"
-                className="-ml-1 rounded-lg p-2 text-white/55 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white active:scale-95 lg:hidden"
+                className={`-ml-1 rounded-lg p-2 text-white/55 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white active:scale-95 ${navCollapsed ? '' : 'lg:hidden'}`}
             >
                 <List weight="bold" className="h-5 w-5" />
             </button>
