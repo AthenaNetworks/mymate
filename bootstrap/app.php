@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountActive;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
@@ -34,6 +35,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // Baseline security response headers on every request, web + api (
         // hardening - closes the security-checklist.md gap).
         $middleware->append(SecurityHeaders::class);
+
+        // A disabled operator's session ends on any web request - the broadcast-auth route
+        // included, so they can't rejoin the live channels. (The API group checks it per route.)
+        $middleware->web(append: [EnsureAccountActive::class]);
 
         // `admin` gates the operator-management write routes.
         $middleware->alias(['admin' => EnsureAdmin::class]);

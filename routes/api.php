@@ -45,6 +45,7 @@ use App\Http\Controllers\Api\SecuritySettingController;
 use App\Http\Controllers\Api\SensorController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SiteController;
+use App\Http\Controllers\Api\SsoSettingController;
 use App\Http\Controllers\Api\SubnetController;
 use App\Http\Controllers\Api\SystemStatusController;
 use App\Http\Controllers\Api\Tools\ToolsController;
@@ -53,6 +54,7 @@ use App\Http\Controllers\Api\UpdateCheckController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\UserGroupController;
 use App\Http\Controllers\Api\WallEmbedSettingController;
+use App\Http\Middleware\EnsureAccountActive;
 use App\Http\Middleware\EnsurePasskeyVerified;
 use App\Http\Middleware\RestrictedAccess;
 use App\Http\Middleware\RestrictWritesToAdmins;
@@ -92,7 +94,7 @@ Route::middleware('throttle:120,1')->withoutMiddleware(EnsureFrontendRequestsAre
 // --- Authenticated (everything else) --------------------------------------
 // `RestrictWritesToAdmins` makes non-admin operators read-only across the whole API
 // - GETs pass, any write from a non-admin is 403 (except their own password).
-Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesToAdmins::class, RestrictedAccess::class])->group(function (): void {
+Route::middleware(['auth:sanctum', EnsureAccountActive::class, EnsurePasskeyVerified::class, RestrictWritesToAdmins::class, RestrictedAccess::class])->group(function (): void {
     Route::get('user', [AuthController::class, 'user'])->name('user');
 
     // Passkeys (WebAuthn): self-service second factor + management. Allowlisted in
@@ -116,6 +118,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         // Origins allowed to embed the public wallboard in an iframe (GitHub #15).
         Route::get('settings/wall-embed', [WallEmbedSettingController::class, 'show'])->name('settings.wall-embed.show');
         Route::put('settings/wall-embed', [WallEmbedSettingController::class, 'update'])->name('settings.wall-embed.update');
+        // Single sign-on (OpenID Connect / Entra ID). The client secret is write-only.
+        Route::get('settings/sso', [SsoSettingController::class, 'show'])->name('settings.sso.show');
+        Route::put('settings/sso', [SsoSettingController::class, 'update'])->name('settings.sso.update');
+        Route::post('settings/sso/test', [SsoSettingController::class, 'test'])->middleware('throttle:10,1')->name('settings.sso.test');
     });
 
     // Is a newer release out? Cached; ?fresh=1 forces a re-check (rate-limited).

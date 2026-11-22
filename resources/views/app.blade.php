@@ -44,6 +44,11 @@
     @isset($wallToken)
         <meta name="mymate:wall-token" content="{{ $wallToken }}">
         <meta name="mymate:wall-map" content="{{ $wallMapId }}">
+    @else
+        {{-- Single sign-on is on: the login screen shows "Login with SSO" (features/auth/lib/sso.ts). --}}
+        @if(app(\App\Support\SsoSettings::class)->showLoginButton())
+            <meta name="mymate:sso" content="1">
+        @endif
     @endisset
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.tsx'])

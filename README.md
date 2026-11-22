@@ -144,6 +144,9 @@ mymate:user:create --admin
 After that, admins manage accounts inside the app under Settings. Admins can change anything,
 everyone else is read only.
 
+People can also sign in with their company account through single sign-on (Microsoft Entra ID, or
+any OpenID Connect provider), with their role set at the provider. See [SSO.md](SSO.md).
+
 ## Resetting a password
 
 An admin can reset anyone's password under Settings > Operators. If you're locked out yourself (the
@@ -187,6 +190,7 @@ running RouterOS 7 can host the agent itself, see [agent/ROUTEROS.md](agent/ROUT
 |---|---|
 | [API reference](https://mymate.network/api-docs) | Interactive REST API docs (OpenAPI 3.1, rendered with Scalar) - live on the demo |
 | [BUILD.md](BUILD.md) | Running from source and building the packages/image yourself |
+| [SSO.md](SSO.md) | Single sign-on with Microsoft Entra ID or another OpenID Connect provider |
 | [deploy/ssl/README.md](deploy/ssl/README.md) | HTTPS: Cloudflare Tunnel, reverse proxy, Let's Encrypt, own cert |
 | [deploy/rusted/README.md](deploy/rusted/README.md) | Config backups: the Rusted engine, how it's provisioned, and credentials |
 | [deploy/cmr/README.md](deploy/cmr/README.md) | The MikroTik CMR controller: setup, the port to open, pairing devices |

@@ -37,6 +37,8 @@ class User extends Authenticatable implements PasskeyUser
         'password',
         'remember_token',
         'passkey_recovery_codes', // hashes, but still never in JSON
+        'sso_issuer',
+        'sso_subject',
     ];
 
     protected $casts = [
@@ -49,6 +51,11 @@ class User extends Authenticatable implements PasskeyUser
         // account on a TV). Also a privilege - set explicitly after the admin gate, never fillable.
         'passkey_exempt' => 'boolean',
         'passkey_recovery_codes' => 'array', // hashes only (App\Support\PasskeyRecovery)
+        // Single sign-on: linked to an identity at the provider (issuer + subject). Set by
+        // ResolveSsoUser only, never fillable. Such an account may have no password at all.
+        'sso_last_login_at' => 'datetime',
+        // Switched off by an admin or by SSO (`disabled_reason`): no sessions, no API keys.
+        'disabled_at' => 'datetime',
     ];
 
     /** @var array<int>|null memoised per-request visibility sets */
@@ -57,6 +64,18 @@ class User extends Authenticatable implements PasskeyUser
     private ?array $memoDeviceIds = null;
 
     private ?bool $memoGroupRestricted = null;
+
+    /** Linked to a single sign-on identity. */
+    public function usesSso(): bool
+    {
+        return $this->sso_subject !== null;
+    }
+
+    /** Has a password, so may use the password login (SSO-created accounts don't). */
+    public function hasPassword(): bool
+    {
+        return is_string($this->password) && $this->password !== '';
+    }
 
     /** Admins can manage operator accounts; normal operators are view-only. */
     public function isAdmin(): bool

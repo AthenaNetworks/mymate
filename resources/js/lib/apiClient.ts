@@ -42,7 +42,11 @@ apiClient.interceptors.response.use(
             if (!isAuthEndpoint(url)) {
                 if (Date.now() - lastExpiredNotice > 3000) {
                     lastExpiredNotice = Date.now();
-                    pushToast({ title: 'Your session ended', detail: 'Please sign in again.', tone: 'info' });
+                    if (error?.response?.data?.code === 'account_disabled') {
+                        pushToast({ title: 'Your account has been disabled', detail: 'Ask an administrator if you need access.', tone: 'down' });
+                    } else {
+                        pushToast({ title: 'Your session ended', detail: 'Please sign in again.', tone: 'info' });
+                    }
                 }
                 return new Promise(() => {}); // never settles - the app is already showing login
             }

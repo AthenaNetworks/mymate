@@ -20,11 +20,13 @@ export interface UserInput {
     name: string;
     email?: string;
     password?: string;
+    sso_only?: boolean; // create only: no password, set up ahead of their first SSO sign-in
     is_admin: boolean;
     restricted?: boolean;
     map_ids?: number[];
     group_ids?: number[];
     passkey_exempt?: boolean;
+    disabled?: boolean; // switched off: can't sign in, sessions end, API keys refused
 }
 
 export function useSaveUser() {

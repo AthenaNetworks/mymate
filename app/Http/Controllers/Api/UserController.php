@@ -42,8 +42,11 @@ class UserController extends Controller
         $user = new User;
         $user->name = $request->validated('name');
         $user->email = $request->validated('email');
-        $user->password = $request->validated('password'); // 'hashed' cast
-        $user->is_admin = $request->boolean('is_admin'); // explicit - never mass-assigned
+        $ssoOnly = $request->boolean('sso_only');
+        // SSO-only: no password at all (null, never a hash of ''), so password sign-in is refused.
+        // Admin comes from their identity-provider role at the first sign-in, so it isn't set here.
+        $user->password = $ssoOnly ? null : $request->validated('password'); // 'hashed' cast
+        $user->is_admin = ! $ssoOnly && $request->boolean('is_admin'); // explicit - never mass-assigned
         $this->applyAccess($user, $request);
         $user->save();
         $this->syncMaps($user, $request);
@@ -53,6 +56,7 @@ class UserController extends Controller
             'actor_id' => $request->user()->id,
             'user_id' => $user->id,
             'is_admin' => $user->is_admin,
+            'sso_only' => $ssoOnly,
             'ip' => $request->ip(),
         ]);
 
@@ -65,10 +69,19 @@ class UserController extends Controller
     {
         // Lockout guard: never demote the system's last admin (would leave nobody able to
         // manage operators - a one-way trap).
-        if ($request->has('is_admin') && $user->is_admin && ! $request->boolean('is_admin') && $this->adminCount() <= 1) {
+        if ($request->has('is_admin') && $user->is_admin && ! $request->boolean('is_admin') && $user->disabled_at === null && $this->adminCount() <= 1) {
             throw ValidationException::withMessages([
                 'is_admin' => 'This is the only administrator - promote another operator before removing admin here.',
             ]);
+        }
+        // Disabling: never yourself, and never the last working administrator (same trap).
+        if ($request->boolean('disabled') && $user->disabled_at === null) {
+            if ($user->id === $request->user()->id) {
+                throw ValidationException::withMessages(['disabled' => 'You cannot disable your own account.']);
+            }
+            if ($user->is_admin && $this->adminCount() <= 1) {
+                throw ValidationException::withMessages(['disabled' => 'This is the only administrator - promote another operator before disabling this one.']);
+            }
         }
 
         if ($request->has('name')) {
@@ -85,6 +98,16 @@ class UserController extends Controller
             $user->is_admin = $request->boolean('is_admin'); // explicit - never mass-assigned
         }
         $this->applyAccess($user, $request);
+        if ($request->has('disabled')) {
+            $off = $request->boolean('disabled');
+            if ($off && $user->disabled_at === null) {
+                $user->disabled_at = now();
+                $user->disabled_reason = 'admin';
+            } elseif (! $off) {
+                $user->disabled_at = null; // lifts an SSO disable too - though the next SSO sign-in
+                $user->disabled_reason = null; // without a role will switch it off again
+            }
+        }
         $user->save();
         $this->syncMaps($user, $request);
         $this->syncGroups($user, $request);
@@ -93,6 +116,7 @@ class UserController extends Controller
             'actor_id' => $request->user()->id,
             'user_id' => $user->id,
             'is_admin' => $user->is_admin,
+            'disabled' => $user->disabled_at !== null,
             'ip' => $request->ip(),
         ]);
 
@@ -142,9 +166,10 @@ class UserController extends Controller
         return response()->noContent();
     }
 
+    /** Administrators who can actually sign in - a disabled admin can't manage anything. */
     private function adminCount(): int
     {
-        return User::query()->where('is_admin', true)->count();
+        return User::query()->where('is_admin', true)->whereNull('disabled_at')->count();
     }
 
     /**
@@ -219,6 +244,12 @@ class UserController extends Controller
             'passkey_exempt' => (bool) $user->passkey_exempt,
             'email' => $user->email,
             'created_at' => $user->created_at?->toIso8601String(),
+            // Single sign-on: linked to a provider identity; SSO-created accounts have no password.
+            'sso' => $user->usesSso(),
+            'has_password' => $user->hasPassword(),
+            'sso_last_login_at' => $user->sso_last_login_at?->toIso8601String(),
+            'disabled' => $user->disabled_at !== null,
+            'disabled_reason' => $user->disabled_reason, // 'admin' | 'sso' | null
         ];
     }
 }

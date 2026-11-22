@@ -15,6 +15,8 @@ export interface AuthUser {
     passkey_exempt?: boolean;
     passkey_stage?: PasskeyStage; // drives the post-login enrol / 2FA gate
     passkey_recovery_codes_left?: number; // one-time codes saved for a lost passkey
+    sso?: boolean; // linked to a single sign-on identity
+    has_password?: boolean; // false = created by SSO: signs in with SSO only, no password to change
 }
 
 /**
@@ -31,6 +33,12 @@ export interface Operator {
     passkey_exempt?: boolean; // excluded from a mandatory-passkey rule (wallboard/kiosk)
     email?: string;
     created_at?: string;
+    // Single sign-on + account state (admin view only).
+    sso?: boolean; // linked to an SSO identity - the admin role is re-synced from the provider at each sign-in
+    has_password?: boolean; // false = SSO-only account
+    sso_last_login_at?: string | null;
+    disabled?: boolean;
+    disabled_reason?: 'admin' | 'sso' | null;
 }
 
 /**
