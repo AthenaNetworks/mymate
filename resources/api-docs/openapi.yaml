@@ -3066,7 +3066,16 @@ components:
       description: Type-specific fields are write-only and stored encrypted.
       properties:
         name: { type: string, maxLength: 255 }
-        type: { type: string, enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty] }
+        type:
+          type: string
+          enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty]
+          description: |
+            `webhook` POSTs JSON: `text` (the human message), `source` ("mymate"), `version` (1),
+            `event` (`alert.firing`, `alert.resolved` or `test`), `instance` (this console's URL),
+            `alert` {id, dedupe_key, status, message, breach_started_at, fired_at, resolved_at, url}
+            and `policy` {id, name, condition}. `alert.dedupe_key` is stable for the life of the
+            condition; `message` can change while it fires, so pair on the key. Slack, Teams,
+            Messenger and Discord get only the text.
         enabled: { type: boolean }
         email: { type: string, format: email, description: "Required for type=email." }
         webhook_url: { type: string, format: uri, description: "Required for slack/teams/messenger/webhook/discord." }
