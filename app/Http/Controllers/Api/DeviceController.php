@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Actions\Devices\BulkUpdateDevices;
 use App\Actions\Devices\CreateDevice;
 use App\Actions\Devices\DeleteDevice;
 use App\Actions\Devices\UpdateDevice;
@@ -14,6 +15,7 @@ use App\Enums\DeviceType;
 use App\Enums\PollMethod;
 use App\Enums\UpgradeStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Device\BulkUpdateDevicesRequest;
 use App\Http\Requests\Device\StoreDeviceRequest;
 use App\Http\Requests\Device\UpdateDevicePositionRequest;
 use App\Http\Requests\Device\UpdateDeviceRequest;
@@ -269,6 +271,17 @@ class DeviceController extends Controller
         DeviceGeo::apply([$device], loadAncestors: true);
 
         return new DeviceResource($device);
+    }
+
+    /**
+     * One set of changes to many devices at once (Devices list + map multi-select). All or
+     * nothing: the request has checked every device, and the writes share one transaction.
+     */
+    public function bulkUpdate(BulkUpdateDevicesRequest $request, BulkUpdateDevices $bulkUpdate): JsonResponse
+    {
+        $updated = $bulkUpdate($request->devices(), $request->changes());
+
+        return response()->json(['data' => ['updated' => $updated]]);
     }
 
     /**

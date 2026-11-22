@@ -1,12 +1,18 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { EyeSlash, LinkBreak, TrashSimple, TreeStructure } from '@phosphor-icons/react';
+import { EyeSlash, LinkBreak, PencilSimple, TrashSimple, TreeStructure } from '@phosphor-icons/react';
 import { StatusDot } from '../../../components/StatusDot';
 import type { Device } from '../../../types';
 
 /** Where a right-click opened the menu, and on which device. The device itself is looked up
  *  live by id at render, so the menu can't outlive (or misreport) the thing it acts on. */
-export type NodeMenuState = { deviceId: number; x: number; y: number };
+export type NodeMenuState = {
+    deviceId: number;
+    x: number;
+    y: number;
+    /** Every selected device card, when the right-clicked one is part of a multi-selection (2+). */
+    selectionIds?: number[];
+};
 
 const MARGIN = 8; // keep the menu clear of the viewport edges
 
@@ -28,6 +34,8 @@ export function MapNodeMenu({
     onRemoveFromMap,
     onDelete,
     onClose,
+    selectionCount = 0,
+    onBulkEdit,
 }: {
     device: Device;
     x: number;
@@ -38,6 +46,9 @@ export function MapNodeMenu({
     onRemoveFromMap: () => void;
     onDelete: () => void;
     onClose: () => void;
+    /** How many device cards are selected along with this one; 2+ offers the bulk edit. */
+    selectionCount?: number;
+    onBulkEdit?: () => void;
 }) {
     const ref = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ x, y });
@@ -88,6 +99,16 @@ export function MapNodeMenu({
                 <p className="truncate px-2.5 pb-1.5 text-[10px] text-white/35">
                     {device.parent_name ? `Under ${device.parent_name}` : 'No parent'}
                 </p>
+
+                {selectionCount >= 2 && onBulkEdit && (
+                    <>
+                        <button onClick={run(onBulkEdit)} title="Change the same settings on every selected device" className={`${item} text-white/75`}>
+                            <PencilSimple weight="light" className="h-4 w-4 shrink-0 text-emerald-300" />
+                            <span className="flex-1">Edit {selectionCount} selected devices...</span>
+                        </button>
+                        <div className="my-1 h-px bg-white/10" />
+                    </>
+                )}
 
                 <button onClick={run(onSetParent)} className={`${item} text-white/75`}>
                     <TreeStructure weight="light" className="h-4 w-4 shrink-0 text-emerald-300" />

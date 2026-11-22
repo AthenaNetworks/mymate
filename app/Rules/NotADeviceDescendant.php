@@ -33,24 +33,36 @@ class NotADeviceDescendant implements ValidationRule
         /** @var array<int, int|null> $parents id => parent_device_id, for the whole fleet */
         $parents = Device::query()->pluck('parent_device_id', 'id')->all();
 
-        // Walk up from the *proposed* parent. Reaching the device being edited means the
-        // proposed parent is one of its own descendants. Cycle-guarded so a loop already
-        // in the data (an import, say) can't spin here.
-        $seen = [];
-        $cursor = (int) $value;
-        while (! isset($seen[$cursor])) {
-            if ($cursor === $this->deviceId) {
-                $fail($this->reason((int) $value));
+        if (self::closesLoop($parents, $this->deviceId, (int) $value)) {
+            $fail($this->reason((int) $value));
+        }
+    }
 
-                return;
+    /**
+     * Would hanging $deviceId under $parentId close a loop? Walks up from the *proposed* parent;
+     * reaching the device means the parent is the device itself or one of its own descendants.
+     * Cycle-guarded so a loop already in the data (an import, say) can't spin here. Takes the
+     * parent map so a bulk edit can load it once for every device it checks.
+     *
+     * @param  array<int, int|null>  $parents  id => parent_device_id
+     */
+    public static function closesLoop(array $parents, int $deviceId, int $parentId): bool
+    {
+        $seen = [];
+        $cursor = $parentId;
+        while (! isset($seen[$cursor])) {
+            if ($cursor === $deviceId) {
+                return true;
             }
             $seen[$cursor] = true;
             $next = $parents[$cursor] ?? null;
             if ($next === null) {
-                return; // reached a root without meeting the device - no loop
+                return false; // reached a root without meeting the device - no loop
             }
             $cursor = (int) $next;
         }
+
+        return false;
     }
 
     /** Name the conflict, so the operator knows which device is in the way. */

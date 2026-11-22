@@ -187,6 +187,10 @@ Route::middleware(['auth:sanctum', EnsurePasskeyVerified::class, RestrictWritesT
         ->middleware('throttle:10,1')->name('devices.upgrade.preflight');
     Route::post('devices/upgrade', [DeviceController::class, 'upgrade'])
         ->middleware('throttle:10,1')->name('devices.upgrade');
+    // One set of changes to many devices, all or nothing (Devices list + map multi-select).
+    // A write, so admin-only. Before the resource so `devices/bulk` isn't read as a device id.
+    Route::patch('devices/bulk', [DeviceController::class, 'bulkUpdate'])
+        ->middleware('throttle:30,1')->name('devices.bulk-update');
     // Up/down/unknown tallies for the header (GitHub #22). Also before the resource.
     Route::get('devices/stats', [DeviceController::class, 'stats'])->name('devices.stats');
     Route::get('devices/versions', [DeviceController::class, 'versions'])->name('devices.versions');

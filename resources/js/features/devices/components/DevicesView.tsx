@@ -7,6 +7,7 @@ import { useUpdateDevice } from '../api/updateDevice';
 import { useUpgradeDevices, useUpgradePreflight, type UpgradePlanRow } from '../api/upgradeDevices';
 import { DeviceForm } from './DeviceForm';
 import { DeviceEditModal } from './DeviceEditModal';
+import { BulkEditDevicesDialog } from './BulkEditDevicesDialog';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useMaps } from '../../maps/api/maps';
 import { DEFAULT_LIST_PREFS, loadListPrefs, saveListPrefs, type MapFilter } from '../lib/listPrefs';
@@ -58,6 +59,7 @@ export function DevicesView() {
     const [deleting, setDeleting] = useState<Device | null>(null);
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
     const [confirmBulkUnplace, setConfirmBulkUnplace] = useState(false);
+    const [bulkEditing, setBulkEditing] = useState(false);
 
     // Search, filters, sort and paging all happen on the server (GitHub #22) - the list only ever
     // holds one page, so it stays quick at 25k devices. They start from what this browser last
@@ -243,6 +245,14 @@ export function DevicesView() {
                                 </p>
                                 {isAdmin && selected.size > 0 && (
                                     <div className="flex flex-wrap items-center gap-2.5">
+                                        <button
+                                            onClick={() => setBulkEditing(true)}
+                                            title="Change the same settings on every selected device"
+                                            className="flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-200 ring-1 ring-emerald-400/25 transition-all duration-300 ease-fluid hover:bg-emerald-500/25 active:scale-[0.98]"
+                                        >
+                                            <PencilSimple weight="bold" className="h-3.5 w-3.5" />
+                                            Edit {selected.size}
+                                        </button>
                                         <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-white/55">
                                             <input
                                                 type="checkbox"
@@ -587,6 +597,8 @@ export function DevicesView() {
                 ))}
 
             {editing && <DeviceEditModal device={editing} onClose={() => setEditing(null)} />}
+            {/* The selection stays after a save, so a second round of changes needs no re-picking. */}
+            {bulkEditing && <BulkEditDevicesDialog deviceIds={[...selected]} onClose={() => setBulkEditing(false)} />}
 
             {confirmBulkDelete && (
                 <ConfirmDialog

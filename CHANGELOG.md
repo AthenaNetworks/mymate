@@ -40,6 +40,11 @@ of commit subjects.
 - The device panel on the right of the map can be collapsed to a slim rail, like the map tools
   panel: the rail keeps the selected device's status and name in view, and selecting another
   device opens the panel again. The setting is remembered across reloads.
+- Edit many devices at once: select devices on the Devices tab and press Edit, or right-click a
+  card in a multi-selection on the map. You can change the poll method and credentials, type,
+  monitoring, agent, parent, ping source, location and icon. Fields you leave alone stay as they
+  are on each device. It's all or nothing: if any device can't take a change (no IP for SNMP, an
+  IP clash on the new agent, a parent loop), nothing is saved and each problem is listed.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters
