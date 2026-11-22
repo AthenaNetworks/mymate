@@ -220,11 +220,15 @@ class SendAlert
                 $m->to($config['email'])->subject('My Mate alert');
             }),
             // Slack, Teams, Messenger and a generic Webhook all take an incoming webhook that
-            // accepts a {"text": ...} POST - one path for every such URL transport.
+            // accepts a {"text": ...} POST - one path for every such URL transport (Teams adds a card).
             //  SSRF hardening: re-check the target immediately before sending (closes
             // the DNS-rebinding gap since save-time validation) and never follow a redirect
             // (a validated public URL could otherwise 302 to an internal target).
-            TransportType::Slack, TransportType::Teams, TransportType::Messenger => $this->deliverWebhook($config, $message),
+            TransportType::Slack, TransportType::Messenger => $this->deliverWebhook($config, $message),
+            // Teams webhooks are Power Automate Workflows now (the Office 365 connectors are
+            // retired), and those only post an Adaptive Card. A bare {"text"} is accepted with a
+            // 2xx and then fails inside the flow, so nothing arrives (GitHub #84).
+            TransportType::Teams => $this->deliverWebhook($config, $message, extra: self::teamsCard($message)),
             // The generic Webhook also gets the structured fields (see webhookContext()).
             TransportType::Webhook => $this->deliverWebhook($config, $message, extra: $context ?? self::testContext()),
             // NOCgenie takes the same body as the generic Webhook, with its token in a header.
@@ -249,6 +253,29 @@ class SendAlert
         }
 
         Http::asJson()->withoutRedirecting()->post($url, [$key => $message] + $extra)->throw();
+    }
+
+    /**
+     * The Workflows "post to a channel when a webhook request is received" envelope: a message
+     * with one Adaptive Card attachment holding the alert text.
+     *
+     * @return array<string, mixed>
+     */
+    private static function teamsCard(string $message): array
+    {
+        return [
+            'type' => 'message',
+            'attachments' => [[
+                'contentType' => 'application/vnd.microsoft.card.adaptive',
+                'contentUrl' => null,
+                'content' => [
+                    '$schema' => 'http://adaptivecards.io/schemas/adaptive-card.json',
+                    'type' => 'AdaptiveCard',
+                    'version' => '1.2',
+                    'body' => [['type' => 'TextBlock', 'text' => $message, 'wrap' => true]],
+                ],
+            ]],
+        ];
     }
 
     /** What the Test button sends in place of an alert's structured fields. @return array<string, mixed> */

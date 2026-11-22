@@ -27,6 +27,17 @@ use App\Support\MaintenanceGuard;
  */
 class EvaluateAlerts
 {
+    /**
+     * Dedupe keys of devices that are down but suppressed as collateral (behind a down parent
+     * or a down agent) in the policy being reconciled. Suppression only stops a *new* alert:
+     * an event that is already open for one of these stays open, so the parent failing doesn't
+     * send a false recovery for the child and then a second down once the parent comes back
+     * (GitHub #86).
+     *
+     * @var array<string, true>
+     */
+    private array $stillDown = [];
+
     public function __construct(private SendAlert $sender) {}
 
     public function __invoke(): void
@@ -94,6 +105,7 @@ class EvaluateAlerts
      */
     private function reconcile(AlertPolicy $policy, MaintenanceGuard $guard, array $suppressDeviceIds = []): void
     {
+        $this->stillDown = [];
         $active = $this->activeConditions($policy);
         if ($suppressDeviceIds !== []) {
             $active = $this->dropClaimedDevices($active, $suppressDeviceIds);
@@ -170,6 +182,14 @@ class EvaluateAlerts
             // Under maintenance: leave the event frozen rather than resolving it (a recovery
             // that lands during planned work isn't a real recovery yet, and mustn't notify).
             if ($this->coveredByMaintenance($key, $guard)) {
+                continue;
+            }
+            // Still down, just suppressed behind its parent or agent: not a recovery.
+            if (isset($this->stillDown[$key])) {
+                if ($event->status === 'resolving') {
+                    $event->update(['status' => 'firing', 'recovery_started_at' => null]);
+                }
+
                 continue;
             }
             if ($event->status === 'pending') {
@@ -485,9 +505,13 @@ class EvaluateAlerts
                 continue;
             }
             if ($suppressDependent && $hasDownAncestor($d->id)) {
+                $this->stillDown["device:{$d->id}"] = true;
+
                 continue;
             }
             if ($suppressDependent && $d->agent_id !== null && isset($downAgentIds[$d->agent_id])) {
+                $this->stillDown["device:{$d->id}"] = true;
+
                 continue; // rolled up into the agent-down alert
             }
             $out["device:{$d->id}"] = 'Device '.self::label($d->name, $d->mgmt_ip).' is down.';
