@@ -80,6 +80,9 @@ of commit subjects.
   falls back to the default for that value instead of being stored as-is.
 - Notes on the public wallboard's map view ignored their background colour and size and always
   showed with the default look. They now match the map.
+- Devices and notes inside a multi-selection on the map can be clicked and right-clicked again;
+  the selection box no longer sits on top of them. Drag the group by any selected card or the
+  space between them, as before.
 - Docker on any port other than 443 (the default 9443 included) showed a blank page: Debian's
   latest nginx passes the Host to PHP without its port, so the asset URLs lost it and the browser
   blocked them. Every shipped nginx config now passes the Host the browser used (#62).
