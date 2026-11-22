@@ -43,7 +43,7 @@ func (p *Poller) discoverDevice(t proto.SNMPTarget) *proto.DeviceDiscovery {
 	if len(ifaces) == 0 && facts == nil {
 		return nil
 	}
-	return &proto.DeviceDiscovery{DeviceID: t.DeviceID, Interfaces: ifaces, Facts: facts}
+	return &proto.DeviceDiscovery{DeviceID: t.DeviceID, Interfaces: ifaces, Facts: facts, Neighbors: walkNeighbors(g)}
 }
 
 // walkInterfaces builds one DiscoveredIface per ifTable row (keyed by ifIndex).

@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\InterfaceController;
 use App\Http\Controllers\Api\InterfaceSampleController;
 use App\Http\Controllers\Api\LibreNmsImportController;
 use App\Http\Controllers\Api\LinkController;
+use App\Http\Controllers\Api\LinkSuggestionController;
 use App\Http\Controllers\Api\MailSettingController;
 use App\Http\Controllers\Api\MaintenanceWindowController;
 use App\Http\Controllers\Api\MapBackgroundController;
@@ -495,4 +496,11 @@ Route::middleware(['auth:sanctum', EnsureAccountActive::class, EnsurePasskeyVeri
         ->name('discovery-candidates.ignore');
     Route::post('discovery-candidates/{candidate}/restore', [DiscoveryCandidateController::class, 'restore'])
         ->name('discovery-candidates.restore');
+
+    // Suggested links from LLDP / CDP / MNDP neighbours (#85).
+    Route::get('link-suggestions', [LinkSuggestionController::class, 'index'])->name('link-suggestions.index');
+    Route::post('link-suggestions/accept-all', [LinkSuggestionController::class, 'acceptAll'])->name('link-suggestions.accept-all');
+    Route::post('link-suggestions/{suggestion}/accept', [LinkSuggestionController::class, 'accept'])->name('link-suggestions.accept');
+    Route::post('link-suggestions/{suggestion}/ignore', [LinkSuggestionController::class, 'ignore'])->name('link-suggestions.ignore');
+    Route::post('link-suggestions/{suggestion}/restore', [LinkSuggestionController::class, 'restore'])->name('link-suggestions.restore');
 });

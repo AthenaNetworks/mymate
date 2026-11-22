@@ -970,6 +970,73 @@ paths:
                 type: object
                 properties: { data: { $ref: "#/components/schemas/DiscoveryCandidate" } }
 
+  /link-suggestions:
+    get:
+      tags: [Discovery]
+      summary: List suggested links
+      description: Links neighbour discovery (LLDP, CDP, MikroTik MNDP) found between known devices. Ones an existing link already covers are left out. Not available to restricted operators.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [new, ignored], default: new }
+      responses:
+        "200":
+          description: Suggestions, most recently seen first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/LinkSuggestion" }
+  /link-suggestions/accept-all:
+    post:
+      tags: [Discovery]
+      summary: Accept every new suggestion
+      description: Admin only.
+      responses:
+        "200":
+          description: How many links were drawn.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { type: object, properties: { created: { type: integer } } } }
+  /link-suggestions/{suggestion}/accept:
+    parameters: [ { name: suggestion, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Discovery]
+      summary: Accept a suggestion (draw the link)
+      description: "Admin only. Returns `data: null` with 200 when a link drawn since already covers it."
+      responses:
+        "201":
+          description: The new link.
+  /link-suggestions/{suggestion}/ignore:
+    parameters: [ { name: suggestion, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Discovery]
+      summary: Ignore a suggestion
+      description: Admin only. It stays ignored when it's seen again.
+      responses:
+        "200":
+          description: Updated suggestion.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { data: { $ref: "#/components/schemas/LinkSuggestion" } }
+  /link-suggestions/{suggestion}/restore:
+    parameters: [ { name: suggestion, in: path, required: true, schema: { type: integer } } ]
+    post:
+      tags: [Discovery]
+      summary: Restore an ignored suggestion
+      description: Admin only.
+      responses:
+        "200":
+          description: Updated suggestion.
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   # ------------------------------------------------------------------ Imports
   /imports:
     get:
@@ -2792,6 +2859,23 @@ components:
         enabled: { type: boolean }
         scope: { $ref: "#/components/schemas/Scope" }
 
+    LinkSuggestionEnd:
+      type: object
+      properties:
+        device_id: { type: integer }
+        device_name: { type: string }
+        interface_id: { type: integer, nullable: true }
+        interface_name: { type: string, nullable: true, description: "Null when the port couldn't be matched." }
+    LinkSuggestion:
+      type: object
+      properties:
+        id: { type: integer }
+        a: { $ref: "#/components/schemas/LinkSuggestionEnd" }
+        b: { $ref: "#/components/schemas/LinkSuggestionEnd" }
+        protocol: { type: string, enum: [lldp, cdp, mndp] }
+        status: { type: string, enum: [new, ignored] }
+        first_seen_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
     DiscoveryCandidate:
       type: object
       properties:

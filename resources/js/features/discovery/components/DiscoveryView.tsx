@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Broadcast, MagnifyingGlass } from '@phosphor-icons/react';
 import { SubnetManager } from './SubnetManager';
 import { CandidateReview } from './CandidateReview';
+import { LinkSuggestions } from './LinkSuggestions';
 import { useSubnets } from '../api/getSubnets';
 
 /**
@@ -34,7 +35,7 @@ export function DiscoveryView() {
                     </span>
                     <div>
                         <h1 className="text-base font-bold tracking-tight text-white">Auto-discovery</h1>
-                        <p className="text-xs text-white/40">Scan subnets - review found devices</p>
+                        <p className="text-xs text-white/40">Scan subnets - review found devices and links</p>
                     </div>
                 </header>
 
@@ -75,8 +76,13 @@ export function DiscoveryView() {
                     <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06] lg:sticky lg:top-0">
                         <SubnetManager scanning={scanning} setScanning={setScanning} />
                     </div>
-                    <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
-                        <CandidateReview open scanning={anyScanning} />
+                    <div className="space-y-6">
+                        <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
+                            <CandidateReview open scanning={anyScanning} />
+                        </div>
+                        <div className="rounded-2xl bg-white/[0.02] p-4 ring-1 ring-white/[0.06]">
+                            <LinkSuggestions />
+                        </div>
                     </div>
                 </div>
             </div>

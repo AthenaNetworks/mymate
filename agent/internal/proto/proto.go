@@ -22,6 +22,10 @@ type Hello struct {
 // CapUpgrade: the agent can be upgraded remotely (it has a writable state directory).
 const CapUpgrade = "upgrade"
 
+// CapNeighbors: a Discover pass also reads the LLDP / CDP / RouterOS neighbour tables and sends
+// them as DeviceDiscovery.Neighbors (#85). Informational: nothing is sent to ask for it.
+const CapNeighbors = "neighbors"
+
 // Upgrade (server -> agent, type "upgrade") asks the agent to upgrade itself to Version. Only
 // sent to agents that report CapUpgrade. Path is a hub path (/agent/binary/...) on the agent's own
 // server; SHA256 and Size are of the binary itself.
@@ -365,6 +369,20 @@ type DeviceDiscovery struct {
 	Interfaces    []DiscoveredIface `json:"interfaces"`
 	Facts         *DeviceFacts      `json:"facts,omitempty"`
 	RouterOSFacts *RouterOSFacts    `json:"routeros_facts,omitempty"`
+	// Neighbors: the raw neighbour tables for link suggestions (#85). Nil when the device has
+	// none; older agents never send it and older servers ignore it.
+	Neighbors *NeighborTables `json:"neighbors,omitempty"`
+}
+
+// NeighborTables is a device's neighbour tables, raw: the server does all the parsing and
+// matching (App\Services\Neighbors\NeighborTables), so the agent only knows which OIDs to read.
+// Walks is column OID -> row index -> value and Scalars OID -> value. A binary octet string (a
+// chassis MAC, a CDP address) is sent as "hex:<hex>", since raw bytes don't survive JSON.
+// RouterOS is the rows of /ip/neighbor/print for a RouterOS-API device.
+type NeighborTables struct {
+	Walks    map[string]map[string]string `json:"walks,omitempty"`
+	Scalars  map[string]string            `json:"scalars,omitempty"`
+	RouterOS []map[string]string          `json:"routeros,omitempty"`
 }
 
 // RouterOSFacts is the raw RouterOS-API facts the server needs to derive model/serial/version/geo.
