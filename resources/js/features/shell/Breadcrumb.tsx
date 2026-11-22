@@ -1,25 +1,23 @@
 import { displayName } from '../../lib/deviceName';
-import { setView, useActiveMapId, useView } from '../../lib/shellStore';
-import { useMaps } from '../maps/api/maps';
+import { setView, useView } from '../../lib/shellStore';
 import { useDevice } from '../devices/api/getDevices';
 import { parseDeviceRoute, useLocationHref } from '../device-page/lib/location';
 import { viewLabel } from './NavRail';
 
 /**
- * Where you are, in the top bar: the page, then what it's showing - the open map on the map
- * and geo views, the device on a device page (whose "Devices" goes back to the list).
+ * Where you are, in the top bar: the page, then the device on a device page (whose "Devices"
+ * goes back to the list).
  */
 export function Breadcrumb() {
     const view = useView();
     const href = useLocationHref();
-    const activeMapId = useActiveMapId();
-    const onMap = view === 'map' || view === 'geo';
-    const { data: maps } = useMaps();
     const deviceId = view === 'device' ? parseDeviceRoute(href).deviceId : null;
     const { data: device } = useDevice(deviceId);
 
     const label = viewLabel(view);
-    const detail = onMap ? maps?.find((m) => m.id === activeMapId)?.name : view === 'device' && device ? displayName(device) : undefined;
+    // On the map and geo views the open map's name is already in the map's own toolbar (the
+    // switcher), so only the page is named here.
+    const detail = view === 'device' && device ? displayName(device) : undefined;
     if (!label) return null;
 
     return (

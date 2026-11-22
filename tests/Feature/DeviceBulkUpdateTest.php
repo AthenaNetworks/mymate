@@ -43,6 +43,15 @@ class DeviceBulkUpdateTest extends TestCase
         $this->assertDatabaseHas('devices', ['id' => $other->id, 'device_type' => 'unknown', 'monitored' => true, 'icon' => null]);
     }
 
+    public function test_an_ip_taken_by_a_concurrent_edit_is_a_422_not_a_500(): void
+    {
+        $d = Device::factory()->create();
+        $this->mock(\App\Actions\Devices\BulkUpdateDevices::class, fn ($m) => $m->shouldReceive('__invoke')
+            ->andThrow(new \Illuminate\Database\UniqueConstraintViolationException('pgsql', 'update devices', [], new \Exception('duplicate key'))));
+
+        $this->bulk([$d->id], ['monitored' => false])->assertStatus(422)->assertJsonValidationErrors('mgmt_ip');
+    }
+
     public function test_only_the_fields_sent_are_changed(): void
     {
         $d = Device::factory()->create(['name' => 'Keep', 'device_type' => DeviceType::Router, 'icon' => 'switch']);

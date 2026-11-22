@@ -164,4 +164,14 @@ class MapExportImportTest extends TestCase
             $this->assertNull($note->longitude);
         }
     }
+
+    public function test_an_imported_note_is_cut_to_the_notes_api_limit(): void
+    {
+        $newId = $this->postJson('/api/maps/import', [
+            'map' => ['name' => 'Long note'],
+            'notes' => [['text' => str_repeat('a', 2000)]],
+        ])->assertCreated()->json('data.id');
+
+        $this->assertSame(500, mb_strlen(MapNote::where('map_id', $newId)->sole()->text));
+    }
 }

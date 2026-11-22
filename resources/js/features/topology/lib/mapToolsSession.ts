@@ -12,8 +12,10 @@ import { useSyncExternalStore } from 'react';
  */
 
 /** How long a placed device counts as "just placed". Covers the add round-trip + the refetch that
- * draws the card, plus the flash animation itself (see .animate-placed in app.css). */
-const FLASH_MS = 2500;
+ * draws the card, plus the flash animation itself (see .animate-placed in app.css). The animation
+ * runs once when the card mounts, so a generous window costs nothing and a slow refetch still
+ * gets the whole glow. */
+const FLASH_MS = 6000;
 
 let search = '';
 let flashing: ReadonlySet<number> = new Set();

@@ -91,7 +91,7 @@ class ImportMap
             foreach ($data['notes'] ?? [] as $n) {
                 [$lat, $lng] = $this->geoPair($n['latitude'] ?? null, $n['longitude'] ?? null);
                 $map->mapNotes()->create([
-                    'text' => (string) ($n['text'] ?? ''),
+                    'text' => mb_substr((string) ($n['text'] ?? ''), 0, 500), // the notes API's limit
                     'x' => (float) ($n['x'] ?? 0), 'y' => (float) ($n['y'] ?? 0),
                     'color' => $this->hexColor($n['color'] ?? null),
                     'background' => $this->hexColor($n['background'] ?? null),

@@ -110,7 +110,11 @@ of commit subjects.
   demotes or disables the last administrator, provider requests don't follow redirects, and
   `mymate:user:admin` re-enables a disabled account as a way back in.
 - Clicking the device that's already selected unfolds a collapsed device inspector, and the top
-  bar breadcrumb shows a device's alias like the rest of the app.
+  bar breadcrumb shows a device's alias like the rest of the app. On the map it no longer repeats
+  the map's name, which the map toolbar already shows.
+- Bulk edit returns a clear error instead of a server error when another edit takes one of the
+  management IPs at the same moment, and a map import cuts note text to the 500-character limit.
+- A device placed from Map tools gets its full glow even when the map is slow to redraw it.
 - A PNG exported from the Graphs page now includes the graph's title, the time window and the
   colour key under the chart, the same as the device page charts.
 - Teams alerts arrive again on Workflows webhooks (the Office 365 connectors are retired).

@@ -27,12 +27,14 @@ use App\Jobs\UpgradeDeviceJob;
 use App\Models\Device;
 use App\Support\DeviceGeo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class DeviceController extends Controller
 {
@@ -279,7 +281,12 @@ class DeviceController extends Controller
      */
     public function bulkUpdate(BulkUpdateDevicesRequest $request, BulkUpdateDevices $bulkUpdate): JsonResponse
     {
-        $updated = $bulkUpdate($request->devices(), $request->changes());
+        try {
+            $updated = $bulkUpdate($request->devices(), $request->changes());
+        } catch (UniqueConstraintViolationException) {
+            // Another edit took one of these addresses between the checks and the writes.
+            throw ValidationException::withMessages(['mgmt_ip' => 'Another device took one of these management IPs while you were editing. Reload and try again.']);
+        }
 
         return response()->json(['data' => ['updated' => $updated]]);
     }
