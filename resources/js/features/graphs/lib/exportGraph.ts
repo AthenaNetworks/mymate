@@ -118,7 +118,9 @@ function compose(img: HTMLImageElement, width: number, height: number, scale: nu
 
     const innerW = Math.max(width, legendW);
     const titleH = extras.title ? (extras.subtitle ? 42 : 26) : 0;
-    const legendH = legend ? 8 + rowH * (legend.rows.length + 1) : 0;
+    // a plain key (no stat columns, as on the Graphs page) has no header row
+    const header = legend !== null && legend.columns.length > 0;
+    const legendH = legend ? 8 + rowH * (legend.rows.length + (header ? 1 : 0)) : 0;
     const W = innerW + PAD * 2;
     const H = PAD + titleH + height + legendH + PAD;
 
@@ -152,17 +154,19 @@ function compose(img: HTMLImageElement, width: number, height: number, scale: nu
     if (legend) {
         y += 8;
         ctx.textBaseline = 'middle';
-        ctx.textAlign = 'right';
-        ctx.font = `500 10px ${font}`;
-        ctx.fillStyle = tone(0.35);
-        if ('letterSpacing' in ctx) ctx.letterSpacing = '1.2px';
         let x = PAD + labelW;
-        legend.columns.forEach((c, i) => {
-            x += colW[i];
-            ctx.fillText(c.label.toUpperCase(), x - 8, y + rowH / 2);
-        });
-        if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-        y += rowH;
+        if (header) {
+            ctx.textAlign = 'right';
+            ctx.font = `500 10px ${font}`;
+            ctx.fillStyle = tone(0.35);
+            if ('letterSpacing' in ctx) ctx.letterSpacing = '1.2px';
+            legend.columns.forEach((c, i) => {
+                x += colW[i];
+                ctx.fillText(c.label.toUpperCase(), x - 8, y + rowH / 2);
+            });
+            if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+            y += rowH;
+        }
 
         for (const r of legend.rows) {
             const mid = y + rowH / 2;
