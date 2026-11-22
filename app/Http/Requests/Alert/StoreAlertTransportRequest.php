@@ -32,6 +32,9 @@ class StoreAlertTransportRequest extends FormRequest
             'telegram_chat_id' => ['nullable', 'string', 'max:64', 'required_if:type,telegram'],
             // PagerDuty Events API routing key (fixed host).
             'pagerduty_key' => ['nullable', 'string', 'max:255', 'required_if:type,pagerduty'],
+            // NOCgenie integration token; the URL is only for a self-hosted NOCgenie (blank = hosted).
+            'nocgenie_token' => ['nullable', 'string', 'max:255', 'required_if:type,nocgenie'],
+            'nocgenie_url' => ['nullable', 'url', new SafeOutboundUrl],
         ];
     }
 }

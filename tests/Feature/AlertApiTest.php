@@ -195,6 +195,37 @@ class AlertApiTest extends TestCase
             ->assertStatus(422)->assertJsonValidationErrors('pagerduty_key');
     }
 
+    public function test_nocgenie_transport_needs_a_token_and_keeps_it_when_only_the_url_changes(): void
+    {
+        $this->actingAsUser();
+
+        $this->postJson('/api/alert-transports', ['name' => 'NG', 'type' => 'nocgenie'])
+            ->assertStatus(422)->assertJsonValidationErrors('nocgenie_token');
+
+        $id = $this->postJson('/api/alert-transports', ['name' => 'NG', 'type' => 'nocgenie', 'nocgenie_token' => 'NGTOKEN'])
+            ->assertCreated()->assertJsonPath('data.type', 'nocgenie')
+            ->assertJsonMissingPath('data.config')->json('data.id');
+        $this->assertSame(['nocgenie_token' => 'NGTOKEN', 'nocgenie_url' => null], AlertTransport::findOrFail($id)->config);
+
+        // The edit form leaves the token blank to keep it.
+        $this->putJson("/api/alert-transports/{$id}", ['nocgenie_url' => 'https://noc.example.test'])->assertOk();
+        $this->assertSame(['nocgenie_token' => 'NGTOKEN', 'nocgenie_url' => 'https://noc.example.test'], AlertTransport::findOrFail($id)->config);
+
+        $this->putJson("/api/alert-transports/{$id}", ['nocgenie_token' => 'NEW'])->assertOk();
+        $this->assertSame(['nocgenie_token' => 'NEW', 'nocgenie_url' => 'https://noc.example.test'], AlertTransport::findOrFail($id)->config);
+    }
+
+    public function test_a_nocgenie_test_send_says_why_it_was_refused(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'Unknown token.'], 404)]);
+        $this->actingAsUser();
+        $transport = AlertTransport::factory()->create(['type' => 'nocgenie', 'config' => ['nocgenie_token' => 'T']]);
+
+        $this->postJson("/api/alert-transports/{$transport->id}/test")
+            ->assertStatus(422)->assertJsonPath('ok', false)
+            ->assertJsonPath('error', 'NOCgenie rejected the integration token (missing, unknown or disabled).');
+    }
+
     public function test_transport_create_never_leaks_or_stores_plaintext_config(): void
     {
         $this->actingAsUser();

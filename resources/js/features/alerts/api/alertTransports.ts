@@ -23,6 +23,8 @@ export interface AlertTransportInput {
     telegram_token?: string;
     telegram_chat_id?: string;
     pagerduty_key?: string;
+    nocgenie_token?: string;
+    nocgenie_url?: string;
     enabled?: boolean;
 }
 

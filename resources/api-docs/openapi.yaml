@@ -3058,7 +3058,7 @@ components:
       properties:
         id: { type: integer }
         name: { type: string }
-        type: { type: string, enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty] }
+        type: { type: string, enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty, nocgenie] }
         enabled: { type: boolean }
     AlertTransportWrite:
       type: object
@@ -3068,20 +3068,25 @@ components:
         name: { type: string, maxLength: 255 }
         type:
           type: string
-          enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty]
+          enum: [email, slack, teams, messenger, webhook, discord, telegram, pagerduty, nocgenie]
           description: |
             `webhook` POSTs JSON: `text` (the human message), `source` ("mymate"), `version` (1),
             `event` (`alert.firing`, `alert.resolved` or `test`), `instance` (this console's URL),
             `alert` {id, dedupe_key, status, message, breach_started_at, fired_at, resolved_at, url}
-            and `policy` {id, name, condition}. `alert.dedupe_key` is stable for the life of the
-            condition; `message` can change while it fires, so pair on the key. Slack, Teams,
-            Messenger and Discord get only the text.
+            and `policy` {id, name, condition}. An alert about one device also carries `device`
+            {id, name, mgmt_ip, type, vendor, model, site, url}, `interface` {name} for a port, and
+            `sustained_minutes`. `alert.dedupe_key` is stable for the life of the
+            condition; `message` can change while it fires, so pair on the key. `nocgenie` POSTs
+            the same body to `<nocgenie_url>/api/v1/inbound` with the token in `X-NOCgenie-Token`,
+            from a queued job that retries a 5xx, 429 or dropped connection for about 20 minutes. Slack, Teams, Messenger and Discord get only the text.
         enabled: { type: boolean }
         email: { type: string, format: email, description: "Required for type=email." }
         webhook_url: { type: string, format: uri, description: "Required for slack/teams/messenger/webhook/discord." }
         telegram_token: { type: string, description: "Required for type=telegram." }
         telegram_chat_id: { type: string, description: "Required for type=telegram." }
         pagerduty_key: { type: string, description: "Required for type=pagerduty." }
+        nocgenie_token: { type: string, description: "Required for type=nocgenie. The token from NOCgenie's My Mate integration." }
+        nocgenie_url: { type: string, format: uri, description: "type=nocgenie only: a self-hosted NOCgenie. Blank means https://app.nocgenie.com." }
 
     MaintenanceWindow:
       type: object

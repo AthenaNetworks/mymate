@@ -31,6 +31,8 @@ class UpdateAlertTransportRequest extends FormRequest
             'telegram_token' => ['nullable', 'string', 'max:255'],
             'telegram_chat_id' => ['nullable', 'string', 'max:64'],
             'pagerduty_key' => ['nullable', 'string', 'max:255'],
+            'nocgenie_token' => ['nullable', 'string', 'max:255'],
+            'nocgenie_url' => ['nullable', 'url', new SafeOutboundUrl],
         ];
     }
 }
