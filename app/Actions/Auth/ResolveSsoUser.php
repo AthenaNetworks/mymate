@@ -47,7 +47,10 @@ class ResolveSsoUser
         if (! $isAdmin && ! $isOperator) {
             // Outside any transaction: the disable must stick even though the sign-in then fails.
             $linked = User::where('sso_issuer', $issuer)->where('sso_subject', $subject)->whereNull('disabled_at')->first();
-            if ($linked !== null) {
+            if ($linked !== null && $this->isLastAdmin($linked)) {
+                // Never lock out the only working administrator from the provider side.
+                EngineLog::warning('auth: sso left the last administrator enabled - no My Mate role', ['user_id' => $linked->id]);
+            } elseif ($linked !== null) {
                 $linked->forceFill(['disabled_at' => now(), 'disabled_reason' => 'sso'])->save();
                 EngineLog::warning('auth: sso account disabled - no My Mate role', ['user_id' => $linked->id]);
             }
@@ -68,6 +71,11 @@ class ResolveSsoUser
                 if ($user !== null && $user->sso_subject !== null) {
                     // Same email, but already linked to a different identity - never re-point it.
                     throw new SsoException('email_conflict', "{$email} is already linked to another SSO identity");
+                }
+                // An account with a password predates SSO, so taking it over needs the provider to
+                // vouch for the email. A prepared SSO-only account was made for this sign-in.
+                if ($user !== null && $user->hasPassword() && ! $this->emailVerified($claims)) {
+                    throw new SsoException('email_unverified', "{$email} matches an existing account but the provider didn't mark the email verified");
                 }
                 if ($user === null) {
                     $user = new User;
@@ -94,12 +102,17 @@ class ResolveSsoUser
                 $user->name = $email;
             }
             // Follow an email change at the provider, unless another account already has it.
-            if (! $created && $email !== null && strtolower((string) $user->email) !== $email
+            if (! $created && $email !== null && strtolower((string) $user->email) !== $email && $this->emailVerified($claims)
                 && ! User::whereRaw('lower(email) = ?', [$email])->whereKeyNot($user->id)->exists()) {
                 $user->email = $email;
             }
 
             $wasAdmin = (bool) $user->is_admin;
+            if ($wasAdmin && ! $isAdmin && $this->isLastAdmin($user)) {
+                // The role went at the provider, but demoting would leave nobody to manage My Mate.
+                $isAdmin = true;
+                EngineLog::warning('auth: sso kept the last administrator as admin', ['user_id' => $user->id]);
+            }
             $user->is_admin = $isAdmin; // explicit - never mass-assigned
             if ($isAdmin) {
                 $user->restricted = false;
@@ -127,6 +140,24 @@ class ResolveSsoUser
 
             return $user;
         });
+    }
+
+    /** The only enabled administrator, so losing admin or being disabled would lock everyone out. */
+    private function isLastAdmin(User $user): bool
+    {
+        return $user->is_admin && $user->disabled_at === null
+            && User::where('is_admin', true)->whereNull('disabled_at')->whereKeyNot($user->id)->doesntExist();
+    }
+
+    /**
+     * The provider vouches for the email: `email_verified` (standard OIDC), or Entra's optional
+     * `xms_edov` claim (Entra doesn't send email_verified).
+     *
+     * @param  array<string,mixed>  $claims
+     */
+    private function emailVerified(array $claims): bool
+    {
+        return ($claims['email_verified'] ?? null) === true || ($claims['xms_edov'] ?? null) === true;
     }
 
     /**

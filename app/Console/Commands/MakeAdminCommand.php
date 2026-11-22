@@ -9,7 +9,8 @@ use Illuminate\Console\Command;
  * Grant (or revoke) admin rights on an existing operator by email:
  * `php artisan mymate:user:admin someone@example.com`. Admin = operator-management
  * rights; `is_admin` is not mass-assignable, so this is the supported way to flip it
- * from the CLI. Use `--revoke` to demote back to a normal (view-only) operator.
+ * from the CLI. Use `--revoke` to demote back to a normal (view-only) operator. Granting also
+ * re-enables a disabled account, so this is the way back in if every administrator got disabled.
  */
 class MakeAdminCommand extends Command
 {
@@ -30,7 +31,13 @@ class MakeAdminCommand extends Command
 
         $grant = ! $this->option('revoke');
 
+        if ($grant && $user->disabled_at !== null) {
+            $user->forceFill(['disabled_at' => null, 'disabled_reason' => null]);
+            $this->info("{$email} was disabled and is enabled again.");
+        }
+
         if ($user->is_admin === $grant) {
+            $user->save();
             $this->info("{$email} is already ".($grant ? 'an admin' : 'a normal operator').'. Nothing to do.');
 
             return self::SUCCESS;

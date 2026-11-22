@@ -1,3 +1,4 @@
+import { displayName } from '../../lib/deviceName';
 import { setView, useActiveMapId, useView } from '../../lib/shellStore';
 import { useMaps } from '../maps/api/maps';
 import { useDevice } from '../devices/api/getDevices';
@@ -18,7 +19,7 @@ export function Breadcrumb() {
     const { data: device } = useDevice(deviceId);
 
     const label = viewLabel(view);
-    const detail = onMap ? maps?.find((m) => m.id === activeMapId)?.name : view === 'device' ? device?.name : undefined;
+    const detail = onMap ? maps?.find((m) => m.id === activeMapId)?.name : view === 'device' && device ? displayName(device) : undefined;
     if (!label) return null;
 
     return (

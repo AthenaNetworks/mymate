@@ -160,6 +160,7 @@ class SsoTest extends TestCase
     public function test_the_admin_role_makes_an_administrator_and_losing_it_demotes(): void
     {
         $this->enable();
+        User::factory()->create(['is_admin' => true]); // another admin, so this one isn't the last
 
         $this->ssoCallback($this->claims(['roles' => ['MyMate.Admin']]))->assertRedirect('/');
         $user = User::where('email', 'pat@yourco.com')->firstOrFail();
@@ -214,7 +215,7 @@ class SsoTest extends TestCase
         $this->enable();
         $local = User::factory()->create(['email' => 'pat@yourco.com', 'password' => 'Local-password-1']);
 
-        $this->ssoCallback($this->claims(['preferred_username' => 'PAT@yourco.com']))->assertRedirect('/');
+        $this->ssoCallback($this->claims(['preferred_username' => 'PAT@yourco.com', 'email_verified' => true]))->assertRedirect('/');
         $local->refresh();
         $this->assertAuthenticatedAs($local);
         $this->assertSame('11111111-2222-3333-4444-555555555555', $local->sso_subject);
@@ -223,10 +224,84 @@ class SsoTest extends TestCase
 
         // The email changes at the provider: still the same account (matched by oid), email follows.
         auth()->guard('web')->logout();
-        $this->ssoCallback($this->claims(['preferred_username' => 'pat.example@yourco.com']))->assertRedirect('/');
+        $this->ssoCallback($this->claims(['preferred_username' => 'pat.example@yourco.com', 'email_verified' => true]))->assertRedirect('/');
         $this->assertAuthenticatedAs($local);
         $this->assertSame('pat.example@yourco.com', $local->fresh()->email);
         $this->assertSame(1, User::count());
+    }
+
+    public function test_an_account_with_a_password_is_not_linked_on_an_unverified_email(): void
+    {
+        // Someone who can set their email at the provider mustn't take over a local admin.
+        $this->enable();
+        $local = User::factory()->create(['email' => 'pat@yourco.com', 'password' => 'Local-password-1', 'is_admin' => true]);
+
+        $this->ssoCallback($this->claims(['roles' => ['MyMate.Admin']]))->assertRedirect('/?sso_error=email_unverified');
+        $this->assertGuest();
+        $this->assertNull($local->fresh()->sso_subject);
+
+        // Entra's optional xms_edov claim counts as verified.
+        $this->ssoCallback($this->claims(['xms_edov' => true]))->assertRedirect('/');
+        $this->assertAuthenticatedAs($local);
+    }
+
+    public function test_an_unverified_email_change_at_the_provider_is_not_followed(): void
+    {
+        $this->enable();
+        $this->ssoCallback($this->claims())->assertRedirect('/');
+        $user = User::where('email', 'pat@yourco.com')->firstOrFail();
+        auth()->guard('web')->logout();
+
+        $this->ssoCallback($this->claims(['preferred_username' => 'boss@yourco.com']))->assertRedirect('/');
+        $this->assertSame('pat@yourco.com', $user->fresh()->email);
+    }
+
+    public function test_sso_never_demotes_or_disables_the_last_administrator(): void
+    {
+        $this->enable();
+        $this->ssoCallback($this->claims(['roles' => ['MyMate.Admin']]))->assertRedirect('/');
+        $admin = User::where('email', 'pat@yourco.com')->firstOrFail();
+        auth()->guard('web')->logout();
+
+        $this->ssoCallback($this->claims(['roles' => ['MyMate.Operator']]))->assertRedirect('/');
+        $this->assertTrue($admin->fresh()->is_admin);
+        auth()->guard('web')->logout();
+
+        $this->ssoCallback($this->claims(['roles' => []]))->assertRedirect('/?sso_error=no_role');
+        $this->assertNull($admin->fresh()->disabled_at);
+    }
+
+    public function test_the_admin_command_re_enables_a_disabled_account(): void
+    {
+        $user = User::factory()->create(['email' => 'pat@yourco.com', 'is_admin' => true]);
+        $user->forceFill(['disabled_at' => now(), 'disabled_reason' => 'sso'])->save();
+
+        $this->artisan('mymate:user:admin', ['email' => 'pat@yourco.com'])->assertSuccessful();
+
+        $this->assertNull($user->fresh()->disabled_at);
+        $this->assertTrue($user->fresh()->is_admin);
+    }
+
+    public function test_the_provider_is_never_followed_through_a_redirect(): void
+    {
+        $this->actingAsUser();
+        $this->enable(['issuer' => 'https://bouncer.example.test']);
+        Http::fake(['bouncer.example.test/*' => Http::response('', 302, ['Location' => 'http://169.254.169.254/latest/meta-data/'])]);
+
+        $this->postJson('/api/settings/sso/test')->assertStatus(422)->assertJsonPath('ok', false);
+
+        Http::assertNotSent(fn ($r) => str_contains($r->url(), '169.254.169.254'));
+    }
+
+    public function test_an_unreachable_provider_error_carries_no_response_body(): void
+    {
+        $this->actingAsUser();
+        $this->enable(['issuer' => 'https://nowhere.example.test']);
+
+        $message = $this->postJson('/api/settings/sso/test')->assertStatus(422)->json('message');
+
+        $this->assertStringContainsString('HTTP 503', $message);
+        $this->assertStringNotContainsString('down', $message);
     }
 
     public function test_an_email_already_linked_to_another_identity_is_refused(): void

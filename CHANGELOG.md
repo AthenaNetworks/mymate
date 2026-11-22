@@ -105,6 +105,12 @@ of commit subjects.
   device; a name that still doesn't fit shows in full on hover.
 
 ### Fixed
+- Single sign-on hardening before release: an existing account with a password is only linked
+  when the provider marks the email verified (`email_verified`, or Entra's `xms_edov`), SSO never
+  demotes or disables the last administrator, provider requests don't follow redirects, and
+  `mymate:user:admin` re-enables a disabled account as a way back in.
+- Clicking the device that's already selected unfolds a collapsed device inspector, and the top
+  bar breadcrumb shows a device's alias like the rest of the app.
 - A PNG exported from the Graphs page now includes the graph's title, the time window and the
   colour key under the chart, the same as the device page charts.
 - Teams alerts arrive again on Workflows webhooks (the Office 365 connectors are retired).

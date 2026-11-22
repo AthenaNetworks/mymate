@@ -5,6 +5,7 @@ namespace App\Services\Sso;
 use App\Support\OutboundHostGuard;
 use App\Support\SsoSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -42,9 +43,11 @@ class OidcClient
             $url = $issuer.'/.well-known/openid-configuration';
             $this->guard($url);
             try {
-                $doc = Http::timeout(self::TIMEOUT)->acceptJson()->get($url)->throw()->json();
+                $doc = Http::timeout(self::TIMEOUT)->acceptJson()->withoutRedirecting()->get($url)->throw()->json();
             } catch (\Throwable $e) {
-                throw new SsoException('provider_unreachable', "discovery failed for {$url}: ".$e->getMessage());
+                // Status only, never the body: the Test button shows this message to the admin.
+                $why = $e instanceof RequestException ? 'HTTP '.$e->response->status() : 'no connection';
+                throw new SsoException('provider_unreachable', "discovery failed for {$url}: {$why}");
             }
             if (! is_array($doc) || ! is_string($doc['issuer'] ?? null) || ! is_string($doc['authorization_endpoint'] ?? null) || ! is_string($doc['token_endpoint'] ?? null)) {
                 throw new SsoException('provider_invalid', "discovery document at {$url} is missing issuer / endpoints");
@@ -103,7 +106,7 @@ class OidcClient
         }
 
         try {
-            $response = Http::timeout(self::TIMEOUT)->acceptJson()->asForm()->post($doc['token_endpoint'], $form);
+            $response = Http::timeout(self::TIMEOUT)->acceptJson()->asForm()->withoutRedirecting()->post($doc['token_endpoint'], $form);
         } catch (\Throwable $e) {
             throw new SsoException('provider_unreachable', 'token request failed: '.$e->getMessage());
         }

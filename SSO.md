@@ -74,6 +74,12 @@ Operators > **Add** and tick **SSO only - no password** (offered once SSO is set
 it's switched on). Fill in the restricted maps and groups as usual. Their first SSO sign-in links
 to that account by email.
 
+An existing account **with a password** (one made before SSO) only links when the provider marks
+the email verified: `email_verified` for OpenID Connect, or for Entra the optional `xms_edov` claim
+(app registration > **Token configuration** > **Add optional claim** > ID > `xms_edov`). Without
+it the sign-in is refused, so nobody can take over a local account by setting their email at the
+provider. Prepared **SSO only** accounts don't need this.
+
 - **The email must match their SSO email exactly** (case doesn't matter). With Entra that's the
   `email` claim, or their user principal name when it has none.
 - **Administrator or operator still comes from their role at the provider**, so the form doesn't
@@ -115,6 +121,16 @@ Conditional Access policy already enforces MFA, you may prefer to leave passkeys
 - **In My Mate:** Settings > Operators > edit > **Disabled**. Their sessions end at once and their
   API keys are refused. An administrator's disable is never lifted by an SSO sign-in.
 
+### Locked out
+
+SSO never demotes or disables the last working administrator, even if their role goes at the
+provider. If every administrator still ends up disabled, run
+`php artisan mymate:user:admin <email>` on the server: it re-enables the account and makes it an
+administrator.
+
+Signing out of My Mate doesn't sign you out of the provider. On a shared computer, sign out there
+too, or the next **Login with SSO** goes straight back in.
+
 ## Troubleshooting
 
 A failed sign-in returns to the login page with a short message; the detail (for example the
@@ -126,4 +142,5 @@ provider's `AADSTS...` error code) is in the engine log as `auth: sso sign-in fa
 | Sign-in wasn't completed at your identity provider | They cancelled, aren't assigned to the app, or the Redirect URI doesn't match exactly |
 | Couldn't reach the identity provider | The server can't reach the provider over HTTPS, or the tenant / issuer is wrong (use **Test**) |
 | Single sign-on failed (generic) | Often an expired or wrong client secret - check the engine log |
+| Email exists but couldn't be linked | The email matches an account with a password, and the token didn't mark it verified (see above) |
 | Email already linked to a different sign-in | Another account is already linked to that email; an admin needs to sort out the duplicate |

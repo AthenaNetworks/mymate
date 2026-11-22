@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -31,6 +32,11 @@ class AuthController extends Controller
         // for a disabled account. Same generic failure as a wrong password: nothing to enumerate.
         $account = User::where('email', $credentials['email'])->first();
         if ($account !== null && (! $account->hasPassword() || $account->disabled_at !== null)) {
+            // Spend the same bcrypt time a wrong password would, so the refusal can't be told
+            // apart by timing (which would reveal SSO-only and disabled accounts).
+            $account->hasPassword()
+                ? Hash::check((string) $credentials['password'], (string) $account->password)
+                : Hash::make((string) $credentials['password']);
             EngineLog::warning('auth: password login refused', [
                 'user_id' => $account->id,
                 'reason' => $account->disabled_at !== null ? 'disabled' : 'no_password',

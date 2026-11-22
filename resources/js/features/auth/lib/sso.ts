@@ -14,6 +14,7 @@ const MESSAGES: Record<string, string> = {
     no_role: "Your account isn't assigned a My Mate role. Ask an administrator to give you access.",
     disabled: 'This account has been disabled by an administrator.',
     email_conflict: 'That email address is already linked to a different sign-in. Ask an administrator.',
+    email_unverified: 'An account with your email already exists, but your identity provider didn\'t confirm the email, so it can\'t be linked. Ask an administrator.',
     no_email: "Your sign-in didn't include an email address, so no account could be matched or created.",
     expired: 'The sign-in took too long or was started in another browser. Please try again.',
     provider_denied: "The sign-in wasn't completed at your identity provider.",

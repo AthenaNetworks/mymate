@@ -248,8 +248,9 @@ export function navigateTo(url: string, opts: { replace?: boolean } = {}): void 
  * persisted collapse survives a reload.
  */
 export function selectDevice(id: number | null, opts: { reveal?: boolean } = {}): void {
-    if (state.selectedDeviceId !== id) {
-        const reveal = (opts.reveal ?? true) && id !== null;
+    // Picking the device that's already selected still unfolds a collapsed inspector.
+    const reveal = (opts.reveal ?? true) && id !== null && state.deviceInspectorCollapsed;
+    if (state.selectedDeviceId !== id || reveal) {
         state = {
             ...state,
             selectedDeviceId: id,
