@@ -4,6 +4,8 @@ namespace App\Jobs;
 
 use App\Actions\Agent\DispatchAgentJobs;
 use App\Actions\Devices\CaptureDeviceFacts;
+use App\Actions\Links\ReadNeighbors;
+use App\Actions\Links\RecordNeighbors;
 use App\Actions\Polling\DiscoverInterfaces;
 use App\Models\Device;
 use App\Support\EngineLog;
@@ -41,6 +43,8 @@ class DiscoverInterfacesJob implements ShouldQueue
         if ($device !== null) {
             $discover($device);
             $facts($device); // best-effort vendor/model/uptime/type - never throws
+            // After the interfaces, so a neighbour can be matched to a port found just now (#85).
+            app(RecordNeighbors::class)($device, app(ReadNeighbors::class)($device));
         }
     }
 

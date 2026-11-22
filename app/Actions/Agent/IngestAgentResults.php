@@ -4,6 +4,7 @@ namespace App\Actions\Agent;
 
 use App\Actions\Devices\CaptureDeviceFacts;
 use App\Actions\Devices\UpgradeDevice;
+use App\Actions\Links\RecordNeighbors;
 use App\Actions\Outages\RecordOutage;
 use App\Actions\Polling\PollProbes;
 use App\Actions\Polling\PollSensors;
@@ -19,6 +20,7 @@ use App\Models\Device;
 use App\Models\NetworkInterface;
 use App\Models\Probe;
 use App\Models\Sensor;
+use App\Services\Neighbors\NeighborTables;
 use App\Services\Polling\DeviceMetrics;
 use App\Services\Polling\LiveDeviceFrame;
 use App\Services\Polling\LiveInterfaceFrame;
@@ -59,6 +61,7 @@ class IngestAgentResults
         private PollProbes $probes,
         private RecordOpticalPower $recordOptical,
         private RecordDeviceResources $recordResources,
+        private RecordNeighbors $recordNeighbors,
     ) {}
 
     /** @param array<string,mixed> $payload */
@@ -217,6 +220,12 @@ class IngestAgentResults
                 $this->applyRouterOsFacts($device, $d['routeros_facts']);
             } elseif (! empty($d['facts']) && is_array($d['facts'])) {
                 $this->applyDiscoveredFacts($device, $d['facts']);
+            }
+
+            // Neighbour tables for link suggestions (#85). Older agents don't send them, and a
+            // device with no neighbours is left alone rather than treated as an empty table.
+            if (! empty($d['neighbors']) && is_array($d['neighbors'])) {
+                ($this->recordNeighbors)($device, NeighborTables::fromArray($d['neighbors']));
             }
         }
     }

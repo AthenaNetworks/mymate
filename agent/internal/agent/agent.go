@@ -119,9 +119,9 @@ func serve(ctx context.Context, cfg *config.Config, b *backoff, poller *poll.Pol
 	go keepalive(ctx, conn)
 
 	// Announce ourselves, with what we can do.
-	hello := proto.Hello{Type: "hello", Version: Version, Platform: Platform(), Name: cfg.Name}
+	hello := proto.Hello{Type: "hello", Version: Version, Platform: Platform(), Name: cfg.Name, Capabilities: []string{proto.CapNeighbors}}
 	if opts.Upgrader != nil {
-		hello.Capabilities = []string{proto.CapUpgrade}
+		hello.Capabilities = append(hello.Capabilities, proto.CapUpgrade)
 	}
 	send <- mustJSON(hello)
 	sendUpgradeReport(opts, send) // e.g. "rolled back" from before a restart

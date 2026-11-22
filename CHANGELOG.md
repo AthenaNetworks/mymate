@@ -14,6 +14,15 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- Suggested links from neighbour discovery (GitHub #85). On each discovery pass My Mate reads LLDP
+  and CDP over SNMP, and the RouterOS neighbour list (MNDP, LLDP and CDP) over the API, and works
+  out which known devices are cabled to which ports. Suggestions wait under Auto-discovery >
+  Suggested links to be added one at a time, all at once, or ignored; nothing is drawn on its own.
+  Matching works across vendors: ports by name (not LLDP's port number, which isn't always the
+  ifIndex), short names like `Gi1/0/1`, or a bare ifIndex, and devices by chassis id, management
+  address or hostname. Each LAG member is its own link, and a far port that can't be matched
+  still gets a link with that end open. Remote agents read the tables too once they're on this
+  release; older agents keep working and just don't suggest links.
 - A Web button beside Winbox and SSH on the device inspector and device page opens the device's
   own web interface (SwOS, WebFig, most switches and APs) in a new tab.
 - The generic Webhook alert transport now sends structured fields beside `text`: `event`

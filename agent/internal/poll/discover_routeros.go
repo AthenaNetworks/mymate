@@ -29,7 +29,7 @@ func (p *Poller) discoverRouterOS(t proto.RouterOSTarget) *proto.DeviceDiscovery
 	if len(ifaces) == 0 && facts == nil {
 		return nil
 	}
-	return &proto.DeviceDiscovery{DeviceID: t.DeviceID, Interfaces: ifaces, RouterOSFacts: facts}
+	return &proto.DeviceDiscovery{DeviceID: t.DeviceID, Interfaces: ifaces, RouterOSFacts: facts, Neighbors: routerOsNeighbors(c)}
 }
 
 func routerOsInterfaces(c *routeros.Client) []proto.DiscoveredIface {
@@ -155,4 +155,18 @@ func atoiSafe(s string) int {
 func atouSafe(s string) uint64 {
 	n, _ := strconv.ParseUint(strings.TrimSpace(s), 10, 64)
 	return n
+}
+
+// routerOsNeighbors reads /ip/neighbor/print (what RouterOS heard over MNDP, LLDP and CDP) for
+// link suggestions (#85). Raw rows; the server picks the fields. Nil when there's nothing.
+func routerOsNeighbors(c *routeros.Client) *proto.NeighborTables {
+	r, err := c.Run("/ip/neighbor/print")
+	if err != nil || len(r.Re) == 0 {
+		return nil
+	}
+	rows := make([]map[string]string, 0, len(r.Re))
+	for _, re := range r.Re {
+		rows = append(rows, re.Map)
+	}
+	return &proto.NeighborTables{RouterOS: rows}
 }

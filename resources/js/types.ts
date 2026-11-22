@@ -832,6 +832,25 @@ export interface DevicePingSample {
 // Auto-discovery - mirrors SubnetResource / DiscoveryCandidateResource.
 export type DiscoveryStatus = 'new' | 'approved' | 'ignored';
 
+/** One end of a suggested link (GitHub #85). The interface is null when the port couldn't be matched. */
+export interface LinkSuggestionEnd {
+    device_id: number;
+    device_name: string;
+    interface_id: number | null;
+    interface_name: string | null;
+}
+
+/** A link neighbour discovery (LLDP / CDP / MNDP) thinks exists, waiting to be accepted. */
+export interface LinkSuggestion {
+    id: number;
+    a: LinkSuggestionEnd;
+    b: LinkSuggestionEnd;
+    protocol: 'lldp' | 'cdp' | 'mndp';
+    status: 'new' | 'ignored';
+    first_seen_at: string;
+    last_seen_at: string;
+}
+
 export interface Subnet {
     id: number;
     cidr: string;
