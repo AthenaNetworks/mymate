@@ -107,7 +107,7 @@ export function WallCanvas() {
             position: { x: n.x, y: n.y },
             draggable: false,
             connectable: false,
-            data: { noteId: n.id, text: n.text, color: n.color, editable: false },
+            data: { noteId: n.id, text: n.text, color: n.color, background: n.background, size: n.size, editable: false },
         }));
         const imageNodes: Node[] = mapImages.filter((i) => i.asset).map((i) => ({
             id: `image:${i.id}`,
