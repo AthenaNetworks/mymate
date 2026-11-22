@@ -14,6 +14,8 @@ of commit subjects.
 ## [Unreleased]
 
 ### Added
+- A Web button beside Winbox and SSH on the device inspector and device page opens the device's
+  own web interface (SwOS, WebFig, most switches and APs) in a new tab.
 - The generic Webhook alert transport now sends structured fields beside `text`: `event`
   (`alert.firing`, `alert.resolved` or `test`), `alert` (its id, a `dedupe_key` that stays the
   same for the life of the condition, status, times and a link) and `policy` (id, name,
@@ -54,6 +56,8 @@ of commit subjects.
   own ~10ms), so a fleet of a thousand-odd devices finishes well inside the process timeout (#61).
 
 ### Fixed
+- A PNG exported from the Graphs page now includes the graph's title, the time window and the
+  colour key under the chart, the same as the device page charts.
 - Teams alerts arrive again on Workflows webhooks (the Office 365 connectors are retired).
   My Mate now posts an Adaptive Card; the plain text it sent before was accepted and then
   dropped inside the flow, so alerts showed as sent but never appeared.

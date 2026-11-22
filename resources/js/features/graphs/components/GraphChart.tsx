@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatRate } from '../../../lib/formatRate';
 import { bridgeGaps } from '../../../lib/bridgeGaps';
 import { parseUtc } from '../../../lib/parseUtc';
 import type { GraphColorMode, GraphData, GraphSeriesFormat } from '../../../types';
+import type { PngLegend } from '../lib/exportGraph';
 
 // The resolved look the chart draws with: fill/stacked and the colour mode (house default or
 // per-graph) plus the series palette (house default; wraps when a graph has more series than
@@ -45,7 +46,8 @@ type Line = { key: string; label: string; color: string; dashed: boolean; emphas
 // and the scale it's plotted against. `filled` draws the area under/within it.
 type Drawn = { line: Line; top: (number | null)[]; base: number[] | null; sc: (v: number) => number; filled: boolean };
 
-export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: ChartStyle | null; svgRef?: React.Ref<SVGSVGElement> }) {
+/** `legendRef` receives the key shown under the chart, so a PNG export can draw the same one. */
+export function GraphChart({ data, style, svgRef, legendRef }: { data: GraphData; style?: ChartStyle | null; svgRef?: React.Ref<SVGSVGElement>; legendRef?: React.MutableRefObject<PngLegend | null> }) {
     const [hover, setHover] = useState<number | null>(null);
     const wrap = useRef<HTMLDivElement>(null);
 
@@ -132,6 +134,13 @@ export function GraphChart({ data, style, svgRef }: { data: GraphData; style?: C
         const list: Drawn[] = items.map((it) => ({ ...it, sc: it.line.format === 'ms' ? msScale : yFn }));
         return { drawn: list, yMax: yMaxLocal, msMax: msMaxLocal };
     }, [mains, msOnly, totalLine, stacked, fill, dualMs, nb]);
+
+    useEffect(() => {
+        if (!legendRef) return;
+        legendRef.current = drawn.length >= 2
+            ? { columns: [], rows: drawn.map((d) => ({ label: d.line.label, color: d.line.color, cells: [] })) }
+            : null;
+    }, [drawn, legendRef]);
 
     // A stroke path along `top` (breaks on nulls, so real gaps stay gaps; sampling gaps were bridged).
     const strokePath = (values: (number | null)[], sc: (v: number) => number) => {

@@ -3,7 +3,7 @@ import { CaretLeft, CaretRight, ChartLine, DownloadSimple, Plus, PencilSimple, T
 import { useGraphs, useDeleteGraph, useGraphData, useGraphStyleDefaults } from '../api/graphs';
 import { GraphChart } from './GraphChart';
 import { GraphEditor } from './GraphEditor';
-import { downloadGraphCsv, downloadGraphPng, downloadGraphSvg, graphFileBase } from '../lib/exportGraph';
+import { downloadGraphCsv, downloadGraphPng, downloadGraphSvg, graphFileBase, type PngLegend } from '../lib/exportGraph';
 import { useIsAdmin } from '../../auth/api/auth';
 import { pushToast } from '../../../lib/toast';
 import type { Graph } from '../../../types';
@@ -35,6 +35,7 @@ export function GraphsView() {
     const [editing, setEditing] = useState<Graph | 'new' | null>(null);
     const [exportOpen, setExportOpen] = useState(false);
     const svgRef = useRef<SVGSVGElement>(null);
+    const legendRef = useRef<PngLegend | null>(null);
 
     // Default to the first graph once they load.
     useEffect(() => {
@@ -67,7 +68,15 @@ export function GraphsView() {
                 if (graphData) downloadGraphCsv(graphData, name);
             } else if (svgRef.current) {
                 if (kind === 'svg') downloadGraphSvg(svgRef.current, name);
-                else downloadGraphPng(svgRef.current, name).catch(() => pushToast({ title: "Couldn't export the image", tone: 'down' }));
+                else {
+                    // the title and key from the page, so the image stands on its own (GitHub #59)
+                    const span = graphData?.from !== undefined && graphData.to !== undefined ? `${fmtEnd(graphData.from)} to ${fmtEnd(graphData.to)}` : null;
+                    downloadGraphPng(svgRef.current, name, 2, {
+                        title: selected?.name,
+                        subtitle: [RANGES.find((r) => r.key === range)?.label, span].filter(Boolean).join(', ') || undefined,
+                        legend: legendRef.current,
+                    }).catch(() => pushToast({ title: "Couldn't export the image", tone: 'down' }));
+                }
             }
         } catch {
             pushToast({ title: "Couldn't export the graph", tone: 'down' });
@@ -171,7 +180,7 @@ export function GraphsView() {
                             {isLoading ? (
                                 <div className="grid h-[260px] place-items-center text-sm text-white/40">Loading...</div>
                             ) : graphData ? (
-                                <GraphChart data={graphData} style={style} svgRef={svgRef} />
+                                <GraphChart data={graphData} style={style} svgRef={svgRef} legendRef={legendRef} />
                             ) : null}
                         </div>
                     ) : (

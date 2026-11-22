@@ -1,6 +1,7 @@
 import { displayName } from '../../../lib/deviceName';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowsOut, CaretDoubleLeft, CaretDown, ChartLine, CaretLeft, CaretRight, Check, CircleNotch, LinkSimple, MagnifyingGlass, Path, PencilSimple, Stack, Terminal, Trash, X } from '@phosphor-icons/react';
+import { ArrowsOut, CaretDoubleLeft, CaretDown, CaretLeft, CaretRight, ChartLine, Check, CircleNotch, Globe, LinkSimple, MagnifyingGlass, Path, PencilSimple, Stack, Terminal, Trash, X } from '@phosphor-icons/react';
+import { webUrl } from '../../../lib/webUrl';
 import {
     useSelectedDeviceId,
     selectDevice,
@@ -735,6 +736,10 @@ export function DeviceInspector() {
                         </a>
                         <a href={`ssh://${device.mgmt_ip}`} className={actionBtn}>
                             <Terminal weight="light" className="h-3.5 w-3.5" /> SSH
+                        </a>
+                        {/* The device's own web UI (SwOS, RouterOS WebFig, most switches and APs) in a new tab. */}
+                        <a href={webUrl(device.mgmt_ip)} target="_blank" rel="noopener noreferrer" title="Open the device's web interface" className={actionBtn}>
+                            <Globe weight="light" className="h-3.5 w-3.5" /> Web
                         </a>
                     </>
                 )}
