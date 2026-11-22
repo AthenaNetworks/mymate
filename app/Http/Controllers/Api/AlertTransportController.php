@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Actions\Alerts\SendAlert;
+use App\Actions\Alerts\TransportRejected;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Alert\StoreAlertTransportRequest;
 use App\Http\Requests\Alert\UpdateAlertTransportRequest;
@@ -58,6 +59,14 @@ class AlertTransportController extends Controller
             $attrs['config'] = ['telegram_token' => $data['telegram_token'] ?? null, 'telegram_chat_id' => $data['telegram_chat_id'] ?? null];
         } elseif (! empty($data['pagerduty_key'])) {
             $attrs['config'] = ['pagerduty_key' => $data['pagerduty_key']];
+        } elseif (! empty($data['nocgenie_token']) || ! empty($data['nocgenie_url'])) {
+            // Two fields, so a new URL alone keeps the stored token and the other way round
+            // (setting https://app.nocgenie.com goes back to the hosted service).
+            $old = $alertTransport->config ?? [];
+            $attrs['config'] = [
+                'nocgenie_token' => ($data['nocgenie_token'] ?? null) ?: ($old['nocgenie_token'] ?? null),
+                'nocgenie_url' => ($data['nocgenie_url'] ?? null) ?: ($old['nocgenie_url'] ?? null),
+            ];
         }
         $alertTransport->update($attrs);
 
@@ -78,6 +87,9 @@ class AlertTransportController extends Controller
             $sender->deliver($transport, 'My Mate test alert - this transport is working.');
 
             return response()->json(['ok' => true]);
+        } catch (TransportRejected $e) {
+            // Our own wording (a rejected token, a lapsed account) - safe to show, and it says what to fix.
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (\Throwable) {
             return response()->json(['ok' => false, 'error' => 'Delivery failed.'], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
@@ -90,6 +102,7 @@ class AlertTransportController extends Controller
             'email' => ['email' => $data['email'] ?? null],
             'telegram' => ['telegram_token' => $data['telegram_token'] ?? null, 'telegram_chat_id' => $data['telegram_chat_id'] ?? null],
             'pagerduty' => ['pagerduty_key' => $data['pagerduty_key'] ?? null],
+            'nocgenie' => ['nocgenie_token' => $data['nocgenie_token'] ?? null, 'nocgenie_url' => ($data['nocgenie_url'] ?? null) ?: null],
             // slack / teams / messenger / webhook / discord
             default => ['webhook_url' => $data['webhook_url'] ?? null],
         };

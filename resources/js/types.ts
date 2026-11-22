@@ -659,7 +659,7 @@ export interface AlertPolicy {
     transport_ids: number[];
 }
 
-export type TransportType = 'email' | 'slack' | 'teams' | 'messenger' | 'webhook' | 'discord' | 'telegram' | 'pagerduty';
+export type TransportType = 'email' | 'slack' | 'teams' | 'messenger' | 'webhook' | 'discord' | 'telegram' | 'pagerduty' | 'nocgenie';
 
 export interface AlertTransport {
     id: number;

@@ -439,6 +439,7 @@ function TransportForm({ initial, onDone }: { initial?: AlertTransport; onDone: 
                 <option value="discord">Discord</option>
                 <option value="telegram">Telegram</option>
                 <option value="pagerduty">PagerDuty</option>
+                <option value="nocgenie">NOCgenie</option>
                 <option value="webhook">Generic webhook</option>
                 <option value="email">Email</option>
             </select>
@@ -456,6 +457,13 @@ function TransportForm({ initial, onDone }: { initial?: AlertTransport; onDone: 
             )}
             {form.type === 'pagerduty' && (
                 <input className={field} placeholder={`Integration routing key${keepHint}`} value={form.pagerduty_key ?? ''} onChange={(e) => set('pagerduty_key', e.target.value)} />
+            )}
+            {/* Token from NOCgenie's Integrations > Add integration > My Mate. The URL is only for a self-hosted NOCgenie. */}
+            {form.type === 'nocgenie' && (
+                <>
+                    <input className={field} placeholder={`Integration token${keepHint}`} value={form.nocgenie_token ?? ''} onChange={(e) => set('nocgenie_token', e.target.value)} />
+                    <input className={field} placeholder={`Self-hosted URL (blank for app.nocgenie.com)${keepHint}`} value={form.nocgenie_url ?? ''} onChange={(e) => set('nocgenie_url', e.target.value)} />
+                </>
             )}
             <label className="flex items-center gap-2 px-1 text-sm text-white/70">
                 <input type="checkbox" checked={form.enabled ?? true} onChange={(e) => set('enabled', e.target.checked)} /> Enabled
@@ -745,7 +753,13 @@ export function AlertsView() {
                                                 onClick={() =>
                                                     testTransport.mutate(t.id, {
                                                         onSuccess: () => pushToast({ title: `Test sent to ${t.name}`, tone: 'info' }),
-                                                        onError: () => pushToast({ title: `Test failed for ${t.name}`, tone: 'down' }),
+                                                        // The server names a fixable cause where it has one (NOCgenie's rejected token, say).
+                                                        onError: (e) =>
+                                                            pushToast({
+                                                                title: `Test failed for ${t.name}`,
+                                                                detail: (e as { response?: { data?: { error?: string } } })?.response?.data?.error,
+                                                                tone: 'down',
+                                                            }),
                                                     })
                                                 }
                                                 title="Send test"

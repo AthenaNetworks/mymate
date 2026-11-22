@@ -19,6 +19,14 @@ of commit subjects.
   same for the life of the condition, status, times and a link) and `policy` (id, name,
   condition). An on-call tool such as NOCgenie can then pair each recovery with its alert
   without parsing the wording. Slack, Teams, Messenger and Discord still get only the text.
+  An alert about one device also carries the device (name, IP, type, vendor, model, site and a
+  link to its page), the interface for a port alert, and how long it was sustained.
+- NOCgenie alert transport. Paste the token from NOCgenie's My Mate integration (and a URL, only
+  for a self-hosted NOCgenie); alerts and their recoveries open and close NOCgenie alerts, with
+  the device as the entity and its site and vendor as tags. Alerts go out from the queue and
+  keep retrying a NOCgenie outage or rate limit for about 20 minutes, with a recovery always sent
+  after its alert. The Test button says when NOCgenie rejects the token or the organisation is
+  closed.
 - Graphs can look back in time: arrows next to the range step the window back and forward by its
   own length, so a 6h graph can show any six hours still kept, not only the latest (#59).
 - The Devices tab sorts by RouterOS version (newest or oldest first, 7.9 before 7.10) and filters

@@ -21,6 +21,7 @@ use App\Models\DiscoveryCandidate;
 use App\Models\Link;
 use App\Models\Map;
 use App\Models\NetworkInterface;
+use App\Models\Site;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -99,6 +100,56 @@ class EvaluateAlertsTest extends TestCase
         $chat = collect(Http::recorded())->map(fn ($r) => $r[0])->filter(fn ($r) => $r->url() === 'https://slack.example.test/s');
         $this->assertCount(2, $chat);
         $chat->each(fn ($r) => $this->assertSame(['text'], array_keys($r->data())));
+    }
+
+    public function test_nocgenie_gets_the_device_and_pairs_the_recovery_on_policy_and_dedupe_key(): void
+    {
+        Http::fake(['*' => Http::response(['message' => 'Accepted.'], 202)]);
+        config(['app.url' => 'https://mate.example.test']);
+        $ng = AlertTransport::factory()->create(['type' => 'nocgenie', 'config' => ['nocgenie_token' => 'T']]);
+        $policy = AlertPolicy::factory()->create(['name' => 'Core down', 'condition' => AlertCondition::DeviceDown]);
+        $policy->transports()->attach($ng->id);
+        $site = Site::factory()->create(['name' => 'SYD1']);
+        $device = Device::factory()->create([
+            'name' => 'CORE1', 'mgmt_ip' => '10.0.0.1', 'status' => DeviceStatus::Down, 'device_type' => DeviceType::Router,
+            'vendor' => 'MikroTik', 'model' => 'CCR2004', 'site_id' => $site->id,
+        ]);
+
+        app(EvaluateAlerts::class)();
+        $device->update(['status' => DeviceStatus::Up]);
+        app(EvaluateAlerts::class)();
+
+        $sent = collect(Http::recorded())->map(fn ($r) => $r[0]->data())->values();
+        $this->assertCount(2, $sent);
+        [$fire, $clear] = [$sent[0], $sent[1]];
+        $this->assertSame('alert.firing', $fire['event']);
+        $this->assertSame([
+            'id' => $device->id, 'name' => 'CORE1', 'mgmt_ip' => '10.0.0.1', 'type' => 'router', 'vendor' => 'MikroTik',
+            'model' => 'CCR2004', 'site' => 'SYD1', 'url' => "https://mate.example.test/devices/{$device->id}",
+        ], $fire['device']);
+        $this->assertSame(0, $fire['sustained_minutes']);
+        $this->assertArrayNotHasKey('interface', $fire);
+        // NOCgenie keys on policy.id + alert.dedupe_key, so both must ride on the recovery too.
+        $this->assertSame('alert.resolved', $clear['event']);
+        $this->assertSame($fire['policy']['id'], $clear['policy']['id']);
+        $this->assertSame("device:{$device->id}", $clear['alert']['dedupe_key']);
+        $this->assertSame('CORE1', $clear['device']['name']);
+        $this->assertTrue(AlertEvent::firstOrFail()->delivered); // set by the queued job once NOCgenie took it
+    }
+
+    public function test_an_interface_alert_names_the_interface_for_a_webhook(): void
+    {
+        Http::fake();
+        $hook = AlertTransport::factory()->create(['type' => 'webhook', 'config' => ['webhook_url' => 'https://hook.example.test/w']]);
+        AlertPolicy::factory()->create(['condition' => AlertCondition::InterfaceDown])->transports()->attach($hook->id);
+        $device = Device::factory()->create(['name' => 'AGG1', 'status' => DeviceStatus::Up]);
+        NetworkInterface::factory()->for($device)->create(['name' => 'ether5', 'oper_status' => 'down']);
+
+        app(EvaluateAlerts::class)();
+
+        $body = collect(Http::recorded())->map(fn ($r) => $r[0]->data())->firstOrFail();
+        $this->assertSame('AGG1', $body['device']['name']);
+        $this->assertSame(['name' => 'ether5'], $body['interface']);
     }
 
     public function test_probe_slow_fires_over_the_threshold_and_resolves_under_it(): void
