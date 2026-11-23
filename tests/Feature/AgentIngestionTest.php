@@ -8,6 +8,7 @@ use App\Actions\Agent\IngestAgentScan;
 use App\Enums\AgentStatus;
 use App\Enums\DeviceStatus;
 use App\Enums\PollMethod;
+use App\Events\DeviceLatencyUpdated;
 use App\Events\DeviceStatusChanged;
 use App\Events\InterfaceUtilUpdated;
 use App\Models\Agent;
@@ -64,6 +65,31 @@ class AgentIngestionTest extends TestCase
         $this->assertNotNull($device->ping_at);
         // The trend sample lands in ping_samples, same as the central latency path.
         $this->assertDatabaseHas('ping_samples', ['device_id' => $device->id]);
+    }
+
+    public function test_ingest_splits_live_latency_under_the_message_size(): void
+    {
+        config(['mymate.poll.broadcast.max_bytes_per_event' => 1000]);
+        Event::fake([DeviceLatencyUpdated::class]);
+        $agent = Agent::factory()->create();
+        $pings = [];
+        foreach (Device::factory()->count(60)->create(['agent_id' => $agent->id, 'status' => DeviceStatus::Up]) as $d) {
+            $pings[] = ['device_id' => $d->id, 'up' => true, 'rtt_ms' => 12.5, 'loss_pct' => 0.0, 'jitter_ms' => 1.2];
+        }
+
+        app(IngestAgentResults::class)($agent, ['pings' => $pings]);
+
+        $seen = [];
+        $events = 0;
+        Event::assertDispatched(DeviceLatencyUpdated::class, function ($e) use (&$seen, &$events) {
+            $events++;
+            $this->assertLessThanOrEqual(1000, strlen((string) json_encode($e->broadcastWith())));
+            array_push($seen, ...array_column($e->devices, 'device_id'));
+
+            return true;
+        });
+        $this->assertGreaterThan(1, $events);
+        $this->assertCount(60, $seen);
     }
 
     public function test_ingest_ignores_devices_not_owned_by_the_agent(): void

@@ -13,6 +13,15 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- In the Docker image nothing updated live - status dots, toasts, link colours - until the page was
+  reloaded: the browser connected with a Reverb key fixed when the image was built, which didn't
+  match the one the server ran with, and Reverb refused it. The page now tells the browser the
+  server's key, so they always match, whatever `REVERB_APP_KEY` is set to.
+- The latency readout and loss badge on internet cards didn't update live on a fleet of any size:
+  each ping sweep sent every device's latency in one message, which Reverb refused as too large.
+  It's now split into messages under the limit, from central pings and from agents alike.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

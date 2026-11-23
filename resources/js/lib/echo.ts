@@ -18,12 +18,19 @@ const wsHost = proxied ? window.location.hostname : import.meta.env.VITE_REVERB_
 const wsPort = proxied ? pagePort : Number(import.meta.env.VITE_REVERB_PORT ?? 8080);
 const forceTLS = proxied ? pageIsHttps : import.meta.env.VITE_REVERB_SCHEME === 'https';
 
+// The Reverb app key comes from the page (the server's own config), so the socket always uses the
+// key Reverb was started with. The build-time VITE value is only a fallback for a page without it
+// (`npm run dev` against an older server). A mismatch isn't retried: Reverb answers 4001
+// "Application does not exist" and pusher-js gives up, so the map would never update live.
+const pageKey = document.querySelector('meta[name="mymate:reverb-key"]')?.getAttribute('content')?.trim();
+const appKey = pageKey || import.meta.env.VITE_REVERB_APP_KEY;
+
 // Single app-wide Echo client (Reverb / pusher protocol). Connects lazily on first use.
 // The `map` channel is private: we authorise each subscription against
 // `/broadcasting/auth` via the credentialed apiClient (session cookie + CSRF).
 export const echo = new Echo<'reverb'>({
     broadcaster: 'reverb',
-    key: import.meta.env.VITE_REVERB_APP_KEY,
+    key: appKey,
     wsHost,
     wsPort,
     wssPort: wsPort,
