@@ -204,6 +204,20 @@ return [
         'default_speed_mbps' => (int) env('MYMATE_LINK_DEFAULT_SPEED_MBPS', 1000),
     ],
 
+    // Site-to-site backhaul liveness (GitHub #85). A link's state is derived from its bound
+    // interfaces; `role` on the link says where the circuit is *supposed* to be, these numbers
+    // decide when the map says it isn't there any more.
+    'site_links' => [
+        'liveness' => [
+            // Poll intervals without a fresh sample before the link reads `unknown` (not `up`).
+            'stale_after' => (int) env('MYMATE_SITE_LINK_STALE_AFTER', 3),
+            // Either direction at or above this % of capacity reads `degraded` (amber, not red).
+            'degraded_util' => (float) env('MYMATE_SITE_LINK_DEGRADED_UTIL', 85),
+            // Per-second error/discard rate at either end that also reads `degraded`.
+            'degraded_errors_per_s' => (float) env('MYMATE_SITE_LINK_DEGRADED_ERRORS', 5),
+        ],
+    ],
+
     // Geographic map overlay (GitHub #11). Raster tiles are loaded straight from the tile
     // provider by the browser, so its host is added to the CSP img-src (SecurityHeaders).
     'map' => [

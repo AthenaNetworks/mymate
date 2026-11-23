@@ -13,6 +13,12 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Site-to-site backhauls can be bound to the interfaces that carry them and given an intended
+  role (primary/backup). The geo map's backhaul feed reports each link's live state, throughput
+  and effective capacity, and a new endpoint returns its two-direction throughput series, so a
+  circuit and a failover are visible instead of the edge being a static line (#85).
+
 ## [2.2.0] - 2026-11-22
 
 ### Added
