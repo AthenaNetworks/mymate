@@ -22,6 +22,7 @@ import { AlertsView } from '../alerts/components/AlertsView';
 import { UpgradesView } from '../upgrades/components/UpgradesView';
 import { BackupsView } from '../backups/components/BackupsView';
 import { ImportView } from '../import/components/ImportView';
+import { useMapRoute } from '../maps/lib/useMapRoute';
 
 /**
  * The NOC console shell: a full-width top bar over a row of [nav rail | active
@@ -39,6 +40,7 @@ export function AppShell() {
     const openOutages = useOutages('open');
     const { data: me } = useCurrentUser();
     const firingAlerts = useFiringAlerts(me !== undefined && me !== null && !me.restricted);
+    useMapRoute(); // the open map in the URL (/maps/{id}-{slug}), so it can be bookmarked
 
     // Keep wallboard in step with the Fullscreen API: leaving fullscreen (Esc, or the
     // browser\'s own control) exits wallboard. Esc also works when fullscreen is

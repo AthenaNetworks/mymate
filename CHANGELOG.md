@@ -13,6 +13,16 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Each map has its own address, like /maps/12-core-network, so a map can be bookmarked or its link
+  shared. The address follows the map you're on, and Back and Forward step between the maps you've
+  opened. Only the number matters, so links keep working after a map is renamed. A link to a map
+  that's been deleted, or that you can't see, opens the default map and says so.
+
+### Fixed
+- A public wallboard keeps its /wall/... address. The page used to change it to / as it loaded, so
+  a screen that reloaded showed the login page instead of the wallboard.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isWall } from './wall';
 
 /**
  * Tiny dependency-free shell store (same pattern as lib/toast.ts) for the NOC
@@ -73,7 +74,8 @@ type ShellState = {
 
 // --- Page routing: the active view lives in the URL path so a
 // reload / shared link / Back-Forward restores the page. No router lib - rides the
-// server catch-all (GET /{any} -> app). Page only; map/device keep default-on-load.
+// server catch-all (GET /{any} -> app). The map view also carries the open map
+// (/maps/{id}-{slug}, see MAP_PAGE); the device page carries its own ids.
 const VIEW_TO_PATH: Record<View, string> = {
     map: '/',
     geo: '/geo',
@@ -95,14 +97,64 @@ const VIEW_TO_PATH: Record<View, string> = {
 // so it's matched by pattern rather than looked up. The page reads the rest of the URL itself.
 const DEVICE_PAGE = /^\/devices\/\d+(\/ports\/\d+)?$/;
 
+// A bookmarkable map: /maps/{id} or /maps/{id}-{slug}. Only the id is read - the slug is the
+// map's name for people, rewritten to the current name (useMapRoute), so a renamed map's
+// old links still open it.
+const MAP_PAGE = /^\/maps\/(\d+)(?:-[^/]*)?$/;
+
+function normalisePath(pathname: string): string {
+    return pathname.replace(/\/+$/, '').toLowerCase() || '/';
+}
+
 function pathToView(pathname: string): View {
-    const p = pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    const p = normalisePath(pathname);
     if (DEVICE_PAGE.test(p)) return 'device';
+    if (MAP_PAGE.test(p)) return 'map';
     return (Object.keys(VIEW_TO_PATH) as View[]).find((v) => VIEW_TO_PATH[v] === p) ?? 'map';
+}
+
+/** The map id a /maps/{id}-{slug} path names, else null. */
+export function mapIdFromPath(pathname: string): number | null {
+    const m = normalisePath(pathname).match(MAP_PAGE);
+    const id = m ? Number(m[1]) : NaN;
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+/** A map's name as a URL slug: "Core Network (Syd)" -> "core-network-syd". May be empty. */
+export function mapSlug(name: string): string {
+    return name
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '') // drop accents: "Café" -> "Cafe"
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60)
+        .replace(/-+$/, '');
+}
+
+/** The map view's path for a map: /maps/12-core-network, /maps/12 without a name, / without a map. */
+export function mapPath(id: number | null, name?: string): string {
+    if (id === null) return '/';
+    const slug = name ? mapSlug(name) : '';
+    return slug ? `/maps/${id}-${slug}` : `/maps/${id}`;
 }
 
 // Derive the initial view from the URL at module load (before first render -> no flash).
 const initialView: View = typeof window !== 'undefined' ? pathToView(window.location.pathname) : 'map';
+// A map named in the URL wins over the one remembered in this browser.
+const initialMapId: number | null = typeof window !== 'undefined' ? mapIdFromPath(window.location.pathname) : null;
+
+// The last map a URL asked for (a bookmark, a pasted link, Back/Forward) that hasn't been checked
+// against the map list yet. useMapRoute reports it if it's gone or not visible to this user - as
+// opposed to a stale id remembered in this browser, which falls back to the default quietly.
+let requestedMapId: number | null = initialMapId;
+
+/** Take (and clear) the map id the URL last asked for, if any. */
+export function takeRequestedMapId(): number | null {
+    const id = requestedMapId;
+    requestedMapId = null;
+    return id;
+}
 
 // --- Persistence: remember the selected device, active map, and
 // per-device inspector prefs across reloads (localStorage). The page lives in the URL
@@ -156,7 +208,7 @@ let state: ShellState = {
     navOpen: false,
     inspectorOpen: false,
     selectedDeviceId: saved.selectedDeviceId ?? null,
-    activeMapId: saved.activeMapId ?? null,
+    activeMapId: initialMapId ?? saved.activeMapId ?? null,
     chartModeById: saved.chartModeById ?? {},
     ifaceFilterById: saved.ifaceFilterById ?? {},
     tileMetricById: saved.tileMetricById ?? {},
@@ -217,9 +269,24 @@ function applyView(view: View, opts: { push: boolean }): void {
     // Navigating closes any open mobile overlays.
     state = { ...state, view, navOpen: false, inspectorOpen: false };
     if (opts.push && typeof window !== 'undefined') {
-        window.history.pushState({ view }, '', VIEW_TO_PATH[view]);
+        // The map view goes straight to the open map; useMapRoute then adds its name.
+        window.history.pushState({ view }, '', view === 'map' ? mapPath(state.activeMapId) : VIEW_TO_PATH[view]);
     }
     emit();
+}
+
+/**
+ * Bring the store in line with the URL after Back/Forward or navigateTo(): the view, and the
+ * map a /maps/{id} path names. Never pushes history, so there's no push/pop loop.
+ */
+function syncFromLocation(): void {
+    const mapId = mapIdFromPath(window.location.pathname);
+    if (mapId !== null) requestedMapId = mapId;
+    if (mapId !== null && state.activeMapId !== mapId) {
+        state = { ...state, activeMapId: mapId };
+        emit();
+    }
+    applyView(pathToView(window.location.pathname), { push: false });
 }
 
 export function setView(view: View): void {
@@ -237,7 +304,7 @@ export function navigateTo(url: string, opts: { replace?: boolean } = {}): void 
     if (typeof window === 'undefined') return;
     if (opts.replace) window.history.replaceState({}, '', url);
     else window.history.pushState({}, '', url);
-    applyView(pathToView(window.location.pathname), { push: false });
+    syncFromLocation();
     window.dispatchEvent(new Event(NAVIGATE_EVENT));
 }
 
@@ -535,7 +602,11 @@ export function useDashboardCycleS(): number {
 // Registered at module scope (runs once on import) - not a React effect, so StrictMode
 // can\'t double-register and there\'s no listener to clean up.
 if (typeof window !== 'undefined') {
-    window.addEventListener('popstate', () => applyView(pathToView(window.location.pathname), { push: false }));
-    // the device page's own path + query (ids, tab, graph range) is the page, keep it as is
-    if (state.view !== 'device') window.history.replaceState({ view: state.view }, '', VIEW_TO_PATH[state.view]);
+    window.addEventListener('popstate', syncFromLocation);
+    // The device page's own path + query (ids, tab, graph range) is the page, keep it as is.
+    // The map view keeps the map it opened on (useMapRoute adds the name once maps load).
+    // A public wallboard's /wall/{token} URL is its login, so it's never rewritten.
+    if (state.view !== 'device' && !isWall()) {
+        window.history.replaceState({ view: state.view }, '', state.view === 'map' ? mapPath(state.activeMapId) : VIEW_TO_PATH[state.view]);
+    }
 }
