@@ -324,6 +324,28 @@ export function useCreateMapNote() {
     });
 }
 
+export type NewMapNote = { text: string; x: number; y: number; color: string | null; background: string | null; size: MapNoteSize | null };
+
+/**
+ * Create several styled notes on one map - paste and duplicate. Posted one at a time so they
+ * keep their order, and the map is refetched once at the end rather than once per note. If one
+ * fails, the ones already made stay (the refetch still runs) and the error is passed on.
+ */
+export function useCreateMapNotes() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ mapId, notes }: { mapId: number; notes: NewMapNote[] }): Promise<MapNote[]> => {
+            const created: MapNote[] = [];
+            for (const n of notes) {
+                const { data } = await apiClient.post<{ data: MapNote }>(`/maps/${mapId}/notes`, n);
+                created.push(data.data);
+            }
+            return created;
+        },
+        onSettled: (_d, _e, { mapId }) => qc.invalidateQueries({ queryKey: mapKeys.detail(mapId) }),
+    });
+}
+
 /** Update a note's text / position / style. Position saves aren't invalidated (already moved). */
 export function useUpdateMapNote() {
     const qc = useQueryClient();

@@ -163,6 +163,33 @@ class OverviewMapTest extends TestCase
         $this->assertDatabaseMissing('map_notes', ['id' => $id]);
     }
 
+    /**
+     * Copy/paste and duplicate on the map create each note in one POST with its whole style -
+     * exactly this payload, nulls included for an unstyled note - onto whichever map is open.
+     */
+    public function test_a_pasted_note_is_created_with_its_style_on_another_map(): void
+    {
+        $from = Map::create(['name' => 'Site A']);
+        $to = Map::create(['name' => 'Site B']);
+        MapNote::create(['map_id' => $from->id, 'text' => "**Core**\n[NetBox](https://netbox.example.com)", 'x' => 5, 'y' => 5, 'color' => '#22d3ee', 'background' => '#101828', 'size' => 'lg']);
+
+        $this->postJson("/api/maps/{$to->id}/notes", [
+            'text' => "**Core**\n[NetBox](https://netbox.example.com)", 'x' => 140.5, 'y' => -32,
+            'color' => '#22d3ee', 'background' => '#101828', 'size' => 'lg',
+        ])->assertCreated()
+            ->assertJsonPath('data.map_id', $to->id)
+            ->assertJsonPath('data.text', "**Core**\n[NetBox](https://netbox.example.com)")
+            ->assertJsonPath('data.background', '#101828')
+            ->assertJsonPath('data.size', 'lg');
+
+        $this->postJson("/api/maps/{$to->id}/notes", ['text' => 'plain', 'x' => 0, 'y' => 0, 'color' => null, 'background' => null, 'size' => null])
+            ->assertCreated()
+            ->assertJsonPath('data.size', null);
+
+        $this->assertSame(2, MapNote::where('map_id', $to->id)->count());
+        $this->assertSame(1, MapNote::where('map_id', $from->id)->count()); // the original is untouched
+    }
+
     public function test_a_note_requires_text_and_rejects_a_bad_colour(): void
     {
         $map = Map::create(['name' => 'Site']);

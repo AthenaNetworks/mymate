@@ -14,7 +14,7 @@ import {
     type Connection,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AlignBottom, AlignCenterHorizontal, AlignCenterVertical, AlignLeft, AlignRight, AlignTop, ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, Columns, Cube, DotsNine, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, Plus, PushPin, Rows, Sparkle, TreeStructure, WaveSine } from '@phosphor-icons/react';
+import { AlignBottom, AlignCenterHorizontal, AlignCenterVertical, AlignLeft, AlignRight, AlignTop, ArrowCounterClockwise, ArrowsOutCardinal, CaretDown, CircleDashed, ClipboardText, Columns, Copy, CopySimple, Cube, DotsNine, DotsThreeVertical, Globe, Graph, ImageSquare, Info, LineSegment, LinkBreak, MagnetStraight, Note, PencilSimple, Plus, PushPin, Rows, Sparkle, TrashSimple, TreeStructure, WaveSine } from '@phosphor-icons/react';
 import { DeviceDialog, type DeviceDialogDefaults } from '../../devices/components/DeviceDialog';
 import { useContrast, useTheme } from '../../../lib/theme';
 import { DeviceNode } from '../nodes/DeviceNode';
@@ -36,13 +36,15 @@ import { MapBreadcrumb } from '../../maps/components/MapBreadcrumb';
 import { MapSearch } from './MapSearch';
 import { MapNodeMenu, type NodeMenuState } from './MapNodeMenu';
 import { BulkEditDevicesDialog } from '../../devices/components/BulkEditDevicesDialog';
+import { CanvasMenu } from './CanvasMenu';
+import { shortcut, useNoteClipboard } from '../hooks/useNoteClipboard';
 import { SetParentDialog } from './SetParentDialog';
 import { DeleteDeviceDialog } from './DeleteDeviceDialog';
 import { MapControls } from './MapControls';
 import { MapBackground } from './MapBackground';
 import { OspfCostControl } from './OspfCostControl';
 import { ConfirmDialog } from '../../../components/Dialog';
-import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote, useDeleteMapNote } from '../../maps/api/maps';
+import { useMap, useSaveMapPositions, isEmptyBatch, type MapPositionBatch, useAddDeviceToMap, useRemoveDeviceFromMap, useCreateMapLink, useUpdateMapLink, useDeleteMapLink, useRemoveChildMap, useCreateMapNote, useUpdateMapNote } from '../../maps/api/maps';
 import { useMapChannel } from '../hooks/useMapChannel';
 import { useMapCanvasPlayback } from '../hooks/useMapCanvasPlayback';
 import { PlaybackBadge, PlaybackBar } from '../../geo/components/PlaybackBar';
@@ -128,6 +130,11 @@ const edgeBtn = (active: boolean): string =>
         active ? 'bg-white/10 text-emerald-300 ring-1 ring-white/15' : 'text-white/45 hover:text-white/80'
     }`;
 
+/** A note's first line, minus any Markdown marker in front - how a menu or dialog names it. */
+function noteHeading(text: string | undefined): string {
+    return (text ?? '').split('\n')[0].replace(/^\s*(#+|[-*+>]|\d+\.)\s+/, '').trim();
+}
+
 export function MapCanvas() {
     const isAdmin = useIsAdmin();
     const activeMapId = useActiveMapId();
@@ -157,7 +164,6 @@ export function MapCanvas() {
     const deleteMapLink = useDeleteMapLink();
     const createMapNote = useCreateMapNote();
     const updateMapNote = useUpdateMapNote();
-    const deleteMapNote = useDeleteMapNote();
     const createMapImage = useCreateMapImage();
     const updateMapImage = useUpdateMapImage();
     const deleteMapImage = useDeleteMapImage();
@@ -227,6 +233,13 @@ export function MapCanvas() {
     const [parentForId, setParentForId] = useState<number | null>(null); // parent picker
     const [deleteDeviceId, setDeleteDeviceId] = useState<number | null>(null); // delete confirmation
     const [bulkEditIds, setBulkEditIds] = useState<number[] | null>(null); // bulk edit of a multi-selection
+    // Right-click a note (copy / duplicate / delete) or the empty canvas (paste / add a note).
+    const [noteMenu, setNoteMenu] = useState<{ ids: number[]; x: number; y: number } | null>(null);
+    // Notes waiting on "Delete?" - from the note menu or the card's own delete button.
+    const [confirmDeleteNoteIds, setConfirmDeleteNoteIds] = useState<number[] | null>(null);
+    const [paneMenu, setPaneMenu] = useState<{ x: number; y: number; at: { x: number; y: number } } | null>(null);
+    // The canvas wrapper: keyboard shortcuts only act while focus is inside it (or on nothing).
+    const [canvasEl, setCanvasEl] = useState<HTMLDivElement | null>(null);
 
     // Stable so threading it into edge data doesn\'t churn the edge-build effect.
     const requestDelete = useCallback((linkId: number) => setDeleteLinkId(linkId), []);
@@ -255,6 +268,8 @@ export function MapCanvas() {
     const mapLinks = useMemo(() => mapDetail?.map_links ?? [], [mapDetail]);
     // Free-text annotations (GitHub #11). A label placed on the geo map (GitHub #52) belongs there.
     const mapNotes = useMemo(() => (mapDetail?.map_notes ?? []).filter((n) => n.latitude == null), [mapDetail]);
+    // Copy / paste / duplicate notes, across maps (right-click menus + Ctrl/Cmd C, V, D).
+    const noteClip = useNoteClipboard({ mapId: activeMapId, enabled: canDrag, notes: mapNotes, canvasEl, setNodes });
     const mapImages = useMemo(() => mapDetail?.map_images ?? [], [mapDetail]); // placed pictures (GitHub #53)
     const childDeviceLinks = useMemo(() => mapDetail?.child_device_links ?? [], [mapDetail]); // real device links crossing child maps (GitHub #9)
 
@@ -524,7 +539,7 @@ export function MapCanvas() {
                 noteId: n.id, text: n.text, color: n.color, background: n.background, size: n.size, editable: isAdmin,
                 onSave: isAdmin ? (text: string) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, text }); } : undefined,
                 onSaveStyle: isAdmin ? (patch: MapNoteStylePatch) => { const m = activeMapIdRef.current; if (m !== null) updateMapNote.mutate({ mapId: m, noteId: n.id, ...patch }); } : undefined,
-                onRemove: isAdmin ? () => { const m = activeMapIdRef.current; if (m !== null) deleteMapNote.mutate({ mapId: m, noteId: n.id }); } : undefined,
+                onRemove: isAdmin ? () => setConfirmDeleteNoteIds([n.id]) : undefined,
             },
             draggable: canDrag,
             selectable: true,
@@ -549,10 +564,14 @@ export function MapCanvas() {
         // the cached positions (and so membershipKey) the moment a drag ends; a fresh node object
         // without `measured` makes React Flow re-measure it (edges jump until it does), and losing
         // the selection would make a group impossible to nudge twice in a row (GitHub #44).
+        // Notes just pasted or duplicated arrive here with the refetch: they become the selection.
         setNodes((prev) => {
             const prevById = new Map(prev.map((n) => [n.id, n]));
-            return [...imageNodes, ...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes].map((n) => {
+            const built = [...imageNodes, ...deviceNodes, ...portalNodes, ...childNodes, ...noteNodes];
+            const pick = new Set(built.filter((n) => !prevById.has(n.id) && noteClip.isPendingSelect(n.id)).map((n) => n.id));
+            return built.map((n) => {
                 const p = prevById.get(n.id);
+                if (pick.size > 0) return { ...n, measured: p?.measured, selected: pick.has(n.id) };
                 return p ? { ...n, measured: p.measured, selected: p.selected } : n;
             });
         });
@@ -846,7 +865,7 @@ export function MapCanvas() {
     return (
         <>
             {/* The canvas fills what is left under the toolbar strip. React Flow ignores a user `position`/`height` on its own root, hence the wrapper. */}
-            <div className="absolute inset-x-0 bottom-0" style={{ top: toolbarH }}>
+            <div ref={setCanvasEl} onPointerMove={noteClip.trackPointer} className="absolute inset-x-0 bottom-0" style={{ top: toolbarH }}>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -933,9 +952,21 @@ export function MapCanvas() {
                 }}
                 // Right-click a device card -> manage it in place (GitHub #45): parent, remove
                 // from this map, delete. Selecting it first makes the menu's target unambiguous
-                // (focus ring + the inspector follows along). Admin-only, like every write here;
-                // other node types keep the browser's own menu.
+                // (focus ring + the inspector follows along). Admin-only, like every write here.
+                // Notes get their own menu below; other node types keep the browser's own menu.
                 onNodeContextMenu={(e, node) => {
+                    // A note: copy / duplicate / delete. Right-clicking one of several selected
+                    // notes acts on all of them; otherwise it becomes the selection first, so the
+                    // target is plain to see.
+                    if (node.type === 'note') {
+                        if (!canDrag || activeMapId === null) return;
+                        e.preventDefault();
+                        const selected = nodes.filter((n) => n.type === 'note' && n.selected).map((n) => noteId(n.id));
+                        const ids = node.selected && selected.length > 1 ? selected : [noteId(node.id)];
+                        if (!node.selected) setNodes((nds) => nds.map((n) => (n.id === node.id ? { ...n, selected: true } : n.selected ? { ...n, selected: false } : n)));
+                        setNoteMenu({ ids, x: e.clientX, y: e.clientY });
+                        return;
+                    }
                     if (!isAdmin || node.type !== 'device') return;
                     e.preventDefault();
                     selectDevice(Number(node.id));
@@ -946,6 +977,13 @@ export function MapCanvas() {
                 }}
                 // Click the empty canvas to deselect - the inspector then shows the map tools.
                 onPaneClick={() => selectDevice(null)}
+                // Right-click the empty canvas: paste what was copied (from any map) or add a note,
+                // right where the click was.
+                onPaneContextMenu={(e) => {
+                    if (!canDrag || activeMapId === null) return;
+                    e.preventDefault();
+                    setPaneMenu({ x: e.clientX, y: e.clientY, at: screenToFlowPosition({ x: e.clientX, y: e.clientY }) });
+                }}
                 // Drag a device from the palette (inspector) onto the map to place it there.
                 onDragOver={(e) => {
                     if (e.dataTransfer.types.includes('application/mymate-device')) {
@@ -1352,6 +1390,100 @@ export function MapCanvas() {
 
             {/* Edit every selected device card at once - from the node menu on a multi-selection. */}
             {bulkEditIds !== null && <BulkEditDevicesDialog deviceIds={bulkEditIds} onClose={() => setBulkEditIds(null)} />}
+            {/* Right-click a note (or several selected): copy, duplicate, delete. */}
+            {noteMenu !== null &&
+                (() => {
+                    const n = noteMenu.ids.length;
+                    const first = n === 1 ? noteHeading(mapNotes.find((x) => x.id === noteMenu.ids[0])?.text) : '';
+                    return (
+                        <CanvasMenu
+                            x={noteMenu.x}
+                            y={noteMenu.y}
+                            heading={n === 1 ? first || 'Note' : `${n} notes`}
+                            onClose={() => setNoteMenu(null)}
+                            items={[
+                                { key: 'copy', label: 'Copy', icon: <Copy weight="light" className="h-4 w-4 text-sky-300" />, shortcut: shortcut('C'), onSelect: () => noteClip.copy(noteMenu.ids) },
+                                { key: 'duplicate', label: 'Duplicate', icon: <CopySimple weight="light" className="h-4 w-4 text-emerald-300" />, shortcut: shortcut('D'), onSelect: () => noteClip.duplicate(noteMenu.ids) },
+                                // Edit is one note at a time - and the way in for a note that is
+                                // all link, which leaves nowhere to double-click.
+                                ...(n === 1
+                                    ? [{
+                                          key: 'edit',
+                                          label: 'Edit',
+                                          icon: <PencilSimple weight="light" className="h-4 w-4 text-amber-300" />,
+                                          title: 'Edit the text (or double-click the note)',
+                                          onSelect: () => {
+                                              const id = noteNodeId(noteMenu.ids[0]);
+                                              setNodes((nds) => nds.map((x) => (x.id === id ? { ...x, data: { ...x.data, editRequest: Date.now() } } : x)));
+                                          },
+                                      }]
+                                    : []),
+                                'divider',
+                                { key: 'delete', label: n === 1 ? 'Delete note' : `Delete ${n} notes`, icon: <TrashSimple weight="light" className="h-4 w-4" />, danger: true, onSelect: () => setConfirmDeleteNoteIds(noteMenu.ids) },
+                            ]}
+                        />
+                    );
+                })()}
+
+            {/* Deleting notes asks first, as deleting a device does. */}
+            {confirmDeleteNoteIds !== null &&
+                (() => {
+                    const n = confirmDeleteNoteIds.length;
+                    const heading = n === 1 ? noteHeading(mapNotes.find((x) => x.id === confirmDeleteNoteIds[0])?.text) : '';
+                    const first = heading.length > 60 ? `${heading.slice(0, 60).trimEnd()}...` : heading;
+                    return (
+                        <ConfirmDialog
+                            title={n === 1 ? 'Delete note' : `Delete ${n} notes`}
+                            icon={<TrashSimple weight="light" className="h-5 w-5" />}
+                            message={
+                                n === 1 ? (
+                                    <>
+                                        Delete {first ? <span className="font-semibold text-white/85">"{first}"</span> : 'this note'} from this map? This can't be undone.
+                                    </>
+                                ) : (
+                                    <>Delete the {n} selected notes from this map? This can't be undone.</>
+                                )
+                            }
+                            confirmLabel={n === 1 ? 'Delete note' : `Delete ${n} notes`}
+                            tone="danger"
+                            onConfirm={() => {
+                                noteClip.remove(confirmDeleteNoteIds);
+                                setConfirmDeleteNoteIds(null);
+                            }}
+                            onClose={() => setConfirmDeleteNoteIds(null)}
+                        />
+                    );
+                })()}
+
+            {/* Right-click the empty canvas: paste here (from this map or another), or add a note. */}
+            {paneMenu !== null &&
+                (() => {
+                    const count = noteClip.clipboard?.items.length ?? 0;
+                    return (
+                        <CanvasMenu
+                            x={paneMenu.x}
+                            y={paneMenu.y}
+                            onClose={() => setPaneMenu(null)}
+                            items={[
+                                {
+                                    key: 'paste',
+                                    label: count > 1 ? `Paste ${count} notes` : 'Paste note',
+                                    icon: <ClipboardText weight="light" className="h-4 w-4 text-sky-300" />,
+                                    shortcut: shortcut('V'),
+                                    disabled: count === 0,
+                                    title: count === 0 ? 'Copy a note first - right-click it, or select it and press ' + shortcut('C') : undefined,
+                                    onSelect: () => noteClip.pasteAt(paneMenu.at),
+                                },
+                                {
+                                    key: 'add-note',
+                                    label: 'Add note here',
+                                    icon: <Note weight="light" className="h-4 w-4 text-amber-300" />,
+                                    onSelect: () => activeMapId !== null && createMapNote.mutate({ mapId: activeMapId, text: 'New note', x: paneMenu.at.x, y: paneMenu.at.y }),
+                                },
+                            ]}
+                        />
+                    );
+                })()}
 
             {/* Re-home a device onto its real uplink - from the node menu or the inspector. */}
             {parentForId !== null && devices?.some((d) => d.id === parentForId) && (
