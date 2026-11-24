@@ -13,6 +13,14 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- On the device page's graphs and a port's graphs, the hover line and its tooltip sat about 66px
+  left of the mouse, the first and last bit of each graph couldn't be hovered, and dragging to zoom
+  picked a range a little earlier than the one dragged over. They now line up with the mouse.
+- The traffic and health charts that open from the map could show the line, and the values in the
+  tooltip, for a time beside the one under the mouse when the window was short and wide. They now
+  follow the mouse whatever the window's shape.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

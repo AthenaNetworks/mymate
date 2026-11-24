@@ -4,6 +4,7 @@ import { useQueries } from '@tanstack/react-query';
 import { Pulse, X } from '@phosphor-icons/react';
 import { useDeviceInterfaces } from '../api/getDeviceInterfaces';
 import { parseUtc } from '../../../lib/parseUtc';
+import { svgPoint, svgXInParent } from '../../../lib/svgPoint';
 import { fetchDeviceSamples, deviceSampleKeys } from '../api/getDeviceSamples';
 import { fetchInterfaceSamples, sampleKeys } from '../api/getInterfaceSamples';
 import { formatRate } from '../../../lib/formatRate';
@@ -50,6 +51,8 @@ export function ChartModal({
     const [windowSec, setWindowSec] = useState<number>(86400);
     const [selected, setSelected] = useState<Set<SourceKey>>(new Set(['total']));
     const [hover, setHover] = useState<number | null>(null); // hovered bucket index
+    // The tooltip's left edge in px within the chart box, over the crosshair as actually drawn.
+    const [tipX, setTipX] = useState<number | null>(null);
     const { data: interfaces } = useDeviceInterfaces(deviceId);
 
     // The pick-list: Total + each interface.
@@ -111,13 +114,18 @@ export function ChartModal({
 
     function onMove(e: MouseEvent<SVGSVGElement>) {
         if (buckets.length === 0) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const px = ((e.clientX - rect.left) / rect.width) * W; // into viewBox space
+        // Into viewBox space through the SVG's own transform: the box rarely has the drawing's
+        // 1000x460 shape, and the browser centres the drawing with blank bands, so scaling by the
+        // box's width drifted the crosshair (and the values shown) away from the mouse.
+        const p = svgPoint(e.currentTarget, e.clientX, e.clientY);
+        if (!p) return;
+        const px = p.x;
         const t = tMin + ((px - PAD.l) / (W - PAD.l - PAD.r)) * tSpan;
         // nearest bucket
         let best = 0;
         for (let i = 1; i < buckets.length; i++) if (Math.abs(buckets[i] - t) < Math.abs(buckets[best] - t)) best = i;
         setHover(best);
+        setTipX(svgXInParent(e.currentTarget, x(buckets[best])));
     }
 
     const hoverT = hover !== null ? buckets[hover] : null;
@@ -191,7 +199,7 @@ export function ChartModal({
                         ) : allPts.length === 0 ? (
                             <div className="grid h-full place-items-center text-sm text-white/35">No samples in this window.</div>
                         ) : (
-                            <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+                            <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full" onMouseMove={onMove} onMouseLeave={() => { setHover(null); setTipX(null); }}>
                                 {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
                                     const v = vMax * (1 - f);
                                     return (
@@ -240,7 +248,7 @@ export function ChartModal({
                         {hoverT !== null && (
                             <div
                                 className="pointer-events-none absolute top-2 rounded-xl bg-surface-2/95 px-3 py-2 text-xs ring-1 ring-white/10"
-                                style={{ left: `${(x(hoverT) / W) * 100}%`, transform: 'translateX(-50%)' }}
+                                style={{ left: tipX !== null ? `${tipX}px` : `${(x(hoverT) / W) * 100}%`, transform: 'translateX(-50%)' }}
                             >
                                 <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">{fmtTime(hoverT)}</div>
                                 {series.map((s) => {

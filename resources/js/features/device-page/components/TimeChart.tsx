@@ -1,6 +1,7 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react';
 import { fmtStamp, fmtTick, fmtValue, niceMax } from '../lib/format';
 import { setHoverTime, useHoverTime } from '../lib/hoverSync';
+import { svgPoint } from '../../../lib/svgPoint';
 import type { SeriesStats } from '../api/devicePage';
 import type { PngLegend } from '../../graphs/lib/exportGraph';
 
@@ -187,9 +188,12 @@ export function TimeChart(props: Props) {
 
     const empty = !loading && lines.every((l) => l.values.every((v) => v === null));
 
+    // The pointer's x in the chart's own coordinates. Measured against the whole SVG: the hover
+    // target is the plot-area <rect>, which starts pad.l (66px) in, so measuring from it put the
+    // crosshair, tooltip and drag-to-zoom 66px left of the mouse.
     function pointerX(e: ReactPointerEvent) {
-        const r = (e.currentTarget as Element).getBoundingClientRect();
-        return Math.min(pad.l + plotW, Math.max(pad.l, e.clientX - r.left));
+        const p = svgPoint(e.currentTarget as Element, e.clientX, e.clientY);
+        return Math.min(pad.l + plotW, Math.max(pad.l, p?.x ?? pad.l));
     }
 
     return (
