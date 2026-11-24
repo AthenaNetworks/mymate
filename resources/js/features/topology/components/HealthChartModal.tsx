@@ -4,6 +4,7 @@ import { Heartbeat, X } from '@phosphor-icons/react';
 import { useDeviceMetricSamples } from '../api/getDeviceMetricSamples';
 import { useDevicePingSamples } from '../api/getDevicePingSamples';
 import { parseUtc } from '../../../lib/parseUtc';
+import { svgPoint, svgXInParent } from '../../../lib/svgPoint';
 import { HEALTH_METRICS, healthPoints, type HealthMetric } from '../lib/healthMetrics';
 
 const WINDOWS = [
@@ -30,6 +31,8 @@ export function HealthChartModal({ deviceId, deviceName, onClose }: { deviceId: 
     const [windowSec, setWindowSec] = useState<number>(86400);
     const [metricKey, setMetricKey] = useState<string | null>(null);
     const [hover, setHover] = useState<number | null>(null); // hovered point index
+    // The tooltip's left edge in px within the chart box, over the crosshair as actually drawn.
+    const [tipX, setTipX] = useState<number | null>(null);
 
     const metricsQ = useDeviceMetricSamples(deviceId, windowSec);
     const pingQ = useDevicePingSamples(deviceId, windowSec);
@@ -83,12 +86,17 @@ export function HealthChartModal({ deviceId, deviceName, onClose }: { deviceId: 
 
     function onMove(e: MouseEvent<SVGSVGElement>) {
         if (points.length === 0) return;
-        const rect = e.currentTarget.getBoundingClientRect();
-        const px = ((e.clientX - rect.left) / rect.width) * W; // into viewBox space
+        // Into viewBox space through the SVG's own transform: the box rarely has the drawing's
+        // 1000x460 shape, and the browser centres the drawing with blank bands, so scaling by the
+        // box's width drifted the crosshair (and the values shown) away from the mouse.
+        const p = svgPoint(e.currentTarget, e.clientX, e.clientY);
+        if (!p) return;
+        const px = p.x;
         const t = tMin + ((px - PAD.l) / (W - PAD.l - PAD.r)) * tSpan;
         let best = 0;
         for (let i = 1; i < points.length; i++) if (Math.abs(points[i].t - t) < Math.abs(points[best].t - t)) best = i;
         setHover(best);
+        setTipX(svgXInParent(e.currentTarget, x(points[best].t)));
     }
 
     const hoverPt = hover !== null && hover < points.length ? points[hover] : null;
@@ -154,7 +162,7 @@ export function HealthChartModal({ deviceId, deviceName, onClose }: { deviceId: 
                         ) : metric === null ? (
                             <div className="grid h-full place-items-center text-sm text-white/35">No health history in this window - collected on the next sweep.</div>
                         ) : (
-                            <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full" onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+                            <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full" onMouseMove={onMove} onMouseLeave={() => { setHover(null); setTipX(null); }}>
                                 {[0, 0.25, 0.5, 0.75, 1].map((f, i) => {
                                     const v = vMax - f * vSpan;
                                     return (
@@ -196,7 +204,7 @@ export function HealthChartModal({ deviceId, deviceName, onClose }: { deviceId: 
                         {metric !== null && hoverPt !== null && (
                             <div
                                 className="pointer-events-none absolute top-2 rounded-xl bg-surface-2/95 px-3 py-2 text-xs ring-1 ring-white/10"
-                                style={{ left: `${(x(hoverPt.t) / W) * 100}%`, transform: 'translateX(-50%)' }}
+                                style={{ left: tipX !== null ? `${tipX}px` : `${(x(hoverPt.t) / W) * 100}%`, transform: 'translateX(-50%)' }}
                             >
                                 <div className="mb-1 text-[10px] uppercase tracking-wide text-white/40">{fmtTime(hoverPt.t)}</div>
                                 <div className="flex items-center gap-2 tabular-nums">
