@@ -24,17 +24,20 @@ import type { AlertConditionType } from '../types';
 
 export type SoundSource = 'devices' | 'alerts';
 /** One list for both directions, so anyone can pick whichever sound they like for each. */
-export type AlertSound = 'chime' | 'soft' | 'ding' | 'rising' | 'knock' | 'beeps' | 'alarm' | 'off';
+export type AlertSound = 'off' | 'alarm' | 'rising' | 'beeps' | 'chime' | 'ding' | 'knock' | 'soft' | 'soft-up';
 
+// "No sound" first, then alphabetical by name. Values stay stable for saved settings ('soft' was
+// "Soft chime" before it had an "up" twin).
 export const ALERT_SOUNDS: { value: AlertSound; label: string }[] = [
-    { value: 'chime', label: 'Chime' },
-    { value: 'soft', label: 'Soft chime' },
-    { value: 'ding', label: 'Ding' },
-    { value: 'rising', label: 'All clear' },
-    { value: 'knock', label: 'Knock' },
-    { value: 'beeps', label: 'Beeps' },
-    { value: 'alarm', label: 'Alarm' },
     { value: 'off', label: 'No sound' },
+    { value: 'alarm', label: 'Alarm' },
+    { value: 'rising', label: 'All clear' },
+    { value: 'beeps', label: 'Beeps' },
+    { value: 'chime', label: 'Chime' },
+    { value: 'ding', label: 'Ding' },
+    { value: 'knock', label: 'Knock' },
+    { value: 'soft', label: 'Soft chime down' },
+    { value: 'soft-up', label: 'Soft chime up' },
 ];
 
 /** The alert policy conditions, in the policy editor's order, as the Sounds tab lists them. */
@@ -70,8 +73,8 @@ export interface SoundPrefs {
 export const SOUND_DEFAULTS = {
     source: 'devices' as SoundSource,
     alertTypes: ['device_down'] as AlertConditionType[],
-    firingSound: 'chime' as AlertSound,
-    resolvedSound: 'soft' as AlertSound,
+    firingSound: 'soft' as AlertSound,
+    resolvedSound: 'soft-up' as AlertSound,
     volume: 70,
     speechVolume: 80,
 };
@@ -208,6 +211,7 @@ const SYNTH: Record<AlertSound, (volume: number) => void> = {
     knock: (v) => tone(v, [196, 196], 0.17, 0.7, 'sine', 0.12),
     off: () => {},
     soft: (v) => tone(v, [659.3, 523.3], 0.14, 0.17),
+    'soft-up': (v) => tone(v, [523.3, 659.3], 0.14, 0.17),
     rising: (v) => tone(v, [523.3, 659.3, 784], 0.12, 0.2, 'sine', 0.5),
     ding: (v) => tone(v, [1568], 0, 0.2, 'sine', 1.4),
 };
