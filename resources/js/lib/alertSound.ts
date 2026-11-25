@@ -23,21 +23,18 @@ import type { AlertConditionType } from '../types';
  */
 
 export type SoundSource = 'devices' | 'alerts';
-export type FiringSound = 'chime' | 'alarm' | 'beeps' | 'knock';
-export type ResolvedSound = 'off' | 'soft' | 'rising' | 'ding';
+/** One list for both directions, so anyone can pick whichever sound they like for each. */
+export type AlertSound = 'chime' | 'soft' | 'ding' | 'rising' | 'knock' | 'beeps' | 'alarm' | 'off';
 
-export const FIRING_SOUNDS: { value: FiringSound; label: string }[] = [
+export const ALERT_SOUNDS: { value: AlertSound; label: string }[] = [
     { value: 'chime', label: 'Chime' },
-    { value: 'alarm', label: 'Alarm' },
-    { value: 'beeps', label: 'Beeps' },
-    { value: 'knock', label: 'Knock' },
-];
-
-export const RESOLVED_SOUNDS: { value: ResolvedSound; label: string }[] = [
-    { value: 'off', label: 'No sound' },
     { value: 'soft', label: 'Soft chime' },
-    { value: 'rising', label: 'All clear' },
     { value: 'ding', label: 'Ding' },
+    { value: 'rising', label: 'All clear' },
+    { value: 'knock', label: 'Knock' },
+    { value: 'beeps', label: 'Beeps' },
+    { value: 'alarm', label: 'Alarm' },
+    { value: 'off', label: 'No sound' },
 ];
 
 /** The alert policy conditions, in the policy editor's order, as the Sounds tab lists them. */
@@ -61,8 +58,8 @@ export interface SoundPrefs {
     mutedUntil: number; // epoch ms; 0 = not snoozed
     source: SoundSource;
     alertTypes: AlertConditionType[];
-    firingSound: FiringSound;
-    resolvedSound: ResolvedSound;
+    firingSound: AlertSound; // down / firing
+    resolvedSound: AlertSound; // back up / resolved
     volume: number; // 0-100, the sounds
     speak: boolean;
     speechVolume: number; // 0-100, the spoken line
@@ -73,8 +70,8 @@ export interface SoundPrefs {
 export const SOUND_DEFAULTS = {
     source: 'devices' as SoundSource,
     alertTypes: ['device_down'] as AlertConditionType[],
-    firingSound: 'chime' as FiringSound,
-    resolvedSound: 'soft' as ResolvedSound,
+    firingSound: 'chime' as AlertSound,
+    resolvedSound: 'soft' as AlertSound,
     volume: 70,
     speechVolume: 80,
 };
@@ -104,8 +101,8 @@ function read(ctx: SoundContext): SoundPrefs {
         alertTypes: Array.isArray(raw.alertTypes)
             ? raw.alertTypes.filter((t): t is AlertConditionType => SOUND_ALERT_TYPES.some((o) => o.value === t))
             : [...d.alertTypes],
-        firingSound: oneOf(raw.firingSound, FIRING_SOUNDS, d.firingSound),
-        resolvedSound: oneOf(raw.resolvedSound, RESOLVED_SOUNDS, d.resolvedSound),
+        firingSound: oneOf(raw.firingSound, ALERT_SOUNDS, d.firingSound),
+        resolvedSound: oneOf(raw.resolvedSound, ALERT_SOUNDS, d.resolvedSound),
         volume: clamp(raw.volume, d.volume),
         speak: typeof raw.speak === 'boolean' ? raw.speak : d.speak,
         speechVolume: clamp(raw.speechVolume, d.speechVolume),
@@ -204,7 +201,7 @@ function tone(volume: number, freqs: number[], gap: number, peak: number, type: 
 }
 
 // Peaks are balanced by ear so the sounds come out about equally loud at the same volume.
-const SYNTH: Record<FiringSound | ResolvedSound, (volume: number) => void> = {
+const SYNTH: Record<AlertSound, (volume: number) => void> = {
     chime: (v) => tone(v, [880, 1318.5], 0.16, 0.36),
     alarm: (v) => tone(v, [987.8, 784, 987.8, 784, 987.8, 784], 0.2, 0.17, 'triangle', 0.19),
     beeps: (v) => tone(v, [1000, 1000, 1000], 0.18, 0.21, 'square', 0.1),
@@ -216,7 +213,7 @@ const SYNTH: Record<FiringSound | ResolvedSound, (volume: number) => void> = {
 };
 
 /** Play one sound now (the Sounds tab's pickers and test button use this directly). */
-export function playSound(sound: FiringSound | ResolvedSound, volume: number): void {
+export function playSound(sound: AlertSound, volume: number): void {
     SYNTH[sound](volume);
 }
 
@@ -329,14 +326,17 @@ function flush(ctx: SoundContext) {
     const resolved = shared ? SOUND_DEFAULTS.resolvedSound : p.resolvedSound;
     const volume = shared ? SOUND_DEFAULTS.volume : p.volume;
 
+    // "No sound" for a direction keeps that direction quiet: no sound, no spoken line.
+    const playDown = down.length > 0 && firing !== 'off';
+    const playUp = up.length > 0 && resolved !== 'off';
     const lines: string[] = [];
-    if (down.length) {
+    if (playDown) {
         playSound(firing, volume);
         lines.push(summary(down, 'down'));
     }
-    if (up.length && resolved !== 'off') {
-        // After a firing sound, wait for it to finish rather than talk over it.
-        if (down.length) setTimeout(() => playSound(resolved, volume), 1300);
+    if (playUp) {
+        // After a down sound, wait for it to finish rather than play over it.
+        if (playDown) setTimeout(() => playSound(resolved, volume), 1300);
         else playSound(resolved, volume);
         lines.push(summary(up, 'up'));
     }
@@ -345,7 +345,7 @@ function flush(ctx: SoundContext) {
     if (p.speak) {
         const text = lines.join('. ');
         // Let the sound play first.
-        setTimeout(() => speakLine(text, p.speechVolume), down.length && up.length && resolved !== 'off' ? 2200 : 900);
+        setTimeout(() => speakLine(text, p.speechVolume), playDown && playUp ? 2200 : 900);
     }
     if (p.notify && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {

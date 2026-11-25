@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { BellRinging, Microphone, SpeakerHigh, SpeakerSimpleHigh } from '@phosphor-icons/react';
 import {
-    FIRING_SOUNDS,
+    ALERT_SOUNDS,
     playSound,
     requestNotifyPermission,
-    RESOLVED_SOUNDS,
     setSoundPrefs,
     SOUND_ALERT_TYPES,
     SOUND_DEFAULTS,
     speakLine,
     useSoundPrefs,
-    type FiringSound,
-    type ResolvedSound,
+    type AlertSound,
     type SoundSource,
 } from '../../../lib/alertSound';
 import { Toggle } from '../../../components/Toggle';
@@ -239,13 +237,13 @@ export function SoundsSection() {
                         <select
                             value={p.firingSound}
                             onChange={(e) => {
-                                const v = e.target.value as FiringSound;
+                                const v = e.target.value as AlertSound;
                                 set({ firingSound: v });
                                 playSound(v, p.volume);
                             }}
                             className={select}
                         >
-                            {FIRING_SOUNDS.map((s) => (
+                            {ALERT_SOUNDS.map((s) => (
                                 <option key={s.value} value={s.value}>
                                     {s.label}
                                 </option>
@@ -257,13 +255,13 @@ export function SoundsSection() {
                         <select
                             value={p.resolvedSound}
                             onChange={(e) => {
-                                const v = e.target.value as ResolvedSound;
+                                const v = e.target.value as AlertSound;
                                 set({ resolvedSound: v });
                                 playSound(v, p.volume);
                             }}
                             className={select}
                         >
-                            {RESOLVED_SOUNDS.map((s) => (
+                            {ALERT_SOUNDS.map((s) => (
                                 <option key={s.value} value={s.value}>
                                     {s.label}
                                 </option>
@@ -282,7 +280,7 @@ export function SoundsSection() {
                             icon={SpeakerSimpleHigh}
                             value={p.volume}
                             onChange={(v) => set({ volume: v })}
-                            onRelease={(v) => playSound(p.firingSound, v)}
+                            onRelease={(v) => playSound(p.firingSound !== 'off' ? p.firingSound : p.resolvedSound, v)}
                         />
                     </div>
                 </div>
@@ -290,7 +288,7 @@ export function SoundsSection() {
                     <button
                         type="button"
                         onClick={() => {
-                            playSound(p.firingSound, p.volume);
+                            playSound(p.firingSound !== 'off' ? p.firingSound : p.resolvedSound, p.volume);
                             if (p.speak) setTimeout(() => speakLine('This is a test alert from My Mate', p.speechVolume), 900);
                         }}
                         className="rounded-lg px-3 py-1.5 text-sm text-white/60 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/85"

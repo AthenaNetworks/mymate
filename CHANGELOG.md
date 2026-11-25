@@ -18,7 +18,7 @@ of commit subjects.
   rather, when alerts of the types you pick fire and resolve. It plays on every page and in
   wallboard mode. A speaker button next to the wallboard button turns it on or off and mutes it
   for 15 minutes, an hour or four hours. Settings > Sounds holds the rest:
-  - which sound plays each way, or none on recovery;
+  - which sound plays each way, picked from one list of eight (including no sound);
   - a volume slider;
   - reading alerts out loud, with its own volume;
   - desktop notifications, which need HTTPS.

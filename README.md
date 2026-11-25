@@ -176,8 +176,8 @@ for 15 minutes, an hour or four hours. Everything else is under **Settings > Sou
 
 - **What plays a sound:** any device going down or coming back (the default), or alerts from
   your alert policies, of the types you tick (by default only "Device down / recovered").
-- **Sounds and volume:** a sound for each direction (or none when things recover), and a volume
-  slider.
+- **Sounds and volume:** a sound for each direction, picked from the same list (or no sound),
+  and a volume slider.
 - **Read alerts out loud**, with its own volume.
 - **Desktop notifications**, off by default. These pop up even when the tab is in the background.
   They need My Mate on **HTTPS** (see below), because browsers only allow notifications on a
