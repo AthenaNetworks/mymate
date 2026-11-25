@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Enums\DeviceType;
+use App\Models\Sensor;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -23,19 +23,15 @@ class StoreSensorRequest extends FormRequest
             // A numeric SNMP OID, optionally dotted-leading. GET reads it as a scalar; walk
             // reads it as a table base and reduces the rows by `agg`.
             'oid' => [$creating ? 'required' : 'sometimes', 'string', 'regex:/^\.?\d+(\.\d+)*$/'],
-            'mode' => ['sometimes', Rule::in(\App\Models\Sensor::MODES)],
-            'agg' => ['nullable', 'required_if:mode,walk', Rule::in(\App\Models\Sensor::AGGS)],
+            'mode' => ['sometimes', Rule::in(Sensor::MODES)],
+            'agg' => ['nullable', 'required_if:mode,walk', Rule::in(Sensor::AGGS)],
             'unit' => ['nullable', 'string', 'max:16'],
             'divisor' => ['nullable', 'numeric', 'not_in:0'],
             'enabled' => ['sometimes', 'boolean'],
             'on_face' => ['sometimes', 'boolean'],
             // Targeting - same bag as alert policies. null/all = fleet-wide.
-            'scope' => ['nullable', 'array'],
-            'scope.type' => ['nullable', Rule::in(['all', 'device_type', 'map', 'devices'])],
-            'scope.device_type' => ['nullable', 'required_if:scope.type,device_type', Rule::enum(DeviceType::class)],
-            'scope.map_id' => ['nullable', 'required_if:scope.type,map', 'integer', 'exists:maps,id'],
-            'scope.device_ids' => ['nullable', 'required_if:scope.type,devices', 'array'],
-            'scope.device_ids.*' => ['integer', 'exists:devices,id'],
+            // Targeting, in either scope shape (shared with the other scoped features).
+            ...ScopeRules::rules(),
         ];
     }
 

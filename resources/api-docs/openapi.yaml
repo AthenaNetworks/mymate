@@ -1932,6 +1932,45 @@ paths:
           description: Delivery failed.
 
   # ------------------------------------------------------------ Maintenance
+  /scopes/preview:
+    post:
+      tags: [Maintenance]
+      summary: Preview which devices a targeting scope covers
+      description: >-
+        Admin only. How many devices a scope (as used by alert policies, maintenance windows and
+        sensors) would cover right now, with a few of their names. Nothing is saved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope: { $ref: "#/components/schemas/Scope" }
+      responses:
+        "200":
+          description: The devices the scope covers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      all: { type: boolean, description: "True when the scope is fleet-wide." }
+                      count: { type: integer }
+                      total: { type: integer, description: "Every device." }
+                      sample:
+                        type: array
+                        description: Up to 8 of the covered devices, by name.
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            name: { type: string }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
   /maintenance-windows:
     get:
       tags: [Maintenance]
@@ -3105,6 +3144,18 @@ components:
         scope: { $ref: "#/components/schemas/Scope" }
         enabled: { type: boolean }
         transport_ids: { type: array, items: { type: integer } }
+        coverage:
+          type: object
+          description: >-
+            Only in the list (GET /alert-policies). What the scope covers right now: how many
+            devices it matches, up to 8 of their names, and the name of each device the scope lists
+            one by one (included or excepted), keyed by device id. A listed device that has been
+            deleted has no entry.
+          properties:
+            matched: { type: integer }
+            total: { type: integer, description: Every device in the fleet }
+            sample: { type: array, items: { type: string } }
+            device_names: { type: object, additionalProperties: { type: string } }
     AlertPolicyWrite:
       type: object
       required: [name, condition]
@@ -3316,9 +3367,27 @@ components:
 
     Scope:
       type: object
-      description: Targeting rule shared by alert policies, sensors and maintenance windows.
+      description: >-
+        Targeting rule shared by alert policies, sensors and maintenance windows, in one of two
+        shapes (not mixed). The original single choice: `type` plus its field (a `map` scope covers
+        only devices placed directly on that map). Or combinations: `include` - device types (any of
+        them) AND maps (any of them), plus listed devices - minus `exclude`, where a device matching
+        any of its fields is removed. Empty or missing lists don't restrict; nothing set anywhere
+        means every device. Saved scopes are stored cleaned, and a fleet-wide one is returned as
+        `{type: all}`.
       properties:
         type: { type: string, enum: [all, device_type, map, devices] }
         device_type: { type: string, enum: [router, switch, ap, server, internet, unknown], description: "When type=device_type." }
         map_id: { type: integer, description: "When type=map." }
         device_ids: { type: array, items: { type: integer }, description: "When type=devices." }
+        include: { $ref: "#/components/schemas/ScopeRule" }
+        exclude: { $ref: "#/components/schemas/ScopeRule" }
+
+    ScopeRule:
+      type: object
+      description: One side (include or exclude) of a combination scope.
+      properties:
+        device_types: { type: array, items: { type: string, enum: [router, switch, ap, server, internet, unknown] } }
+        map_ids: { type: array, items: { type: integer } }
+        submaps: { type: boolean, default: false, description: "Also the maps under the listed ones." }
+        device_ids: { type: array, items: { type: integer } }

@@ -20,6 +20,14 @@ class AlertPolicy extends Model
 
     protected $fillable = ['name', 'condition', 'params', 'scope', 'enabled'];
 
+    /**
+     * What the scope covers right now (ScopeCoverage), set by the policy list for its rows. Not a
+     * column: a plain property, so it's never saved or serialised with the model.
+     *
+     * @var array{matched: int, total: int, sample: list<string>, device_names: array<int, string>}|null
+     */
+    public ?array $coverage = null;
+
     protected $casts = [
         'condition' => AlertCondition::class,
         'params' => 'array',
