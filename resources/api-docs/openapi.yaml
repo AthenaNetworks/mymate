@@ -3144,6 +3144,18 @@ components:
         scope: { $ref: "#/components/schemas/Scope" }
         enabled: { type: boolean }
         transport_ids: { type: array, items: { type: integer } }
+        coverage:
+          type: object
+          description: >-
+            Only in the list (GET /alert-policies). What the scope covers right now: how many
+            devices it matches, up to 8 of their names, and the name of each device the scope lists
+            one by one (included or excepted), keyed by device id. A listed device that has been
+            deleted has no entry.
+          properties:
+            matched: { type: integer }
+            total: { type: integer, description: Every device in the fleet }
+            sample: { type: array, items: { type: string } }
+            device_names: { type: object, additionalProperties: { type: string } }
     AlertPolicyWrite:
       type: object
       required: [name, condition]

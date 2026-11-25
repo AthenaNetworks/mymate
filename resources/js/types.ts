@@ -688,6 +688,15 @@ export interface AlertPolicy {
     scope: AlertScope;
     enabled: boolean;
     transport_ids: number[];
+    /** List only: what the scope covers now (devices matched, a few names, listed devices by id). */
+    coverage?: ScopeCoverage;
+}
+
+export interface ScopeCoverage {
+    matched: number;
+    total: number;
+    sample: string[];
+    device_names: Record<string, string>;
 }
 
 export type TransportType = 'email' | 'slack' | 'teams' | 'messenger' | 'webhook' | 'discord' | 'telegram' | 'pagerduty' | 'nocgenie';

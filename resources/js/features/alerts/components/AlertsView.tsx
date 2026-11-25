@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Bell, Plus, PencilSimple, Trash, PaperPlaneTilt, Wrench } from '@phosphor-icons/react';
+import { Bell, Eye, EyeSlash, Plus, PencilSimple, Trash, PaperPlaneTilt, Wrench } from '@phosphor-icons/react';
 import { ConfirmDialog } from '../../../components/Dialog';
 import { ScopeEditor } from '../../../components/ScopeEditor';
+import { ScopeChips } from '../../../components/ScopeChips';
 import { InterfaceFilterEditor, interfaceFilterSummary } from './InterfaceFilterEditor';
 import { useAlertPolicies, useSaveAlertPolicy, useDeleteAlertPolicy, type AlertPolicyInput } from '../api/alertPolicies';
 import {
@@ -11,13 +12,13 @@ import {
     type MaintenanceWindowInput,
 } from '../api/maintenanceWindows';
 import { useAlertTransports, useSaveAlertTransport, useDeleteAlertTransport, useTestTransport, type AlertTransportInput } from '../api/alertTransports';
-import { useAlertEvents, useAckAlertEvent } from '../api/alertEvents';
+import { useAlertEvents, useAckAlertEvent, useFiringAlerts } from '../api/alertEvents';
 import { useIsAdmin } from '../../auth/api/auth';
 import { relativeTime } from '../../../lib/relativeTime';
-import { describeScope, isFleetWide } from '../../../lib/scope';
+import { describeScope } from '../../../lib/scope';
 import { useMaps } from '../../maps/api/maps';
 import { pushToast } from '../../../lib/toast';
-import type { AlertConditionType, AlertPolicy, AlertTransport, MaintenanceWindow } from '../../../types';
+import type { AlertConditionType, AlertPolicy, AlertTransport, MaintenanceWindow, NetworkMap } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
 const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down', 'probe_slow', 'optical_power'];
@@ -539,6 +540,160 @@ function MaintenanceForm({ initial, onDone }: { initial?: MaintenanceWindow; onD
     );
 }
 
+const METRIC_LABEL: Record<string, string> = { cpu: 'CPU', mem: 'Memory', temp: 'Temperature', latency: 'Latency', loss: 'Packet loss' };
+
+/** What makes a policy fire, in a few words each: "Over 90%", "For 10 min", "Suppresses dependents". */
+function policyTriggers(p: AlertPolicy): string[] {
+    const t = p.params ?? {};
+    const minutes = t.duration_minutes ?? 0;
+    const out: string[] = [];
+    switch (p.condition) {
+        case 'device_down':
+            out.push(minutes > 0 ? `After ${minutes} min down` : 'Notifies at once');
+            out.push((t.suppress_dependent ?? true) ? 'Suppresses dependents' : 'Alerts dependents too');
+            return out;
+        case 'high_util':
+            out.push(`Over ${t.threshold ?? 90}%`);
+            break;
+        case 'low_throughput':
+            out.push(`Under ${t.threshold ?? 1} Mbps on ${t.target === 'interfaces' ? 'ports' : 'links'}`);
+            break;
+        case 'high_metric': {
+            const unit = t.metric === 'temp' ? '°C' : t.metric === 'latency' ? ' ms' : '%';
+            out.push(`${METRIC_LABEL[t.metric ?? 'cpu'] ?? t.metric} over ${t.threshold ?? 90}${unit}`);
+            break;
+        }
+        case 'optical_power':
+            out.push(`${(t.optical ?? 'rx') === 'rx' ? 'Rx' : 'Tx'} ${t.bound ?? 'below'} ${t.dbm ?? -25} dBm`);
+            break;
+        case 'probe_slow':
+            out.push(`Slower than ${t.threshold ?? 1000} ms`);
+            break;
+    }
+    if (p.condition === 'interface_down' || (p.condition === 'low_throughput' && t.target === 'interfaces')) {
+        const ports = interfaceFilterSummary(t.interfaces);
+        if (ports) out.push(ports.charAt(0).toUpperCase() + ports.slice(1));
+    }
+    if (SUSTAINABLE_CONDITIONS.includes(p.condition) && minutes > 0) out.push(`For ${minutes} min`);
+    return out;
+}
+
+const DETAILS_KEY = 'mymate.alerts.policy-details';
+
+/** The policy list's Details on/off, remembered in this browser (a display preference only). */
+function usePolicyDetails(): [boolean, () => void] {
+    const [on, setOn] = useState(() => {
+        try {
+            return window.localStorage.getItem(DETAILS_KEY) !== 'off';
+        } catch {
+            return true;
+        }
+    });
+    const toggle = () =>
+        setOn((v) => {
+            try {
+                window.localStorage.setItem(DETAILS_KEY, v ? 'off' : 'on');
+            } catch {
+                // Storage off: the choice lasts until the page is reloaded.
+            }
+            return !v;
+        });
+    return [on, toggle];
+}
+
+const badge = 'shrink-0 rounded-full px-2 text-[11px] font-semibold leading-5';
+
+/**
+ * One policy in the list. The first line is always there: name, condition and badges (firing,
+ * a warning, disabled). With details on it adds what it applies to, what makes it fire, how many
+ * devices it covers right now and where it sends.
+ */
+function PolicyRow({
+    policy: p,
+    details,
+    maps,
+    transports,
+    firing,
+    isAdmin,
+    onEdit,
+    onDelete,
+}: {
+    policy: AlertPolicy;
+    details: boolean;
+    maps: NetworkMap[] | undefined;
+    transports: AlertTransport[] | undefined;
+    firing: number;
+    isAdmin: boolean;
+    onEdit: () => void;
+    onDelete: () => void;
+}) {
+    const scoped = SCOPED_CONDITIONS.includes(p.condition);
+    const sendsTo = transports?.filter((t) => t.enabled && p.transport_ids?.includes(t.id)) ?? [];
+    const nowhere = transports !== undefined && sendsTo.length === 0;
+    const matchesNone = scoped && p.coverage?.matched === 0;
+    const warning = !p.enabled ? null : matchesNone ? 'Matches no devices' : nowhere ? 'Nowhere to send' : null;
+    const sample = p.coverage?.sample ?? [];
+    const sampleTitle =
+        sample.length > 0 ? `e.g. ${sample.join(', ')}${(p.coverage?.matched ?? 0) > sample.length ? ', ...' : ''}` : undefined;
+    const triggers = policyTriggers(p);
+
+    return (
+        <div className={`rounded-xl bg-white/[0.02] px-3 py-2 text-sm ring-1 ring-white/[0.06] ${p.enabled ? '' : 'opacity-60'}`}>
+            <div className="flex items-center gap-2">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.enabled ? 'bg-emerald-400' : 'bg-white/20'}`} />
+                <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5">
+                    <span className="min-w-0 break-words font-semibold text-white/85">{p.name}</span>
+                    <span className="text-white/40">{p.condition_label}</span>
+                </span>
+                {!p.enabled && <span className={`${badge} bg-white/5 text-white/40`}>Disabled</span>}
+                {firing > 0 && <span className={`${badge} bg-rose-500/10 text-rose-300 ring-1 ring-rose-400/25`}>{firing} firing</span>}
+                {warning && <span className={`${badge} bg-amber-500/10 text-amber-300 ring-1 ring-amber-400/25`}>{warning}</span>}
+                {isAdmin && (
+                    <span className="flex shrink-0 items-center">
+                        <button onClick={onEdit} className={iconBtn} aria-label={`Edit ${p.name}`}>
+                            <PencilSimple weight="bold" className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={onDelete} className={`${iconBtn} hover:bg-rose-500/10 hover:text-rose-300`} aria-label={`Delete ${p.name}`}>
+                            <Trash weight="bold" className="h-3.5 w-3.5" />
+                        </button>
+                    </span>
+                )}
+            </div>
+            {details && (
+                <div className="mt-1.5 space-y-1.5 pl-3.5">
+                    {scoped ? (
+                        <ScopeChips scope={p.scope} maps={maps} deviceNames={p.coverage?.device_names} />
+                    ) : (
+                        <p className="text-xs text-white/45">
+                            {p.condition === 'agent_down' ? 'Applies to every remote agent' : 'Applies to newly discovered devices'}
+                        </p>
+                    )}
+                    <div className="flex flex-wrap gap-x-3.5 gap-y-0.5 text-xs text-white/40">
+                        {scoped && p.coverage && (
+                            <span className={matchesNone ? 'text-amber-300' : ''}>
+                                <span className={`tabular-nums ${sampleTitle ? 'cursor-help underline decoration-white/25 decoration-dotted underline-offset-2' : ''}`} title={sampleTitle}>
+                                    Matches <span className="font-medium text-white/60">{p.coverage.matched}</span> of {p.coverage.total} devices
+                                </span>
+                            </span>
+                        )}
+                        {triggers.map((t) => (
+                            <span key={t}>{t}</span>
+                        ))}
+                        {transports !== undefined &&
+                            (nowhere ? (
+                                <span className="text-amber-300">No enabled transports</span>
+                            ) : (
+                                <span>
+                                    Sends to <span className="font-medium text-white/60">{sendsTo.map((t) => t.name).join(', ')}</span>
+                                </span>
+                            ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 function MaintenanceSection({ isAdmin }: { isAdmin: boolean }) {
     const { data: windows } = useMaintenanceWindows();
     const { data: maps } = useMaps(); // map names for the scope summaries
@@ -606,6 +761,10 @@ export function AlertsView() {
     const { data: maps } = useMaps(); // map names for the scope summaries
     const { data: transports } = useAlertTransports();
     const { data: events } = useAlertEvents();
+    const { data: firingEvents } = useFiringAlerts(true); // per-policy "N firing" badges
+    const firingByPolicy = new Map<number, number>();
+    for (const e of firingEvents ?? []) firingByPolicy.set(e.policy_id, (firingByPolicy.get(e.policy_id) ?? 0) + 1);
+    const [policyDetails, togglePolicyDetails] = usePolicyDetails();
     const delPolicy = useDeleteAlertPolicy();
     const delTransport = useDeleteAlertTransport();
     const testTransport = useTestTransport();
@@ -669,11 +828,23 @@ export function AlertsView() {
                 <section className={card}>
                     <div className="mb-3 flex items-center justify-between">
                         <h2 className="text-sm font-bold text-white">Policies</h2>
-                        {isAdmin && !addingPolicy && (
-                            <button onClick={() => { setAddingPolicy(true); setEditingPolicy(null); }} className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 hover:text-white">
-                                <Plus weight="bold" className="h-3.5 w-3.5" /> Add
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                onClick={togglePolicyDetails}
+                                aria-pressed={policyDetails}
+                                title="Show or hide what each policy applies to, what makes it fire and where it sends"
+                                className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                                    policyDetails ? 'bg-emerald-500/10 text-emerald-300 ring-emerald-400/20' : 'text-white/40 ring-white/10 hover:text-white/80'
+                                }`}
+                            >
+                                {policyDetails ? <Eye weight="bold" className="h-3.5 w-3.5" /> : <EyeSlash weight="bold" className="h-3.5 w-3.5" />} Details
                             </button>
-                        )}
+                            {isAdmin && !addingPolicy && (
+                                <button onClick={() => { setAddingPolicy(true); setEditingPolicy(null); }} className="flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 hover:text-white">
+                                    <Plus weight="bold" className="h-3.5 w-3.5" /> Add
+                                </button>
+                            )}
+                        </div>
                     </div>
                     {addingPolicy && <PolicyForm transports={transports ?? []} onDone={() => setAddingPolicy(false)} />}
                     <div className="mt-2 space-y-2">
@@ -681,29 +852,17 @@ export function AlertsView() {
                             editingPolicy === p.id ? (
                                 <PolicyForm key={p.id} initial={p} transports={transports ?? []} onDone={() => setEditingPolicy(null)} />
                             ) : (
-                                <div key={p.id} className="flex items-center gap-2 rounded-xl bg-white/[0.02] px-3 py-2 text-sm ring-1 ring-white/[0.06]">
-                                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.enabled ? 'bg-emerald-400' : 'bg-white/20'}`} />
-                                    <span className="min-w-0 flex-1 truncate text-white/85">
-                                        {p.name}
-                                        <span className="text-white/35"> - {p.condition_label}</span>
-                                        {!isFleetWide(p.scope) && <span className="text-emerald-300/60"> - {describeScope(p.scope, maps)}</span>}
-                                        {(p.condition === 'interface_down' || (p.condition === 'low_throughput' && p.params?.target === 'interfaces')) &&
-                                            interfaceFilterSummary(p.params?.interfaces) && (
-                                                <span className="text-emerald-300/60"> - {interfaceFilterSummary(p.params?.interfaces)}</span>
-                                            )}
-                                        {(p.params?.duration_minutes ?? 0) > 0 && <span className="text-white/35"> - {p.params.duration_minutes} min</span>}
-                                    </span>
-                                    {isAdmin && (
-                                        <>
-                                            <button onClick={() => { setEditingPolicy(p.id); setAddingPolicy(false); }} className={iconBtn}>
-                                                <PencilSimple weight="bold" className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button onClick={() => setDeletingPolicy(p)} className={`${iconBtn} hover:bg-rose-500/10 hover:text-rose-300`}>
-                                                <Trash weight="bold" className="h-3.5 w-3.5" />
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
+                                <PolicyRow
+                                    key={p.id}
+                                    policy={p}
+                                    details={policyDetails}
+                                    maps={maps}
+                                    transports={transports}
+                                    firing={firingByPolicy.get(p.id) ?? 0}
+                                    isAdmin={isAdmin}
+                                    onEdit={() => { setEditingPolicy(p.id); setAddingPolicy(false); }}
+                                    onDelete={() => setDeletingPolicy(p)}
+                                />
                             ),
                         )}
                         {policies && policies.length === 0 && !addingPolicy && <p className="text-xs text-white/40">No policies yet.</p>}

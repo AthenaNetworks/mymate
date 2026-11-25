@@ -23,6 +23,14 @@ of commit subjects.
   their names, and policy, window and sensor lists describe it in a line. Existing single-type,
   single-map and device-list scopes keep working unchanged (a map still means just that map), and
   are saved in the new form the next time they're edited.
+- The Alerts page's policy list shows each policy in full instead of one line cut off at the edge.
+  Under the name and condition, Applies to lists the device types, maps (with "+ sub-maps") and
+  devices by name, and Except lists what's left out, in rose so an exclusion stands out. A last
+  line gives how many devices the policy matches right now (hover for some of their names), what
+  makes it fire (eg "Over 90%", "For 10 min", "Suppresses dependents") and where it sends. Badges
+  show how many alerts it has firing, and warn when an enabled policy matches no devices or has no
+  enabled transport to send to. The Details button beside Add hides all but the first line, and
+  is remembered in the browser.
 
 ## [2.2.0] - 2026-11-22
 
