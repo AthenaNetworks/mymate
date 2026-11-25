@@ -13,6 +13,10 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Fixed
+- Non-admins can collapse the map's side panel when no device is selected ("Select a device on
+  the map."), as they already could with a device selected.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added
