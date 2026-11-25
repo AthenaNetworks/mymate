@@ -647,14 +647,15 @@ export function DeviceInspector() {
         return (
             <InspectorShell
                 open={inspectorOpen}
-                collapsed={mapToolsCollapsed && isAdmin && stats?.total !== 0}
+                // Non-admins see a placeholder rather than map tools; it folds away the same way.
+                collapsed={mapToolsCollapsed && stats?.total !== 0}
                 rail={{
-                    title: 'Show map tools',
+                    title: isAdmin ? 'Show map tools' : 'Show device panel',
                     onExpand: () => setMapToolsCollapsed(false),
                     content: (
                         <>
                             <Stack weight="light" className="h-4 w-4" />
-                            <span className="text-xs font-semibold [writing-mode:vertical-rl]">Map tools</span>
+                            <span className="text-xs font-semibold [writing-mode:vertical-rl]">{isAdmin ? 'Map tools' : 'Device panel'}</span>
                         </>
                     ),
                 }}

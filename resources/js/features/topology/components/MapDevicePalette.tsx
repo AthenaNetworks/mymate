@@ -12,7 +12,8 @@ const RESULTS = 100;
 /**
  * The map-tools panel shown in the inspector when nothing is selected: a searchable list of
  * devices not yet on the current map. Drag one onto the canvas to place it precisely (handled
- * by MapCanvas's onDrop), or click to drop it in. Admin-only. The "Orphaned only" toggle narrows
+ * by MapCanvas's onDrop), or click to drop it in. Admin-only: others get a placeholder that
+ * collapses the same way. The "Orphaned only" toggle narrows
  * the list to devices on no map at all.
  *
  * Placing a device doesn't select it, so the palette stays open for the next one; the new card
@@ -40,7 +41,19 @@ export function MapDevicePalette() {
     );
 
     if (!isAdmin) {
-        return <div className="grid flex-1 place-items-center px-6 text-center text-sm text-white/35">Select a device on the map.</div>;
+        return (
+            <div className="relative grid flex-1 place-items-center px-6 text-center text-sm text-white/35">
+                Select a device on the map.
+                {/* Desktop only: below lg the panel is a slide-over sheet with its own close. */}
+                <button
+                    onClick={() => setMapToolsCollapsed(true)}
+                    title="Collapse device panel"
+                    className="absolute right-0 top-0 hidden rounded-lg p-1.5 text-white/40 transition-colors duration-300 ease-fluid hover:bg-white/5 hover:text-white/80 lg:block"
+                >
+                    <CaretDoubleRight weight="bold" className="h-4 w-4" />
+                </button>
+            </div>
+        );
     }
 
     const offMap = data?.data ?? [];
