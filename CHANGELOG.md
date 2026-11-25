@@ -24,7 +24,7 @@ of commit subjects.
   - reading alerts out loud, with its own volume;
   - desktop notifications, which need HTTPS.
 
-  Settings are per browser, and sound is on by default. Alerts that arrive together share one
+  Settings are per browser, and sound is off until you turn it on. Alerts that arrive together share one
   sound, and with several tabs open only one plays. A shared wallboard link starts silent; its
   own speaker button turns sound on for that screen.
 - On a phone, everything right of the menu button in the top bar (the logo included) now slides

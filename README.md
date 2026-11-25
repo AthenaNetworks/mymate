@@ -171,8 +171,9 @@ same way with `mymate:user:reset-passkeys you@example.com` in place of `mymate:u
 ## Alert sounds
 
 My Mate can play a sound in the browser when a device goes down or comes back, or when an
-alert fires or resolves. The speaker button in the top bar turns sound on or off and mutes it
-for 15 minutes, an hour or four hours. Everything else is under **Settings > Sounds**:
+alert fires or resolves. Sound is off until you turn it on with the speaker button in the top
+bar, which also mutes it for 15 minutes, an hour or four hours. Everything else is under
+**Settings > Sounds**:
 
 - **What plays a sound:** any device going down or coming back (the default), or alerts from
   your alert policies, of the types you tick (by default only "Device down / recovered").

@@ -79,8 +79,9 @@ export const SOUND_DEFAULTS = {
     speechVolume: 80,
 };
 
-const APP_DEFAULTS: SoundPrefs = { enabled: true, mutedUntil: 0, speak: false, notify: false, ...SOUND_DEFAULTS };
-// A shared wallboard link starts silent.
+// Off until someone turns it on with the speaker button: a new feature shouldn't start making noise.
+const APP_DEFAULTS: SoundPrefs = { enabled: false, mutedUntil: 0, speak: false, notify: false, ...SOUND_DEFAULTS };
+// A shared wallboard link starts silent too.
 const SHARED_DEFAULTS: SoundPrefs = { ...APP_DEFAULTS, enabled: false };
 
 export type SoundContext = 'app' | 'shared';
