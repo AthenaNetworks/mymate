@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CaretRight, GearSix, SpeakerHigh, SpeakerSlash } from '@phosphor-icons/react';
 import { isSoundMuted, playSound, setSoundPrefs, SOUND_DEFAULTS, useAudioUnlocked, useSoundPrefs, type SoundContext } from '../lib/alertSound';
 import { Toggle } from './Toggle';
@@ -42,6 +43,27 @@ export function SoundButton({
     const unlocked = useAudioUnlocked();
     const [open, setOpen] = useState(false);
     const wrap = useRef<HTMLDivElement>(null);
+    const panel = useRef<HTMLDivElement>(null);
+    // The popover is portalled and fixed, so a scrolling top bar (phones) can't clip it. It sits
+    // under the button, right-aligned to it, kept on screen.
+    const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+    useLayoutEffect(() => {
+        if (!open) return;
+        const place = () => {
+            const r = wrap.current?.getBoundingClientRect();
+            if (!r) return;
+            const width = Math.min(288, window.innerWidth - 24);
+            const right = Math.min(Math.max(12, window.innerWidth - r.right), window.innerWidth - width - 12);
+            setPos({ top: r.bottom + 10, right });
+        };
+        place();
+        window.addEventListener('resize', place);
+        window.addEventListener('scroll', place, true); // the top bar sliding sideways
+        return () => {
+            window.removeEventListener('resize', place);
+            window.removeEventListener('scroll', place, true);
+        };
+    }, [open]);
     const shared = context === 'shared';
 
     const now = Date.now();
@@ -58,7 +80,8 @@ export function SoundButton({
     useEffect(() => {
         if (!open) return;
         const onDown = (e: PointerEvent) => {
-            if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+            const t = e.target as Node;
+            if (!wrap.current?.contains(t) && !panel.current?.contains(t)) setOpen(false);
         };
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
@@ -123,53 +146,58 @@ export function SoundButton({
                 )}
             </button>
 
-            {open && (
-                <div
-                    role="dialog"
-                    aria-label="Alert sounds"
-                    className="absolute right-0 top-[calc(100%+0.6rem)] z-50 w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface/95 p-1.5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-2xl"
-                >
-                    <div className="flex items-center gap-3 p-2.5">
-                        <div className="min-w-0 flex-1">
-                            <div className="text-[13px] font-semibold text-white">Alert sounds</div>
-                            <div className="mt-0.5 text-[11px] text-white/40">
-                                {status ?? <span className="text-amber-300">Click anywhere on the page to allow sound</span>}
+            {open &&
+                pos &&
+                createPortal(
+                    <div
+                        ref={panel}
+                        role="dialog"
+                        aria-label="Alert sounds"
+                        style={{ top: pos.top, right: pos.right }}
+                        className="fixed z-[70] w-72 max-w-[calc(100vw-1.5rem)] rounded-2xl bg-surface/95 p-1.5 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)] ring-1 ring-white/10 backdrop-blur-2xl"
+                    >
+                        <div className="flex items-center gap-3 p-2.5">
+                            <div className="min-w-0 flex-1">
+                                <div className="text-[13px] font-semibold text-white">Alert sounds</div>
+                                <div className="mt-0.5 text-[11px] text-white/40">
+                                    {status ?? <span className="text-amber-300">Click anywhere on the page to allow sound</span>}
+                                </div>
                             </div>
+                            <Toggle checked={p.enabled && !snoozed} onChange={setOn} label="Alert sounds" />
                         </div>
-                        <Toggle checked={p.enabled && !snoozed} onChange={setOn} label="Alert sounds" />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5">
-                        <span className="text-[11px] text-white/35">Mute for</span>
-                        {SNOOZES.map((s) => (
-                            <button
-                                key={s.mins}
-                                onClick={() => setSoundPrefs(context, { enabled: true, mutedUntil: Date.now() + s.mins * 60_000 })}
-                                className="rounded-full px-2 py-0.5 text-[11px] text-white/55 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/85"
-                            >
-                                {s.label}
-                            </button>
-                        ))}
-                    </div>
-                    {shared ? (
-                        <p className="border-t border-white/[0.06] px-2.5 pb-2 pt-2.5 text-[11px] leading-relaxed text-white/35">
-                            Plays the default sounds when a device on this map goes down or comes back. Saved in this browser.
-                        </p>
-                    ) : (
-                        onOpenSettings && (
-                            <button
-                                onClick={() => {
-                                    setOpen(false);
-                                    onOpenSettings();
-                                }}
-                                className="flex w-full items-center gap-2 rounded-xl border-t border-white/[0.06] px-2.5 py-2.5 text-left text-[12.5px] text-white/75 transition-colors hover:bg-white/5 hover:text-white"
-                            >
-                                <GearSix weight="light" className="h-4 w-4 text-white/40" />
-                                Sound settings
-                                <CaretRight weight="bold" className="ml-auto h-3.5 w-3.5 text-white/35" />
-                            </button>
-                        )
-                    )}
-                </div>
+                        <div className="flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5">
+                            <span className="text-[11px] text-white/35">Mute for</span>
+                            {SNOOZES.map((s) => (
+                                <button
+                                    key={s.mins}
+                                    onClick={() => setSoundPrefs(context, { enabled: true, mutedUntil: Date.now() + s.mins * 60_000 })}
+                                    className="rounded-full px-2 py-0.5 text-[11px] text-white/55 ring-1 ring-white/10 transition-colors hover:bg-white/5 hover:text-white/85"
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                        {shared ? (
+                            <p className="border-t border-white/[0.06] px-2.5 pb-2 pt-2.5 text-[11px] leading-relaxed text-white/35">
+                                Plays the default sounds when a device on this map goes down or comes back. Saved in this browser.
+                            </p>
+                        ) : (
+                            onOpenSettings && (
+                                <button
+                                    onClick={() => {
+                                        setOpen(false);
+                                        onOpenSettings();
+                                    }}
+                                    className="flex w-full items-center gap-2 rounded-xl border-t border-white/[0.06] px-2.5 py-2.5 text-left text-[12.5px] text-white/75 transition-colors hover:bg-white/5 hover:text-white"
+                                >
+                                    <GearSix weight="light" className="h-4 w-4 text-white/40" />
+                                    Sound settings
+                                    <CaretRight weight="bold" className="ml-auto h-3.5 w-3.5 text-white/35" />
+                                </button>
+                            )
+                        )}
+                    </div>,
+                document.body,
             )}
         </div>
     );

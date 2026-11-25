@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BellRinging, Microphone, SpeakerHigh, SpeakerSimpleHigh } from '@phosphor-icons/react';
+import { BellRinging, Microphone, Play, SpeakerHigh, SpeakerSimpleHigh } from '@phosphor-icons/react';
 import {
     ALERT_SOUNDS,
     playSound,
@@ -62,6 +62,51 @@ function VolumeSlider({ id, value, onChange, onRelease, disabled, icon: Icon }: 
                 {value}%
             </output>
         </span>
+    );
+}
+
+/** One direction's sound: the list, and a play button to hear the current choice again. */
+function SoundPicker({ id, label, value, volume, onChange }: {
+    id: string;
+    label: string;
+    value: AlertSound;
+    volume: number;
+    onChange: (v: AlertSound) => void;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-4">
+            <label htmlFor={id} className="min-w-0 flex-1 text-sm text-white/70">
+                {label}
+            </label>
+            <div className="flex shrink-0 items-center gap-1.5">
+                <select
+                    id={id}
+                    value={value}
+                    onChange={(e) => {
+                        const v = e.target.value as AlertSound;
+                        onChange(v);
+                        playSound(v, volume);
+                    }}
+                    className={select}
+                >
+                    {ALERT_SOUNDS.map((s) => (
+                        <option key={s.value} value={s.value}>
+                            {s.label}
+                        </option>
+                    ))}
+                </select>
+                <button
+                    type="button"
+                    onClick={() => playSound(value, volume)}
+                    disabled={value === 'off'}
+                    title={value === 'off' ? 'No sound to play' : `Play "${ALERT_SOUNDS.find((s) => s.value === value)?.label}"`}
+                    aria-label={`Play the sound for: ${label}`}
+                    className="grid h-9 w-9 place-items-center rounded-xl text-emerald-300 ring-1 ring-white/10 transition-colors hover:bg-emerald-500/10 hover:text-emerald-200 disabled:text-white/25 disabled:hover:bg-transparent"
+                >
+                    <Play weight="fill" className="h-3.5 w-3.5" />
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -229,45 +274,23 @@ export function SoundsSection() {
 
             <section className={card}>
                 <CardHead icon={SpeakerHigh} title="Sounds">
-                    Picking a sound plays it. Turn sound on or off and mute it from the speaker button in the top bar.
+                    Picking a sound plays it, and so does its play button. Turn sound on or off and mute it from the speaker button in the top bar.
                 </CardHead>
                 <div className="space-y-3">
-                    <label className="flex items-center justify-between gap-4">
-                        <span className="min-w-0 flex-1 text-sm text-white/70">{devices ? 'When a device goes down' : 'When an alert fires'}</span>
-                        <select
-                            value={p.firingSound}
-                            onChange={(e) => {
-                                const v = e.target.value as AlertSound;
-                                set({ firingSound: v });
-                                playSound(v, p.volume);
-                            }}
-                            className={select}
-                        >
-                            {ALERT_SOUNDS.map((s) => (
-                                <option key={s.value} value={s.value}>
-                                    {s.label}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
-                    <label className="flex items-center justify-between gap-4">
-                        <span className="min-w-0 flex-1 text-sm text-white/70">{devices ? "When it's back up" : "When it's resolved"}</span>
-                        <select
-                            value={p.resolvedSound}
-                            onChange={(e) => {
-                                const v = e.target.value as AlertSound;
-                                set({ resolvedSound: v });
-                                playSound(v, p.volume);
-                            }}
-                            className={select}
-                        >
-                            {ALERT_SOUNDS.map((s) => (
-                                <option key={s.value} value={s.value}>
-                                    {s.label}
-                                </option>
-                            ))}
-                        </select>
-                    </label>
+                    <SoundPicker
+                        id="sound-down"
+                        label={devices ? 'When a device goes down' : 'When an alert fires'}
+                        value={p.firingSound}
+                        volume={p.volume}
+                        onChange={(v) => set({ firingSound: v })}
+                    />
+                    <SoundPicker
+                        id="sound-up"
+                        label={devices ? "When it's back up" : "When it's resolved"}
+                        value={p.resolvedSound}
+                        volume={p.volume}
+                        onChange={(v) => set({ resolvedSound: v })}
+                    />
                     <div className="flex items-center justify-between gap-4 border-t border-white/5 pt-3">
                         <label htmlFor="sound-volume" className="min-w-0 flex-1 text-sm text-white/70">
                             Volume
@@ -285,16 +308,6 @@ export function SoundsSection() {
                     </div>
                 </div>
                 <div className="mt-4 flex justify-end gap-2">
-                    <button
-                        type="button"
-                        onClick={() => {
-                            playSound(p.firingSound !== 'off' ? p.firingSound : p.resolvedSound, p.volume);
-                            if (p.speak) setTimeout(() => speakLine('This is a test alert from My Mate', p.speechVolume), 900);
-                        }}
-                        className="rounded-lg px-3 py-1.5 text-sm text-white/60 ring-1 ring-white/10 hover:bg-white/5 hover:text-white/85"
-                    >
-                        Play a test sound
-                    </button>
                     <button
                         type="button"
                         onClick={() => set({ ...SOUND_DEFAULTS, alertTypes: [...SOUND_DEFAULTS.alertTypes] })}
