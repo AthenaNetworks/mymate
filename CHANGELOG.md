@@ -27,9 +27,9 @@ of commit subjects.
   Settings are per browser, and sound is on by default. Alerts that arrive together share one
   sound, and with several tabs open only one plays. A shared wallboard link starts silent; its
   own speaker button turns sound on for that screen.
-- On a phone, everything right of the breadcrumb in the top bar now slides sideways instead of
-  running off the screen, so the sound, wallboard and sign-out buttons and your name can always
-  be reached.
+- On a phone, everything right of the menu button in the top bar (the logo included) now slides
+  sideways instead of running off the screen, so the sound, wallboard and sign-out buttons and
+  your name can always be reached.
 
 ## [2.2.0] - 2026-11-22
 
