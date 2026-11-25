@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { ArrowsIn } from '@phosphor-icons/react';
-import { setWallboard, useView, useWallboard } from '../../lib/shellStore';
+import { navigateTo, setWallboard, useView, useWallboard } from '../../lib/shellStore';
+import { SoundButton } from '../../components/SoundButton';
+import { useAlertSounds } from './useAlertSounds';
 import { TopBar } from './TopBar';
 import { NavRail } from './NavRail';
 import { UpdateNotice } from './UpdateNotice';
@@ -39,6 +41,9 @@ export function AppShell() {
     const openOutages = useOutages('open');
     const { data: me } = useCurrentUser();
     const firingAlerts = useFiringAlerts(me !== undefined && me !== null && !me.restricted);
+    // Alert sounds play on every page, wallboard mode included (only shared wallboard links,
+    // which never render this shell, are silent by default).
+    useAlertSounds();
 
     // Keep wallboard in step with the Fullscreen API: leaving fullscreen (Esc, or the
     // browser\'s own control) exits wallboard. Esc also works when fullscreen is
@@ -100,14 +105,27 @@ export function AppShell() {
             <div className="relative flex h-screen flex-col overflow-hidden bg-surface-deep text-zinc-100">
                 {meshGlow}
                 <div className="flex min-h-0 flex-1">{mainView}</div>
-                <button
-                    onClick={exitWallboard}
-                    title="Exit wallboard (Esc)"
-                    className="fixed right-4 top-4 z-30 flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
-                >
-                    <ArrowsIn weight="bold" className="h-4 w-4" />
-                    Exit wallboard
-                </button>
+                <div className="fixed right-4 top-4 z-30 flex items-center gap-2">
+                    {/* Sound keeps playing in wallboard mode (an iPad on the Outages list), so the
+                        speaker stays reachable. Its settings link leaves wallboard first. */}
+                    <div className="rounded-full bg-white/[0.06] p-0.5 ring-1 ring-white/10 backdrop-blur-xl">
+                        <SoundButton
+                            className="rounded-full"
+                            onOpenSettings={() => {
+                                exitWallboard();
+                                navigateTo('/settings?tab=sounds');
+                            }}
+                        />
+                    </div>
+                    <button
+                        onClick={exitWallboard}
+                        title="Exit wallboard (Esc)"
+                        className="flex items-center gap-2 rounded-full bg-white/[0.06] px-3 py-1.5 text-xs font-medium text-white/70 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 ease-fluid hover:bg-white/10 hover:text-white active:scale-[0.98]"
+                    >
+                        <ArrowsIn weight="bold" className="h-4 w-4" />
+                        Exit wallboard
+                    </button>
+                </div>
             </div>
         );
     }

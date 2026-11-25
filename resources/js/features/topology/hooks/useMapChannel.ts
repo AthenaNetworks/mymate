@@ -35,8 +35,8 @@ type DeviceStatusChangedPayload = {
  *  - `DeviceRebooted` -> handed to `onReboot` (the map toasts it).
  *
  * On (re)connect it resyncs the device + link snapshot to fill any missed events.
- * One subscription only (Echo caches the channel; a second `leave('map')` would
- * tear down the other listener).
+ * Echo caches the channel, so this and the app shell's alert sounds share one subscription;
+ * each removes only its own listeners (leaving the channel would cut the other one off).
  */
 export function useMapChannel(
     onUtil?: (payload: InterfaceUtilUpdatedPayload) => void,
@@ -54,6 +54,13 @@ export function useMapChannel(
     useEffect(() => {
         if (channelName === null) return;
         const channel = echo.private(channelName);
+        // Bound by reference and unbound the same way on cleanup, never by leaving the channel:
+        // the app shell's alert sounds (useAlertSounds) listen on it too, on every page.
+        const bound: [string, CallableFunction][] = [];
+        const listen = <T,>(event: string, cb: (e: T) => void) => {
+            channel.listen(event, cb);
+            bound.push([event, cb]);
+        };
 
         // A real up<->down flip opens/closes an outage row, so the timeline is refreshed ahead
         // of its 15 s poll. Coalesced, not per-flip: on a large fleet hundreds of devices can
@@ -74,7 +81,7 @@ export function useMapChannel(
         };
 
         // Custom broadcastAs() names -> leading dot so Echo doesn\'t prepend a namespace.
-        channel.listen('.DeviceStatusChanged', (e: DeviceStatusChangedPayload) => {
+        listen('.DeviceStatusChanged', (e: DeviceStatusChangedPayload) => {
             // The payload carries the name and the old status, so this works for devices that
             // aren't in any cached query (most of a big fleet, now there's no full list).
             const cached = findCachedDevice(qc, e.id);
@@ -104,7 +111,7 @@ export function useMapChannel(
 
         // An alert fired or resolved: refresh the Alerts views + the nav count, and for a port alert
         // the device's interface list so the inspector shows the port's new state straight away.
-        channel.listen('.AlertStateChanged', (e: AlertStateChangedPayload) => {
+        listen('.AlertStateChanged', (e: AlertStateChangedPayload) => {
             void qc.invalidateQueries({ queryKey: ['alert-events'] });
             if (e.interface_id !== null && e.device_id !== null) {
                 void qc.invalidateQueries({ queryKey: deviceInterfaceKeys(e.device_id) });
@@ -112,19 +119,19 @@ export function useMapChannel(
             onAlert?.(e);
         });
 
-        channel.listen('.InterfaceUtilUpdated', (e: InterfaceUtilUpdatedPayload) => {
+        listen('.InterfaceUtilUpdated', (e: InterfaceUtilUpdatedPayload) => {
             onUtil?.(e);
             patchCachedInterfaces(qc, e);
         });
 
-        channel.listen('.DeviceRebooted', (e: DeviceRebootedPayload) => {
+        listen('.DeviceRebooted', (e: DeviceRebootedPayload) => {
             onReboot?.(e);
         });
 
         // Live cpu/mem/temp -> folded into the devices cache so both the map tiles and the
         // inspector show current values (slower cadence than util, so a cache write per
         // frame is cheap). Coalesced across devices in one event.
-        channel.listen('.DeviceMetricsUpdated', (e: DeviceMetricsUpdatedPayload) => {
+        listen('.DeviceMetricsUpdated', (e: DeviceMetricsUpdatedPayload) => {
             const byId = new Map(e.devices.map((f) => [f.device_id, f]));
             patchCachedDevices(qc, (id) => {
                 const f = byId.get(id);
@@ -146,7 +153,7 @@ export function useMapChannel(
 
         // Live ping latency/loss -> folded into the devices cache so the internet/upstream
         // card reflects current rtt without a refetch. Same coalesced shape as metrics.
-        channel.listen('.DeviceLatencyUpdated', (e: DeviceLatencyUpdatedPayload) => {
+        listen('.DeviceLatencyUpdated', (e: DeviceLatencyUpdatedPayload) => {
             const byId = new Map(e.devices.map((f) => [f.device_id, f]));
             patchCachedDevices(qc, (id) => {
                 const f = byId.get(id);
@@ -156,17 +163,19 @@ export function useMapChannel(
 
         const connection = (
             echo.connector as unknown as {
-                pusher?: { connection?: { bind(event: string, cb: () => void): void } };
+                pusher?: { connection?: { bind(event: string, cb: () => void): void; unbind(event: string, cb: () => void): void } };
             }
         ).pusher?.connection;
-        connection?.bind('connected', () => {
+        const onConnected = () => {
             void qc.invalidateQueries({ queryKey: deviceKeys.all });
             void qc.invalidateQueries({ queryKey: linkKeys.all });
-        });
+        };
+        connection?.bind('connected', onConnected);
 
         return () => {
             if (outageTimer !== null) clearTimeout(outageTimer);
-            echo.leave(channelName);
+            bound.forEach(([event, cb]) => channel.stopListening(event, cb));
+            connection?.unbind('connected', onConnected);
         };
     }, [qc, onUtil, onStatus, onAlert, onReboot, channelName]);
 }
