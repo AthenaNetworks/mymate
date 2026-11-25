@@ -3,7 +3,8 @@ import { List, MagnifyingGlass, SignOut, Television } from '@phosphor-icons/reac
 import { useConnectionStatus } from '../topology/hooks/useConnectionStatus';
 import { StatusCounts } from './StatusCounts';
 import { Breadcrumb } from './Breadcrumb';
-import { setView, setNavOpen, setWallboard, useNavCollapsed } from '../../lib/shellStore';
+import { navigateTo, setView, setNavOpen, setWallboard, useNavCollapsed } from '../../lib/shellStore';
+import { SoundButton } from '../../components/SoundButton';
 import { useCurrentUser, useLogout } from '../auth/api/auth';
 import { Logomark } from '../../components/Logomark';
 import { ThemeToggle } from '../../components/ThemeToggle';
@@ -81,6 +82,9 @@ export function TopBar() {
             {/* Light/dark toggle (GitHub #34). */}
             <ThemeToggle />
             <ContrastToggle />
+
+            {/* Alert sounds: on/off and mute; the rest is in Settings > Sounds. */}
+            <SoundButton onOpenSettings={() => navigateTo('/settings?tab=sounds')} />
 
             {/* Wallboard / TV mode - chrome-free fullscreen for a NOC big screen. */}
             <button

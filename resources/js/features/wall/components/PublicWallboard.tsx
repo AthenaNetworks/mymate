@@ -5,6 +5,8 @@ import { WallCanvas } from './WallCanvas';
 import { WallGeoCanvas } from './WallGeoCanvas';
 import { useWallDevices, useWallMap, useWallView } from '../api/wall';
 import { BrandedLoader } from '../../../components/BrandedLoader';
+import { SoundButton } from '../../../components/SoundButton';
+import { useWallSounds } from '../hooks/useWallSounds';
 
 // Live wall clock (updates each minute - a wallboard doesn't need a ticking seconds hand).
 function useClock(): string {
@@ -36,6 +38,7 @@ export function PublicWallboard() {
     const { data: devices } = useWallDevices();
     const { data: view } = useWallView();
     const clock = useClock();
+    useWallSounds(devices);
     const [picked, setPicked] = useState<Shown | null>(hashView);
 
     // A logical or geo share shows just that. A "both" share opens on the hash if there is one,
@@ -76,7 +79,7 @@ export function PublicWallboard() {
 
     return (
         <div className="flex h-screen w-screen flex-col bg-surface-deep">
-            <header className="flex items-center justify-between gap-4 border-b border-white/10 bg-surface/80 px-5 py-3 backdrop-blur-xl">
+            <header className="relative z-20 flex items-center justify-between gap-4 border-b border-white/10 bg-surface/80 px-5 py-3 backdrop-blur-xl">
                 <div className="flex items-center gap-3">
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_2px_rgba(52,211,153,0.5)]" />
                     <h1 className="text-sm font-semibold tracking-tight text-white/90">{map.name}</h1>
@@ -108,6 +111,10 @@ export function PublicWallboard() {
                     </span>
                     <span className="text-white/35">{total} devices</span>
                     <span className="text-white/55">{clock}</span>
+                    {/* Off until someone turns it on for this screen. */}
+                    <span className="font-sans">
+                        <SoundButton context="shared" />
+                    </span>
                     <ThemeToggle className="rounded-lg p-1 text-white/40 transition-colors hover:bg-white/5 hover:text-white/80" />
                 </div>
             </header>

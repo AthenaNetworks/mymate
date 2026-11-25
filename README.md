@@ -168,6 +168,27 @@ Run it as the `mymate` user, the same as the services, however you installed:
 If you can sign in with your password but have lost your passkey and recovery codes, clear them the
 same way with `mymate:user:reset-passkeys you@example.com` in place of `mymate:user:password`.
 
+## Alert sounds
+
+My Mate can play a sound in the browser when a device goes down or comes back, or when an
+alert fires or resolves. The speaker button in the top bar turns sound on or off and mutes it
+for 15 minutes, an hour or four hours. Everything else is under **Settings > Sounds**:
+
+- **What plays a sound:** any device going down or coming back (the default), or alerts from
+  your alert policies, of the types you tick (by default only "Device down / recovered").
+- **Sounds and volume:** a sound for each direction (or none when things recover), and a volume
+  slider.
+- **Read alerts out loud**, with its own volume.
+- **Desktop notifications**, off by default. These pop up even when the tab is in the background.
+  They need My Mate on **HTTPS** (see below), because browsers only allow notifications on a
+  secure site. On an iPad they also need My Mate added to the Home Screen.
+
+These settings are saved per browser, so muting one desk doesn't mute anyone else's. Browsers
+won't play sound until you've clicked or tapped the page once; until then the speaker button
+shows an amber dot. With several My Mate tabs open, only one of them plays. Sounds keep playing
+in wallboard mode. A shared wallboard link starts silent; its speaker button can turn sound on
+for that screen.
+
 ## HTTPS
 
 The packaged and LXC installs are HTTPS on day one with a self signed certificate. To move to

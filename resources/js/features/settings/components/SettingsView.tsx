@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, DotsNine, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, IdentificationBadge, Info, Key, LockKey, Palette, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, ArrowRight, Broadcast, ChartLine, Check, CloudArrowDown, Copy, DotsNine, Envelope, Eye, EyeSlash, Fingerprint, FloppyDisk, Gauge, GearSix, IdentificationBadge, Info, Key, LockKey, Palette, PaperPlaneTilt, Plus, PencilSimple, PlugsConnected, ShieldCheck, SpeakerHigh, Terminal, Trash, UsersFour, UsersThree, X } from '@phosphor-icons/react';
 import { Toggle } from '../../../components/Toggle';
 import { usePasskeys, useRegisterPasskey, useDeletePasskey, useGenerateRecoveryCodes, useSecuritySettings, useUpdateSecuritySettings, type Passkey } from '../../auth/api/passkeys';
 import { passkeysSupported } from '../../auth/lib/passkey';
@@ -9,6 +9,7 @@ import { useSystemStatus, type StatusLevel } from '../api/systemStatus';
 import { SensorsSection } from './SensorsSection';
 import { WallEmbedSection } from './WallEmbedSection';
 import { CmrControllerSection } from './CmrControllerSection';
+import { SoundsSection } from './SoundsSection';
 import { useCredentials, useSaveCredential, useDeleteCredential, type CredentialInput } from '../api/credentials';
 import { useMailSettings, useUpdateMailSettings, useTestMail, type MailSettingsInput } from '../api/mailSettings';
 import { useSsoSettings, useTestSso, useUpdateSsoSettings, type SsoSettingsInput, type SsoTestResult } from '../api/ssoSettings';
@@ -26,7 +27,7 @@ import { ConfirmDialog } from '../../../components/Dialog';
 import { pushToast } from '../../../lib/toast';
 import type { AgentUpgrade, Credential, GraphColorMode, Operator, OperatorGroup } from '../../../types';
 import { relativeTime } from '../../../lib/relativeTime';
-import { MAP_GRID_DEFAULT_COLOR, MAP_GRID_DEFAULT_SIZE, MAP_GRID_MAX, MAP_GRID_MIN, clampGridSize, setMapGrid, setMapGridColor, setMapGridSize, useMapGrid, useMapGridColor, useMapGridSize } from '../../../lib/shellStore';
+import { NAVIGATE_EVENT, MAP_GRID_DEFAULT_COLOR, MAP_GRID_DEFAULT_SIZE, MAP_GRID_MAX, MAP_GRID_MIN, clampGridSize, setMapGrid, setMapGridColor, setMapGridSize, useMapGrid, useMapGridColor, useMapGridSize } from '../../../lib/shellStore';
 
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none ' +
@@ -2443,6 +2444,7 @@ const TABS: Tab[] = [
     { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },
     // Per-browser look-and-feel - every operator gets it, read-only included.
     { id: 'theme', label: 'Theme', icon: Palette, render: () => <TwoCol><MapGridSection /></TwoCol> },
+    { id: 'sounds', label: 'Sounds', icon: SpeakerHigh, render: () => <SoundsSection /> },
     {
         id: 'operators',
         label: 'Operators',
@@ -2471,12 +2473,29 @@ const TABS: Tab[] = [
     },
 ];
 
+function tabFromUrl(): string | null {
+    try {
+        return new URLSearchParams(window.location.search).get('tab');
+    } catch {
+        return null;
+    }
+}
+
 export function SettingsView() {
     // Engine cadence, mail server and credentials are admin-only config.
     // A read-only operator keeps just self-service (change own password), the rosters and API keys.
     const isAdmin = useIsAdmin();
     const tabs = TABS.filter((t) => isAdmin || !t.adminOnly);
-    const [active, setActive] = useState(tabs[0].id);
+    // A link can open a given tab (?tab=sounds, from the speaker button), now or while already here.
+    const [active, setActive] = useState(() => tabFromUrl() ?? tabs[0].id);
+    useEffect(() => {
+        const onNavigate = () => {
+            const t = tabFromUrl();
+            if (t) setActive(t);
+        };
+        window.addEventListener(NAVIGATE_EVENT, onNavigate);
+        return () => window.removeEventListener(NAVIGATE_EVENT, onNavigate);
+    }, []);
     // If the visible set changes (admin flag resolves late) and the active tab vanished, fall back.
     const current = tabs.find((t) => t.id === active) ?? tabs[0];
 
@@ -2503,7 +2522,15 @@ export function SettingsView() {
                         return (
                             <button
                                 key={t.id}
-                                onClick={() => setActive(t.id)}
+                                onClick={() => {
+                                    setActive(t.id);
+                                    // Keep the address in step, so a reload (or a copied link) lands on this tab.
+                                    try {
+                                        window.history.replaceState(window.history.state, '', `${window.location.pathname}?tab=${t.id}`);
+                                    } catch {
+                                        /* no history API: the tab still switches */
+                                    }
+                                }}
                                 className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2.5 text-sm font-medium transition ${
                                     on
                                         ? 'border-emerald-400 text-white'

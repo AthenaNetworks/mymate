@@ -13,6 +13,20 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Alert sounds. My Mate can play a sound when a device goes down or comes back, or, if you'd
+  rather, when alerts of the types you pick fire and resolve. It plays on every page and in
+  wallboard mode. A speaker button next to the wallboard button turns it on or off and mutes it
+  for 15 minutes, an hour or four hours. Settings > Sounds holds the rest:
+  - which sound plays each way, or none on recovery;
+  - a volume slider;
+  - reading alerts out loud, with its own volume;
+  - desktop notifications, which need HTTPS.
+
+  Settings are per browser, and sound is on by default. Alerts that arrive together share one
+  sound, and with several tabs open only one plays. A shared wallboard link starts silent; its
+  own speaker button turns sound on for that screen.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added
