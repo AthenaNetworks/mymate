@@ -2443,8 +2443,8 @@ const TABS: Tab[] = [
     { id: 'sensors', label: 'Sensors', icon: Gauge, adminOnly: true, render: () => <SensorsSection /> },
     { id: 'graphs', label: 'Graphs', icon: ChartLine, adminOnly: true, render: () => <GraphDefaultsSection /> },
     // Per-browser look-and-feel - every operator gets it, read-only included.
-    { id: 'theme', label: 'Theme', icon: Palette, render: () => <TwoCol><MapGridSection /></TwoCol> },
     { id: 'sounds', label: 'Sounds', icon: SpeakerHigh, render: () => <SoundsSection /> },
+    { id: 'theme', label: 'Theme', icon: Palette, render: () => <TwoCol><MapGridSection /></TwoCol> },
     {
         id: 'operators',
         label: 'Operators',
