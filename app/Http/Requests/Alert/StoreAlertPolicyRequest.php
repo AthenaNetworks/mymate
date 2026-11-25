@@ -3,7 +3,7 @@
 namespace App\Http\Requests\Alert;
 
 use App\Enums\AlertCondition;
-use App\Enums\DeviceType;
+use App\Http\Requests\ScopeRules;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -40,12 +40,8 @@ class StoreAlertPolicyRequest extends FormRequest
             'params.bound' => ['nullable', Rule::in(['below', 'above'])],
             'params.dbm' => ['nullable', 'numeric', 'between:-60,30'],
             // Targeting - limit the policy to a device subset. null/all = fleet-wide.
-            'scope' => ['nullable', 'array'],
-            'scope.type' => ['nullable', Rule::in(['all', 'device_type', 'map', 'devices'])],
-            'scope.device_type' => ['nullable', 'required_if:scope.type,device_type', Rule::enum(DeviceType::class)],
-            'scope.map_id' => ['nullable', 'required_if:scope.type,map', 'integer', 'exists:maps,id'],
-            'scope.device_ids' => ['nullable', 'required_if:scope.type,devices', 'array'],
-            'scope.device_ids.*' => ['integer', 'exists:devices,id'],
+            // Targeting, in either scope shape (shared with the other scoped features).
+            ...ScopeRules::rules(),
             'enabled' => ['sometimes', 'boolean'],
             'transport_ids' => ['nullable', 'array'],
             'transport_ids.*' => ['integer', 'exists:alert_transports,id'],

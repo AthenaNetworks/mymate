@@ -9,6 +9,7 @@ use App\Http\Resources\SensorResource;
 use App\Models\Device;
 use App\Models\Sensor;
 use App\Services\Snmp\SnmpCredential;
+use App\Support\DeviceScope;
 use App\Support\SensorReader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class SensorController extends Controller
 
     public function store(StoreSensorRequest $request): JsonResponse
     {
-        $sensor = Sensor::create($request->validated());
+        $sensor = Sensor::create(self::withScope($request->validated(), $request));
 
         return (new SensorResource($sensor))->response()->setStatusCode(Response::HTTP_CREATED);
     }
@@ -81,7 +82,7 @@ class SensorController extends Controller
 
     public function update(StoreSensorRequest $request, Sensor $sensor): SensorResource
     {
-        $sensor->update($request->validated());
+        $sensor->update(self::withScope($request->validated(), $request));
 
         return new SensorResource($sensor);
     }
@@ -129,5 +130,21 @@ class SensorController extends Controller
             ->get(['s.id as sensor_id', 's.name', 's.unit', 'r.value', 'r.read_at']);
 
         return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * Store the scope cleaned (known fields only), in whichever shape it came. Taken from the
+     * request rather than validated(), which drops a scope whose sides are empty arrays.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function withScope(array $data, Request $request): array
+    {
+        if ($request->exists('scope')) {
+            $data['scope'] = DeviceScope::normalize(DeviceScope::fromRequest($request));
+        }
+
+        return $data;
     }
 }

@@ -13,6 +13,17 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Alert policies, maintenance windows and custom sensors can target several device types and maps
+  at once, with exceptions. Applies to now takes any of the chosen device types, on any of the
+  chosen maps (both together means a device must match each), plus devices added by name; a map can
+  include the maps under it. Except leaves out anything matching its own device types, maps or
+  devices, and wins over the rest - eg "routers and switches on Site and its sub-maps, except the
+  Lab map and two devices". The editor shows how many devices the choice matches, with a few of
+  their names, and policy, window and sensor lists describe it in a line. Existing single-type,
+  single-map and device-list scopes keep working unchanged (a map still means just that map), and
+  are saved in the new form the next time they're edited.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added

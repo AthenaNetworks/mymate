@@ -1,6 +1,7 @@
 import { useQueries } from '@tanstack/react-query';
 import { useDevicesByIds } from '../../devices/api/getDevices';
 import { deviceInterfaceKeys, fetchDeviceInterfaces } from '../../topology/api/getDeviceInterfaces';
+import { listedDeviceIds } from '../../../lib/scope';
 import type { AlertInterfaceFilter, AlertScope } from '../../../types';
 
 const field =
@@ -23,8 +24,8 @@ export function interfaceFilterSummary(f: AlertInterfaceFilter | undefined): str
 
 /**
  * Pick which interfaces an interface-level policy watches (GitHub #22 / #11). Hand picking
- * only makes sense against a known device list, so that option needs the policy scoped to
- * specific devices, and lists their ports grouped by device.
+ * only makes sense against a known device list, so that option uses the devices the policy's scope
+ * lists by name ("Also these devices"), and lists their ports grouped by device.
  */
 export function InterfaceFilterEditor({
     value,
@@ -37,7 +38,7 @@ export function InterfaceFilterEditor({
     allowAll?: boolean;
     onChange: (f: AlertInterfaceFilter) => void;
 }) {
-    const deviceIds = scope.type === 'devices' ? (scope.device_ids ?? []) : [];
+    const deviceIds = listedDeviceIds(scope); // the devices the scope lists by name
     const { data: devices } = useDevicesByIds(deviceIds); // just the scoped devices, for their names
     const ifaceQueries = useQueries({
         queries: value.mode === 'selected' ? deviceIds.map((id) => ({ queryKey: deviceInterfaceKeys(id), queryFn: () => fetchDeviceInterfaces(id) })) : [],
@@ -81,7 +82,7 @@ export function InterfaceFilterEditor({
 
             {value.mode === 'selected' &&
                 (deviceIds.length === 0 ? (
-                    <p className="px-1 text-[11px] text-amber-300/70">Set "Applies to" to specific devices above, then pick their ports here.</p>
+                    <p className="px-1 text-[11px] text-amber-300/70">Add devices under "Also these devices" in Applies to above, then pick their ports here.</p>
                 ) : (
                     <div className="max-h-52 space-y-2 overflow-y-auto rounded-lg bg-black/20 p-1.5 ring-1 ring-white/[0.06]">
                         {deviceIds.map((id, i) => {

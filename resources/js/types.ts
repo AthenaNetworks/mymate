@@ -581,12 +581,35 @@ export interface GraphData {
 
 export type DeviceMetricKey = 'cpu' | 'mem' | 'temp' | 'latency' | 'loss';
 
-/** Alert policy targeting - which devices a policy covers. */
+/** One side (include or exclude) of a combination scope. Empty lists don't restrict. */
+export interface ScopeRule {
+    device_types?: DeviceType[];
+    map_ids?: number[];
+    submaps?: boolean; // also the maps under the listed ones (off by default)
+    device_ids?: number[];
+}
+
+/**
+ * Targeting - which devices an alert policy, maintenance window or custom sensor covers. Either the
+ * original single choice (`type` + its field), or combinations: `include` (types OR'd, maps OR'd,
+ * types AND maps, listed devices added) minus `exclude` (anything matching any of it). Saved scopes
+ * may be either; the editor always writes combinations (lib/scope.ts). App\Support\DeviceScope.
+ */
 export interface AlertScope {
-    type: 'all' | 'device_type' | 'map' | 'devices';
+    type?: 'all' | 'device_type' | 'map' | 'devices';
     device_type?: DeviceType;
     map_id?: number;
     device_ids?: number[];
+    include?: ScopeRule;
+    exclude?: ScopeRule;
+}
+
+/** What a scope covers right now (POST /scopes/preview). */
+export interface ScopePreview {
+    all: boolean;
+    count: number;
+    total: number;
+    sample: { id: number; name: string }[];
 }
 
 /** A custom SNMP sensor definition (user-defined OID polled on the in-scope devices). */

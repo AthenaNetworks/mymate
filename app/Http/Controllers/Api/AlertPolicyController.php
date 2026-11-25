@@ -7,6 +7,7 @@ use App\Http\Requests\Alert\StoreAlertPolicyRequest;
 use App\Http\Requests\Alert\UpdateAlertPolicyRequest;
 use App\Http\Resources\AlertPolicyResource;
 use App\Models\AlertPolicy;
+use App\Support\DeviceScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -26,7 +27,7 @@ class AlertPolicyController extends Controller
             'name' => $data['name'],
             'condition' => $data['condition'],
             'params' => $data['params'] ?? [],
-            'scope' => $data['scope'] ?? null,
+            'scope' => DeviceScope::normalize(DeviceScope::fromRequest($request)),
             'enabled' => $data['enabled'] ?? true,
         ]);
         $policy->transports()->sync($data['transport_ids'] ?? []);
@@ -37,6 +38,9 @@ class AlertPolicyController extends Controller
     public function update(UpdateAlertPolicyRequest $request, AlertPolicy $alertPolicy): AlertPolicyResource
     {
         $data = $request->validated();
+        if ($request->exists('scope')) {
+            $data['scope'] = DeviceScope::normalize(DeviceScope::fromRequest($request));
+        }
         $alertPolicy->update(array_intersect_key($data, array_flip(['name', 'condition', 'params', 'scope', 'enabled'])));
 
         if (array_key_exists('transport_ids', $data)) {

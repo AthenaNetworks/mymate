@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\ProbeController;
 use App\Http\Controllers\Api\PublicWallController;
 use App\Http\Controllers\Api\RouterosUpgradeController;
 use App\Http\Controllers\Api\SecuritySettingController;
+use App\Http\Controllers\Api\ScopePreviewController;
 use App\Http\Controllers\Api\SensorController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\SiteController;
@@ -464,6 +465,10 @@ Route::middleware(['auth:sanctum', EnsureAccountActive::class, EnsurePasskeyVeri
     // Maintenance windows: scheduled alert suppression for planned work.
     Route::apiResource('maintenance-windows', MaintenanceWindowController::class)
         ->only(['index', 'store', 'update', 'destroy']);
+    // How many devices a targeting scope covers (the scope editor's "Matches N devices"). A POST,
+    // so admin-only like the editors that use it; nothing is saved.
+    Route::post('scopes/preview', ScopePreviewController::class)
+        ->middleware('throttle:120,1')->name('scopes.preview');
     // Custom SNMP sensors (user-defined OIDs). `test` reads an OID against a chosen device
     // without saving, so it sits before the resource routes and is throttled like probes.test.
     Route::post('sensors/test', [SensorController::class, 'test'])

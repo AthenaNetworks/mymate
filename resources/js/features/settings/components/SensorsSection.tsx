@@ -5,24 +5,14 @@ import { useDeviceList } from '../../devices/api/getDevices';
 import { ScopeEditor } from '../../../components/ScopeEditor';
 import { DevicePicker } from '../../../components/DevicePicker';
 import { pushToast } from '../../../lib/toast';
-import type { AlertScope, Device, Sensor } from '../../../types';
+import { describeScope } from '../../../lib/scope';
+import { useMaps } from '../../maps/api/maps';
+import type { Device, Sensor } from '../../../types';
 
 const card = 'rounded-2xl bg-white/[0.02] p-5 ring-1 ring-white/[0.06]';
 const field =
     'w-full rounded-xl bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60';
 
-function scopeSummary(scope: AlertScope): string {
-    switch (scope.type) {
-        case 'device_type':
-            return `type: ${scope.device_type ?? '-'}`;
-        case 'map':
-            return 'on a map';
-        case 'devices':
-            return `${scope.device_ids?.length ?? 0} device(s)`;
-        default:
-            return 'all devices';
-    }
-}
 
 function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void }) {
     const save = useSaveSensor();
@@ -159,6 +149,7 @@ function SensorForm({ initial, onDone }: { initial?: Sensor; onDone: () => void 
 
 export function SensorsSection() {
     const { data: sensors } = useSensors();
+    const { data: maps } = useMaps(); // map names for the scope summaries
     const del = useDeleteSensor();
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<number | null>(null);
@@ -192,7 +183,7 @@ export function SensorsSection() {
                                         <span className="truncate font-medium text-white/85">{s.name}</span>
                                         {!s.enabled && <span className="shrink-0 text-[10px] text-white/30">disabled</span>}
                                     </div>
-                                    <div className="mt-0.5 truncate font-mono text-white/40">{s.oid}{s.unit ? ` · ${s.unit}` : ''} · {scopeSummary(s.scope)}</div>
+                                    <div className="mt-0.5 truncate font-mono text-white/40">{s.oid}{s.unit ? ` · ${s.unit}` : ''} · {describeScope(s.scope, maps)}</div>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
                                     <button onClick={() => { setEditing(s.id); setAdding(false); }} className="rounded-lg p-1 text-white/40 hover:bg-white/5 hover:text-white/80"><PencilSimple weight="bold" className="h-3.5 w-3.5" /></button>

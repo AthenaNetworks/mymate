@@ -14,25 +14,14 @@ import { useAlertTransports, useSaveAlertTransport, useDeleteAlertTransport, use
 import { useAlertEvents, useAckAlertEvent } from '../api/alertEvents';
 import { useIsAdmin } from '../../auth/api/auth';
 import { relativeTime } from '../../../lib/relativeTime';
+import { describeScope, isFleetWide } from '../../../lib/scope';
+import { useMaps } from '../../maps/api/maps';
 import { pushToast } from '../../../lib/toast';
-import type { AlertConditionType, AlertPolicy, AlertScope, AlertTransport, MaintenanceWindow } from '../../../types';
+import type { AlertConditionType, AlertPolicy, AlertTransport, MaintenanceWindow } from '../../../types';
 
 // device-scoped conditions; new_discovery is fleet-wide (candidates aren\'t devices yet).
 const SCOPED_CONDITIONS: AlertConditionType[] = ['device_down', 'high_util', 'low_throughput', 'interface_down', 'upgrade_failed', 'backup_failed', 'high_metric', 'probe_down', 'probe_slow', 'optical_power'];
 
-/** Short targeting label for the policy list row. */
-function scopeSummary(scope: AlertScope): string {
-    switch (scope.type) {
-        case 'device_type':
-            return `type: ${scope.device_type ?? '-'}`;
-        case 'map':
-            return 'on a map';
-        case 'devices':
-            return `${scope.device_ids?.length ?? 0} device(s)`;
-        default:
-            return 'all devices';
-    }
-}
 
 // Conditions that get the generic "Sustained for" field. device_down has its own wording for
 // the same setting; the one-shot events (upgrade/backup failed, new discovery) have nothing to
@@ -552,6 +541,7 @@ function MaintenanceForm({ initial, onDone }: { initial?: MaintenanceWindow; onD
 
 function MaintenanceSection({ isAdmin }: { isAdmin: boolean }) {
     const { data: windows } = useMaintenanceWindows();
+    const { data: maps } = useMaps(); // map names for the scope summaries
     const del = useDeleteMaintenanceWindow();
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<number | null>(null);
@@ -593,7 +583,7 @@ function MaintenanceSection({ isAdmin }: { isAdmin: boolean }) {
                                         {w.active && <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-400/20">active</span>}
                                         {!w.enabled && <span className="shrink-0 text-[10px] text-white/30">disabled</span>}
                                     </div>
-                                    <div className="mt-0.5 truncate text-white/40">{fmtRange(w)} · {scopeSummary(w.scope)}</div>
+                                    <div className="mt-0.5 truncate text-white/40">{fmtRange(w)} · {describeScope(w.scope, maps)}</div>
                                 </div>
                                 {isAdmin && (
                                     <div className="flex shrink-0 items-center gap-1">
@@ -613,6 +603,7 @@ function MaintenanceSection({ isAdmin }: { isAdmin: boolean }) {
 export function AlertsView() {
     const isAdmin = useIsAdmin();
     const { data: policies } = useAlertPolicies();
+    const { data: maps } = useMaps(); // map names for the scope summaries
     const { data: transports } = useAlertTransports();
     const { data: events } = useAlertEvents();
     const delPolicy = useDeleteAlertPolicy();
@@ -695,7 +686,7 @@ export function AlertsView() {
                                     <span className="min-w-0 flex-1 truncate text-white/85">
                                         {p.name}
                                         <span className="text-white/35"> - {p.condition_label}</span>
-                                        {p.scope && p.scope.type !== 'all' && <span className="text-emerald-300/60"> - {scopeSummary(p.scope)}</span>}
+                                        {!isFleetWide(p.scope) && <span className="text-emerald-300/60"> - {describeScope(p.scope, maps)}</span>}
                                         {(p.condition === 'interface_down' || (p.condition === 'low_throughput' && p.params?.target === 'interfaces')) &&
                                             interfaceFilterSummary(p.params?.interfaces) && (
                                                 <span className="text-emerald-300/60"> - {interfaceFilterSummary(p.params?.interfaces)}</span>
