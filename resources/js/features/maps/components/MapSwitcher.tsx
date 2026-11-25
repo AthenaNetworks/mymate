@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { CaretDown, DownloadSimple, GlobeHemisphereWest, ImageSquare, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
+import { CaretDown, DownloadSimple, GlobeHemisphereWest, ImageSquare, MagnifyingGlass, MapTrifold, PencilSimple, Plus, ShareNetwork, Timer, Trash, UploadSimple } from '@phosphor-icons/react';
 import { useMaps, useSaveMap, useDeleteMap, useExportMap, useImportMap } from '../api/maps';
 import { useIsAdmin } from '../../auth/api/auth';
 import { useActiveMapId, setActiveMap } from '../../../lib/shellStore';
@@ -20,6 +20,17 @@ export function pickDefaultMap(maps: NetworkMap[]): NetworkMap {
     return maps.find((m) => m.device_count > 0) ?? flagged ?? maps[0];
 }
 
+/** Maps whose name holds every word of the search, in any order and case ("tower 12" finds
+ *  "Tower site 12"). A blank search keeps them all. */
+export function filterMaps(maps: NetworkMap[], query: string): NetworkMap[] {
+    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return maps;
+    return maps.filter((m) => {
+        const name = m.name.toLowerCase();
+        return words.every((w) => name.includes(w));
+    });
+}
+
 /** Switch / create / rename / delete maps. Drives the active map id
  *  in the shell store, which MapCanvas renders. Create/rename/delete use the app\'s
  *  styled dialogs, never the browser\'s native prompt/confirm. */
@@ -33,12 +44,30 @@ export function MapSwitcher() {
     const importMap = useImportMap();
     const fileRef = useRef<HTMLInputElement>(null);
     const [open, setOpen] = useState(false);
+    // Search at the top of the list. Starts empty every time the list opens.
+    const [query, setQuery] = useState('');
+    const [highlight, setHighlight] = useState(0); // index into `shown`, for the arrow keys
+    const [navigated, setNavigated] = useState(false); // arrow keys used: show the highlight with no search too
+    const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+    useEffect(() => {
+        if (!open) {
+            setQuery('');
+            setHighlight(0);
+            setNavigated(false);
+        }
+    }, [open]);
     // The list sizes to its longest map name (CSS `w-max`), but can't run past the right
     // edge of the viewport: measure the room right of the panel's left edge on open/resize.
     const panelRef = useRef<HTMLDivElement>(null);
     const [panelMaxW, setPanelMaxW] = useState<number | undefined>(undefined);
+    // Its width with every map listed, held while searching so the panel doesn't jump narrower
+    // with each letter typed.
+    const [panelOpenW, setPanelOpenW] = useState<number | undefined>(undefined);
     useLayoutEffect(() => {
-        if (!open) return;
+        if (!open) {
+            setPanelOpenW(undefined);
+            return;
+        }
         const fit = () => {
             const el = panelRef.current;
             if (!el) return;
@@ -46,6 +75,7 @@ export function MapSwitcher() {
             setPanelMaxW(Math.max(160, window.innerWidth - left - 16)); // 16px gutter
         };
         fit();
+        if (panelRef.current) setPanelOpenW(panelRef.current.offsetWidth);
         window.addEventListener('resize', fit);
         return () => window.removeEventListener('resize', fit);
     }, [open]);
@@ -63,6 +93,40 @@ export function MapSwitcher() {
     }, [activeId, maps]);
 
     const active = maps?.find((m) => m.id === activeId) ?? null;
+    const shown = filterMaps(maps ?? [], query);
+    const hi = Math.min(highlight, Math.max(0, shown.length - 1));
+    const showHi = query !== '' || navigated;
+    useEffect(() => {
+        if (open && showHi) rowRefs.current[hi]?.scrollIntoView({ block: 'nearest' });
+    }, [open, showHi, hi]);
+
+    function pick(id: number) {
+        setActiveMap(id);
+        setOpen(false);
+    }
+
+    function onSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (shown.length === 0) return;
+            setNavigated(true);
+            setHighlight((hi + (e.key === 'ArrowDown' ? 1 : shown.length - 1)) % shown.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (showHi && shown[hi]) pick(shown[hi].id); // nothing typed or picked yet: stay put
+        } else if (e.key === 'Escape') {
+            // First Esc clears the search, the next closes the list. Kept away from the map canvas,
+            // which uses Esc for its own things (clearing a selection).
+            e.preventDefault();
+            e.stopPropagation();
+            if (query !== '') {
+                setQuery('');
+                setHighlight(0);
+            } else {
+                setOpen(false);
+            }
+        }
+    }
 
     function openDialog(d: MapDialog) {
         setOpen(false);
@@ -125,18 +189,45 @@ export function MapSwitcher() {
                             ref={panelRef}
                             style={
                                 panelMaxW !== undefined
-                                    ? { maxWidth: `min(28rem, ${panelMaxW}px)`, minWidth: `min(16rem, ${panelMaxW}px)` }
+                                    ? {
+                                          maxWidth: `min(28rem, ${panelMaxW}px)`,
+                                          minWidth: panelOpenW !== undefined ? `min(${panelOpenW}px, ${panelMaxW}px)` : `min(16rem, ${panelMaxW}px)`,
+                                      }
                                     : undefined
                             }
                             className="absolute left-0 z-20 mt-1.5 flex max-h-[70vh] w-max min-w-[min(16rem,calc(100vw-2rem))] max-w-[min(28rem,calc(100vw-2rem))] flex-col rounded-xl bg-surface p-1 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.9)] ring-1 ring-white/10">
+                            <div className="mb-1 flex shrink-0 items-center gap-2 border-b border-white/5 px-2.5 py-1.5">
+                                <MagnifyingGlass weight="bold" className="h-3.5 w-3.5 shrink-0 text-white/40" />
+                                <input
+                                    autoFocus
+                                    value={query}
+                                    onChange={(e) => {
+                                        setQuery(e.target.value);
+                                        setHighlight(0);
+                                    }}
+                                    onKeyDown={onSearchKey}
+                                    placeholder="Search maps..."
+                                    aria-label="Search maps"
+                                    className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/30"
+                                />
+                            </div>
                             <div className="min-h-0 flex-1 overflow-y-auto">
-                            {maps?.map((m) => (
-                                <div key={m.id} className={`group flex items-center gap-0.5 rounded-lg ${m.id === activeId ? 'bg-emerald-500/10' : ''}`}>
+                            {query.trim() !== '' && shown.length === 0 && (
+                                <div className="px-2.5 py-1.5 text-xs text-white/35">No maps match "{query.trim()}"</div>
+                            )}
+                            {shown.map((m, i) => (
+                                <div
+                                    key={m.id}
+                                    ref={(el) => {
+                                        rowRefs.current[i] = el;
+                                    }}
+                                    onMouseMove={() => i !== hi && setHighlight(i)}
+                                    className={`group flex items-center gap-0.5 rounded-lg ${
+                                        m.id === activeId ? 'bg-emerald-500/10' : showHi && i === hi ? 'bg-white/5' : ''
+                                    } ${showHi && i === hi ? 'ring-1 ring-white/10' : ''}`}
+                                >
                                     <button
-                                        onClick={() => {
-                                            setActiveMap(m.id);
-                                            setOpen(false);
-                                        }}
+                                        onClick={() => pick(m.id)}
                                         title={m.name}
                                         className="min-w-0 flex-1 truncate whitespace-nowrap px-2.5 py-1.5 text-left text-sm text-white/85"
                                     >

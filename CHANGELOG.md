@@ -13,6 +13,11 @@ of commit subjects.
 
 ## [Unreleased]
 
+### Added
+- Search the map list: the map selector opens with a search box at the top that filters maps by
+  name as you type (every word has to match, in any order). Arrow keys move through the matches,
+  Enter opens one, and Esc clears the search, then closes the list.
+
 ## [2.2.0] - 2026-11-22
 
 ### Added
