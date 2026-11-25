@@ -58,7 +58,7 @@ export function useMapChannel(
         // the app shell's alert sounds (useAlertSounds) listen on it too, on every page.
         const bound: [string, CallableFunction][] = [];
         const listen = <T,>(event: string, cb: (e: T) => void) => {
-            listen(event, cb);
+            channel.listen(event, cb);
             bound.push([event, cb]);
         };
 
